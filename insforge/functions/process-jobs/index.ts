@@ -12,43 +12,163 @@
  */
 
 import { createDbClient } from '../_shared/create-db-client.js';
-import { PostgresJobQueue } from '../../packages/support-core/src/services/postgres-job-queue.js';
-import type { Job, JobType } from '../../packages/support-core/src/types/index.js';
+import { createRealtimePublisher } from '../_shared/create-realtime-publisher.js';
+import { PostgresJobQueue } from '../../../packages/support-core/src/services/postgres-job-queue.js';
+import { ConversationRepository } from '../../../packages/support-core/src/repositories/conversation-repository.js';
+import { MessageRepository } from '../../../packages/support-core/src/repositories/message-repository.js';
+import { KnowledgeRepository } from '../../../packages/support-core/src/repositories/knowledge-repository.js';
+import { AiSettingsRepository } from '../../../packages/support-core/src/repositories/ai-settings-repository.js';
+import { AiDecisionRepository } from '../../../packages/support-core/src/repositories/ai-decision-repository.js';
+import { AuditLogRepository } from '../../../packages/support-core/src/repositories/audit-log-repository.js';
+import { AiAgentService } from '../../../packages/support-core/src/services/ai-agent-service.js';
+import { KnowledgeIngestionService } from '../../../packages/support-core/src/services/knowledge-ingestion-service.js';
+import { createDefaultEscalationEngine } from '../../../packages/support-core/src/services/escalation-rules.js';
+import type { AiClient } from '../../../packages/support-core/src/interfaces/ai-client.js';
+import type { Job, JobType } from '../../../packages/support-core/src/types/index.js';
+import type { DatabaseClient } from '../../../packages/support-core/src/interfaces/database-client.js';
 
 /** Maximum number of jobs to claim per invocation. */
 const MAX_JOBS_PER_RUN = 10;
 
-/**
- * Job handler type — each handler receives the job and returns void on success.
- * Throwing an error signals failure.
- */
-type JobHandler = (job: Job) => Promise<void>;
+// ---------------------------------------------------------------------------
+// AI Client factory (same as process-ai-job)
+// ---------------------------------------------------------------------------
 
-/**
- * Stub handlers for each job type.
- * Actual implementations will be wired in later tasks.
- */
-const jobHandlers: Record<JobType, JobHandler> = {
-  process_ai_message: async (_job: Job) => {
-    // Stub: actual AI processing will be wired in task 19
-  },
-  process_knowledge_document: async (_job: Job) => {
-    // Stub: actual knowledge ingestion will be wired in task 18
-  },
-  send_outbound_message: async (_job: Job) => {
-    // Stub: actual outbound sending will be wired in task 11
-  },
-  process_delivery_status: async (_job: Job) => {
-    // Stub: actual delivery status processing will be wired in task 15
-  },
-  retry_failed_jobs: async (_job: Job) => {
-    // Stub: retry logic will be wired in a later task
-  },
-};
+function createAiClient(baseUrl: string, serviceRoleKey: string): AiClient {
+  return {
+    async chatCompletion(params) {
+      const res = await fetch(`${baseUrl}/ai/v1/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: serviceRoleKey,
+          Authorization: `Bearer ${serviceRoleKey}`,
+        },
+        body: JSON.stringify({
+          model: params.model,
+          messages: params.messages,
+          response_format: params.responseFormat,
+          temperature: params.temperature,
+        }),
+      });
+      if (!res.ok) {
+        const errorBody = await res.text().catch(() => 'unknown error');
+        throw new Error(`AI chat completion failed: HTTP ${res.status} — ${errorBody}`);
+      }
+      const data = (await res.json()) as Record<string, unknown>;
+      const choices = data.choices as Array<{ message: { content: string } }>;
+      return {
+        content: choices?.[0]?.message?.content ?? '',
+        usage: undefined,
+      };
+    },
+    async createEmbedding(params) {
+      const res = await fetch(`${baseUrl}/ai/v1/embeddings`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: serviceRoleKey,
+          Authorization: `Bearer ${serviceRoleKey}`,
+        },
+        body: JSON.stringify({ model: params.model, input: params.input }),
+      });
+      if (!res.ok) {
+        const errorBody = await res.text().catch(() => 'unknown error');
+        throw new Error(`AI embedding failed: HTTP ${res.status} — ${errorBody}`);
+      }
+      const data = (await res.json()) as Record<string, unknown>;
+      const embeddings = data.data as Array<{ embedding: number[] }>;
+      return embeddings?.[0]?.embedding ?? [];
+    },
+  };
+}
 
-export default async function (req: Request): Promise<Response> {
+// ---------------------------------------------------------------------------
+// Job handler builders — create real handlers with injected dependencies
+// ---------------------------------------------------------------------------
+
+function buildJobHandlers(
+  db: DatabaseClient,
+  baseUrl: string,
+  serviceRoleKey: string,
+): Record<JobType, (job: Job) => Promise<void>> {
+  const realtime = createRealtimePublisher(baseUrl, serviceRoleKey);
+  const aiClient = createAiClient(baseUrl, serviceRoleKey);
+
+  return {
+    async process_ai_message(job: Job) {
+      const conversationId = (job.payload.conversationId ?? job.payload.conversation_id) as string;
+      const orgId = job.organizationId;
+
+      const conversationRepo = new ConversationRepository(db);
+      const messageRepo = new MessageRepository(db);
+      const knowledgeRepo = new KnowledgeRepository(db);
+      const aiSettingsRepo = new AiSettingsRepository(db);
+      const aiDecisionRepo = new AiDecisionRepository(db);
+      const auditLogRepo = new AuditLogRepository(db);
+      const jobQueue = new PostgresJobQueue(db);
+      const escalationEngine = createDefaultEscalationEngine();
+
+      const aiAgentService = new AiAgentService(
+        conversationRepo, messageRepo, knowledgeRepo,
+        aiSettingsRepo, aiDecisionRepo, escalationEngine,
+        aiClient, jobQueue, auditLogRepo,
+      );
+
+      const decision = await aiAgentService.processMessage(conversationId, orgId);
+
+      await realtime.publish(`org:${orgId}`, 'conversation_updated', {
+        conversationId,
+        aiDecisionId: decision.id,
+        decisionType: decision.decisionType,
+      });
+    },
+
+    async process_knowledge_document(job: Job) {
+      const documentId = (job.payload.documentId ?? job.payload.document_id) as string;
+      const orgId = job.organizationId;
+
+      const knowledgeRepo = new KnowledgeRepository(db);
+      const auditLogRepo = new AuditLogRepository(db);
+
+      const ingestionService = new KnowledgeIngestionService(
+        knowledgeRepo, aiClient, auditLogRepo,
+      );
+
+      await ingestionService.processDocument(documentId);
+
+      await realtime.publish(`org:${orgId}`, 'knowledge_document_updated', {
+        documentId,
+        status: 'ready',
+      });
+    },
+
+    async send_outbound_message(_job: Job) {
+      // Outbound messages are sent synchronously by OutboundMessageService
+      // when called from send-reply or approve-ai-draft. This job type is
+      // reserved for async sends triggered by auto-reply mode.
+      // TODO: Wire OutboundMessageService for async auto-reply sends.
+    },
+
+    async process_delivery_status(_job: Job) {
+      // Delivery status is processed synchronously by the sms-status and
+      // email-status function entrypoints. This job type is reserved for
+      // async retry of failed status processing.
+      // TODO: Wire DeliveryStatusService for async retries.
+    },
+
+    async retry_failed_jobs(_job: Job) {
+      // TODO: Implement retry logic — re-enqueue failed jobs as pending.
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Function entrypoint
+// ---------------------------------------------------------------------------
+
+export default async function (_req: Request): Promise<Response> {
   try {
-    // 1. Create database client
     const baseUrl = (globalThis as Record<string, unknown>).Deno
       ? (globalThis as Record<string, { get(key: string): string | undefined }>).Deno.env.get('INSFORGE_BASE_URL')
       : process.env.INSFORGE_BASE_URL;
@@ -65,55 +185,34 @@ export default async function (req: Request): Promise<Response> {
 
     const db = createDbClient(baseUrl, serviceRoleKey);
     const jobQueue = new PostgresJobQueue(db);
+    const jobHandlers = buildJobHandlers(db, baseUrl, serviceRoleKey);
 
-    // 2. Claim pending jobs
     const jobs = await jobQueue.claim(MAX_JOBS_PER_RUN);
 
-    // 3. Process each job
     const results: Array<{ jobId: string; jobType: string; status: 'completed' | 'failed'; error?: string }> = [];
 
     for (const job of jobs) {
       const handler = jobHandlers[job.jobType];
 
       if (!handler) {
-        // Unknown job type — fail the job
         await jobQueue.fail(job.id, `Unknown job type: ${job.jobType}`);
-        results.push({
-          jobId: job.id,
-          jobType: job.jobType,
-          status: 'failed',
-          error: `Unknown job type: ${job.jobType}`,
-        });
+        results.push({ jobId: job.id, jobType: job.jobType, status: 'failed', error: `Unknown job type: ${job.jobType}` });
         continue;
       }
 
       try {
         await handler(job);
         await jobQueue.complete(job.id);
-        results.push({
-          jobId: job.id,
-          jobType: job.jobType,
-          status: 'completed',
-        });
+        results.push({ jobId: job.id, jobType: job.jobType, status: 'completed' });
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : String(err);
         await jobQueue.fail(job.id, errorMessage);
-        results.push({
-          jobId: job.id,
-          jobType: job.jobType,
-          status: 'failed',
-          error: errorMessage,
-        });
+        results.push({ jobId: job.id, jobType: job.jobType, status: 'failed', error: errorMessage });
       }
     }
 
-    // 4. Return summary
     return new Response(
-      JSON.stringify({
-        status: 'ok',
-        claimed: jobs.length,
-        results,
-      }),
+      JSON.stringify({ status: 'ok', claimed: jobs.length, results }),
       { status: 200, headers: { 'Content-Type': 'application/json' } },
     );
   } catch (err) {

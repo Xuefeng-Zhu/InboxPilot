@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useState } from 'react';
+import { getAccessToken } from '@/lib/insforge';
 
 // ---------------------------------------------------------------------------
 // Component
@@ -13,6 +14,7 @@ interface ReplyComposerProps {
 export function ReplyComposer({ conversationId }: ReplyComposerProps) {
   const [body, setBody] = useState('');
   const [sending, setSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = useCallback(
     async (e: React.FormEvent) => {
@@ -21,11 +23,28 @@ export function ReplyComposer({ conversationId }: ReplyComposerProps) {
       if (!trimmed) return;
 
       setSending(true);
+      setError(null);
       try {
-        // TODO: Call the send-reply function entrypoint once implemented (Task 11).
-        // For now, log to console.
-        console.log('[ReplyComposer] send-reply', { conversationId, body: trimmed });
+        const token = getAccessToken();
+        const baseUrl = process.env.NEXT_PUBLIC_INSFORGE_URL ?? '';
+
+        const res = await fetch(`${baseUrl}/functions/v1/send-reply`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({ conversationId, body: trimmed }),
+        });
+
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error((data as Record<string, string>).error ?? 'Failed to send reply');
+        }
+
         setBody('');
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to send reply');
       } finally {
         setSending(false);
       }
@@ -50,6 +69,9 @@ export function ReplyComposer({ conversationId }: ReplyComposerProps) {
       className="border-t border-gray-200 bg-white px-4 py-3"
       aria-label="Reply composer"
     >
+      {error && (
+        <p className="mb-2 text-xs text-red-600" role="alert">{error}</p>
+      )}
       <div className="flex items-end gap-2">
         <textarea
           value={body}

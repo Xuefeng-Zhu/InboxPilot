@@ -14,21 +14,21 @@
 
 import { createDbClient } from '../_shared/create-db-client.js';
 import { createRealtimePublisher } from '../_shared/create-realtime-publisher.js';
-import { ConversationRepository } from '../../packages/support-core/src/repositories/conversation-repository.js';
-import { MessageRepository } from '../../packages/support-core/src/repositories/message-repository.js';
-import { KnowledgeRepository } from '../../packages/support-core/src/repositories/knowledge-repository.js';
-import { AiSettingsRepository } from '../../packages/support-core/src/repositories/ai-settings-repository.js';
-import { AiDecisionRepository } from '../../packages/support-core/src/repositories/ai-decision-repository.js';
-import { AuditLogRepository } from '../../packages/support-core/src/repositories/audit-log-repository.js';
-import { PostgresJobQueue } from '../../packages/support-core/src/services/postgres-job-queue.js';
-import { AiAgentService } from '../../packages/support-core/src/services/ai-agent-service.js';
-import { createDefaultEscalationEngine } from '../../packages/support-core/src/services/escalation-rules.js';
-import type { AiClient } from '../../packages/support-core/src/interfaces/ai-client.js';
+import { ConversationRepository } from '../../../packages/support-core/src/repositories/conversation-repository.js';
+import { MessageRepository } from '../../../packages/support-core/src/repositories/message-repository.js';
+import { KnowledgeRepository } from '../../../packages/support-core/src/repositories/knowledge-repository.js';
+import { AiSettingsRepository } from '../../../packages/support-core/src/repositories/ai-settings-repository.js';
+import { AiDecisionRepository } from '../../../packages/support-core/src/repositories/ai-decision-repository.js';
+import { AuditLogRepository } from '../../../packages/support-core/src/repositories/audit-log-repository.js';
+import { PostgresJobQueue } from '../../../packages/support-core/src/services/postgres-job-queue.js';
+import { AiAgentService } from '../../../packages/support-core/src/services/ai-agent-service.js';
+import { createDefaultEscalationEngine } from '../../../packages/support-core/src/services/escalation-rules.js';
+import type { AiClient } from '../../../packages/support-core/src/interfaces/ai-client.js';
 import type {
   ChatCompletionParams,
   ChatCompletionResult,
   EmbeddingParams,
-} from '../../packages/support-core/src/types/index.js';
+} from '../../../packages/support-core/src/types/index.js';
 
 /**
  * Create an AiClient that delegates to the InsForge AI Gateway (OpenRouter).

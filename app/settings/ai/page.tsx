@@ -65,22 +65,25 @@ export default function AiSettingsPage() {
     setLoading(true);
     setError(null);
     try {
-      const { data, error: fetchError } = await insforge.from<AiSettings>('ai_settings', {
-        limit: 1,
-        single: true,
-      });
+      const { data, error: fetchError } = await insforge.database
+        .from('ai_settings')
+        .select()
+        .limit(1)
+        .single();
+
       if (fetchError) {
         setError(fetchError.message);
         return;
       }
       if (data && !Array.isArray(data)) {
-        setSettings(data);
-        setAiMode(data.ai_mode);
-        setConfidenceThreshold(data.confidence_threshold);
-        setContextWindowSize(data.context_window_size);
-        setEscalationKeywords(data.escalation_keywords ?? []);
-        setSystemPrompt(data.system_prompt ?? '');
-        setModel(data.model);
+        const s = data as AiSettings;
+        setSettings(s);
+        setAiMode(s.ai_mode);
+        setConfidenceThreshold(s.confidence_threshold);
+        setContextWindowSize(s.context_window_size);
+        setEscalationKeywords(s.escalation_keywords ?? []);
+        setSystemPrompt(s.system_prompt ?? '');
+        setModel(s.model);
       }
     } catch {
       setError('Failed to load AI settings');
@@ -104,9 +107,9 @@ export default function AiSettingsPage() {
     setError(null);
     setSuccess(null);
     try {
-      const { error: updateError } = await insforge.update(
-        'ai_settings',
-        {
+      const { error: updateError } = await insforge.database
+        .from('ai_settings')
+        .update({
           ai_mode: aiMode,
           confidence_threshold: confidenceThreshold,
           context_window_size: contextWindowSize,
@@ -114,24 +117,28 @@ export default function AiSettingsPage() {
           system_prompt: systemPrompt || null,
           model,
           updated_at: new Date().toISOString(),
-        },
-        { id: `eq.${settings.id}` },
-      );
+        })
+        .eq('id', settings.id)
+        .select();
+
       if (updateError) {
         setError(updateError.message);
         return;
       }
 
       // Record audit log entry for settings change
-      await insforge.insert('audit_logs', {
-        organization_id: settings.organization_id,
-        actor_id: user?.id ?? null,
-        actor_type: 'user',
-        action: 'settings_changed',
-        resource_type: 'ai_settings',
-        resource_id: settings.id,
-        metadata: { ai_mode: aiMode, model },
-      });
+      await insforge.database
+        .from('audit_logs')
+        .insert({
+          organization_id: settings.organization_id,
+          actor_id: user?.id ?? null,
+          actor_type: 'user',
+          action: 'settings_changed',
+          resource_type: 'ai_settings',
+          resource_id: settings.id,
+          metadata: { ai_mode: aiMode, model },
+        })
+        .select();
 
       setSuccess('Settings saved successfully');
       setTimeout(() => setSuccess(null), 3000);

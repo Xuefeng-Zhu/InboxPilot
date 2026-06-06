@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { insforge } from '@/lib/insforge';
+import { insforge, getAccessToken } from '@/lib/insforge';
 import type { AiState } from '@support-core/types';
 
 // ---------------------------------------------------------------------------
@@ -47,15 +47,12 @@ export function AiDraftPanel({ conversationId, aiState }: AiDraftPanelProps) {
     setError(null);
 
     try {
-      const { data, error: fetchError } = await insforge.from<AiDecisionRow>(
-        'ai_decisions',
-        {
-          select: '*',
-          filter: { conversation_id: `eq.${conversationId}` },
-          order: 'created_at.desc',
-          limit: 1,
-        },
-      );
+      const { data, error: fetchError } = await insforge.database
+        .from('ai_decisions')
+        .select('*')
+        .eq('conversation_id', conversationId)
+        .order('created_at', { ascending: false })
+        .limit(1);
 
       if (fetchError) {
         setError(fetchError.message);
@@ -63,7 +60,7 @@ export function AiDraftPanel({ conversationId, aiState }: AiDraftPanelProps) {
       }
 
       const rows = Array.isArray(data) ? data : data ? [data] : [];
-      setDecision(rows[0] ?? null);
+      setDecision((rows[0] as AiDecisionRow) ?? null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load AI decision');
     } finally {
@@ -84,7 +81,7 @@ export function AiDraftPanel({ conversationId, aiState }: AiDraftPanelProps) {
     setError(null);
 
     try {
-      const token = insforge.getAccessToken();
+      const token = getAccessToken();
       const baseUrl = process.env.NEXT_PUBLIC_INSFORGE_URL ?? '';
 
       const res = await fetch(`${baseUrl}/functions/v1/approve-ai-draft`, {
@@ -117,7 +114,7 @@ export function AiDraftPanel({ conversationId, aiState }: AiDraftPanelProps) {
     setError(null);
 
     try {
-      const token = insforge.getAccessToken();
+      const token = getAccessToken();
       const baseUrl = process.env.NEXT_PUBLIC_INSFORGE_URL ?? '';
 
       const res = await fetch(`${baseUrl}/functions/v1/regenerate-ai-draft`, {

@@ -85,23 +85,18 @@ export default function AnalyticsPage() {
       const startIso = new Date(startDate).toISOString();
       const endIso = new Date(endDate + 'T23:59:59.999Z').toISOString();
 
-      const { data: conversations, error: convError } = await insforge.from<Conversation>(
-        'conversations',
-        {
-          select: 'id,status,ai_state,created_at,last_message_at',
-          filter: {
-            created_at: `gte.${startIso}`,
-          },
-          limit: 10000,
-        },
-      );
+      const { data: conversations, error: convError } = await insforge.database
+        .from('conversations')
+        .select('id,status,ai_state,created_at,last_message_at')
+        .gte('created_at', startIso)
+        .limit(10000);
 
       if (convError) {
         setError(convError.message);
         return;
       }
 
-      const convList = Array.isArray(conversations) ? conversations : [];
+      const convList = Array.isArray(conversations) ? (conversations as Conversation[]) : [];
       // Filter by end date client-side
       const filtered = convList.filter((c) => new Date(c.created_at) <= new Date(endIso));
 
@@ -123,19 +118,17 @@ export default function AnalyticsPage() {
       if (filtered.length > 0) {
         // Fetch messages for these conversations to compute response times
         const convIds = filtered.slice(0, 100).map((c) => c.id); // Limit for performance
-        const { data: messages } = await insforge.from<Message>('messages', {
-          select: 'id,conversation_id,sender_type,direction,created_at',
-          filter: {
-            conversation_id: `in.(${convIds.join(',')})`,
-          },
-          order: 'created_at.asc',
-          limit: 5000,
-        });
+        const { data: messages } = await insforge.database
+          .from('messages')
+          .select('id,conversation_id,sender_type,direction,created_at')
+          .in('conversation_id', convIds)
+          .order('created_at', { ascending: true })
+          .limit(5000);
 
         if (messages && Array.isArray(messages)) {
           // Group messages by conversation
           const byConvo = new Map<string, Message[]>();
-          for (const msg of messages) {
+          for (const msg of messages as Message[]) {
             const list = byConvo.get(msg.conversation_id) ?? [];
             list.push(msg);
             byConvo.set(msg.conversation_id, list);

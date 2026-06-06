@@ -33,40 +33,22 @@ interface AuthContextValue extends AuthState {
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 // ---------------------------------------------------------------------------
-// Storage helpers (access token persistence)
+// Cookie helpers (for Next.js middleware auth detection)
 // ---------------------------------------------------------------------------
 
-const TOKEN_KEY = 'insforge_access_token';
-const REFRESH_KEY = 'insforge_refresh_token';
-
-function persistTokens(access: string, refresh: string): void {
+function setCookie(token: string): void {
   try {
-    localStorage.setItem(TOKEN_KEY, access);
-    localStorage.setItem(REFRESH_KEY, refresh);
-    // Also set a cookie so the Next.js middleware can detect auth state
-    document.cookie = `insforge_access_token=${access}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`;
-  } catch {
-    // SSR or storage unavailable — ignore
-  }
-}
-
-function clearTokens(): void {
-  try {
-    localStorage.removeItem(TOKEN_KEY);
-    localStorage.removeItem(REFRESH_KEY);
-    // Clear the auth cookie
-    document.cookie =
-      'insforge_access_token=; path=/; max-age=0; SameSite=Lax';
+    document.cookie = `insforge_access_token=${token}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`;
   } catch {
     // ignore
   }
 }
 
-function loadAccessToken(): string | null {
+function clearCookie(): void {
   try {
-    return localStorage.getItem(TOKEN_KEY);
+    document.cookie = 'insforge_access_token=; path=/; max-age=0; SameSite=Lax';
   } catch {
-    return null;
+    // ignore
   }
 }
 
@@ -77,48 +59,52 @@ function loadAccessToken(): string | null {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AuthState>({ user: null, loading: true });
 
-  // Hydrate session from persisted token on mount
+  // Hydrate session on mount
   useEffect(() => {
-    const token = loadAccessToken();
-    if (!token) {
-      setState({ user: null, loading: false });
-      return;
-    }
-    insforge.setAccessToken(token);
-    insforge.getUser().then(({ data, error }) => {
-      if (error || !data) {
-        clearTokens();
-        insforge.setAccessToken(null);
+    insforge.auth.getCurrentUser().then(({ data, error }) => {
+      if (error || !data?.user) {
+        clearCookie();
         setState({ user: null, loading: false });
       } else {
-        setState({ user: data, loading: false });
+        setState({ user: data.user as InsForgeUser, loading: false });
       }
     });
   }, []);
 
   const signIn = useCallback(async (email: string, password: string) => {
-    const { data, error } = await insforge.signIn(email, password);
+    const { data, error } = await insforge.auth.signInWithPassword({
+      email,
+      password,
+    });
     if (error || !data) {
       return { error: error?.message ?? 'Sign-in failed' };
     }
-    persistTokens(data.access_token, data.refresh_token);
-    setState({ user: data.user, loading: false });
+    if (data.accessToken) {
+      setCookie(data.accessToken);
+    }
+    setState({ user: data.user as InsForgeUser, loading: false });
     return { error: null };
   }, []);
 
   const signUp = useCallback(async (email: string, password: string) => {
-    const { data, error } = await insforge.signUp(email, password);
+    const { data, error } = await insforge.auth.signUp({
+      email,
+      password,
+    });
     if (error || !data) {
       return { error: error?.message ?? 'Sign-up failed' };
     }
-    persistTokens(data.access_token, data.refresh_token);
-    setState({ user: data.user, loading: false });
+    if (data.accessToken) {
+      setCookie(data.accessToken);
+      setState({ user: data.user as InsForgeUser, loading: false });
+    }
+    // If email verification is required, user won't have an accessToken yet
     return { error: null };
   }, []);
 
   const signOut = useCallback(async () => {
-    await insforge.signOut();
-    clearTokens();
+    await insforge.auth.signOut();
+    clearCookie();
     setState({ user: null, loading: false });
   }, []);
 

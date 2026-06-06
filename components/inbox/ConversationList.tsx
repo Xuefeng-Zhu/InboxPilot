@@ -33,13 +33,11 @@ export function ConversationList({ selectedId, onSelect }: ConversationListProps
 
     try {
       // First get the user's organization membership to find their org
-      const { data: members, error: memberError } = await insforge.from<
-        { organization_id: string }
-      >('organization_members', {
-        select: 'organization_id',
-        filter: { user_id: `eq.${user.id}` },
-        limit: 1,
-      });
+      const { data: members, error: memberError } = await insforge.database
+        .from('organization_members')
+        .select('organization_id')
+        .eq('user_id', user.id)
+        .limit(1);
 
       if (memberError || !members) {
         setError('No organization found. Please join an organization first.');
@@ -54,17 +52,14 @@ export function ConversationList({ selectedId, onSelect }: ConversationListProps
         return;
       }
 
-      const orgId = memberArr[0].organization_id;
+      const orgId = (memberArr[0] as { organization_id: string }).organization_id;
 
       // Fetch conversations with joined contact data, sorted by last_message_at desc
-      const { data, error: fetchError } = await insforge.from<ConversationRow>(
-        'conversations',
-        {
-          select: '*, contacts(*)',
-          order: 'last_message_at.desc.nullslast',
-          filter: { organization_id: `eq.${orgId}` },
-        },
-      );
+      const { data, error: fetchError } = await insforge.database
+        .from('conversations')
+        .select('*, contacts(*)')
+        .eq('organization_id', orgId)
+        .order('last_message_at', { ascending: false, nullsFirst: false });
 
       if (fetchError) {
         setError(fetchError.message);
@@ -72,7 +67,7 @@ export function ConversationList({ selectedId, onSelect }: ConversationListProps
         return;
       }
 
-      setConversations(Array.isArray(data) ? data : data ? [data] : []);
+      setConversations(Array.isArray(data) ? (data as ConversationRow[]) : data ? [data as ConversationRow] : []);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load conversations');
     } finally {

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/lib/auth-context';
-import { insforge } from '@/lib/insforge';
+import { insforge, getAccessToken } from '@/lib/insforge';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -65,13 +65,14 @@ export default function SmsSettingsPage() {
     setError(null);
     try {
       const [accountsRes, phonesRes] = await Promise.all([
-        insforge.from<SmsProviderAccount>('sms_provider_accounts', {
-          select: 'id,organization_id,provider,label,credentials_secret_id,is_active,metadata,created_at,updated_at',
-          order: 'created_at.asc',
-        }),
-        insforge.from<SmsPhoneNumber>('sms_phone_numbers', {
-          order: 'created_at.asc',
-        }),
+        insforge.database
+          .from('sms_provider_accounts')
+          .select('id,organization_id,provider,label,credentials_secret_id,is_active,metadata,created_at,updated_at')
+          .order('created_at', { ascending: true }),
+        insforge.database
+          .from('sms_phone_numbers')
+          .select()
+          .order('created_at', { ascending: true }),
       ]);
       if (accountsRes.error) {
         setError(accountsRes.error.message);
@@ -81,8 +82,8 @@ export default function SmsSettingsPage() {
         setError(phonesRes.error.message);
         return;
       }
-      setAccounts(Array.isArray(accountsRes.data) ? accountsRes.data : []);
-      setPhoneNumbers(Array.isArray(phonesRes.data) ? phonesRes.data : []);
+      setAccounts(Array.isArray(accountsRes.data) ? (accountsRes.data as SmsProviderAccount[]) : []);
+      setPhoneNumbers(Array.isArray(phonesRes.data) ? (phonesRes.data as SmsPhoneNumber[]) : []);
     } catch {
       setError('Failed to load SMS settings');
     } finally {
@@ -104,13 +105,17 @@ export default function SmsSettingsPage() {
     setAddingAccount(true);
     setError(null);
     try {
-      const { error: insertError } = await insforge.insert('sms_provider_accounts', {
-        provider: newProvider,
-        label: newLabel.trim(),
-        credentials_secret_id: newCredentialsId.trim(),
-        is_active: true,
-        metadata: {},
-      });
+      const { error: insertError } = await insforge.database
+        .from('sms_provider_accounts')
+        .insert({
+          provider: newProvider,
+          label: newLabel.trim(),
+          credentials_secret_id: newCredentialsId.trim(),
+          is_active: true,
+          metadata: {},
+        })
+        .select();
+
       if (insertError) {
         setError(insertError.message);
         return;
@@ -118,15 +123,18 @@ export default function SmsSettingsPage() {
 
       // Record audit log for provider account modification
       if (accounts.length > 0) {
-        await insforge.insert('audit_logs', {
-          organization_id: accounts[0].organization_id,
-          actor_id: user?.id ?? null,
-          actor_type: 'user',
-          action: 'provider_account_modified',
-          resource_type: 'sms_provider_account',
-          resource_id: null,
-          metadata: { operation: 'create', provider: newProvider, label: newLabel.trim() },
-        });
+        await insforge.database
+          .from('audit_logs')
+          .insert({
+            organization_id: accounts[0].organization_id,
+            actor_id: user?.id ?? null,
+            actor_type: 'user',
+            action: 'provider_account_modified',
+            resource_type: 'sms_provider_account',
+            resource_id: null,
+            metadata: { operation: 'create', provider: newProvider, label: newLabel.trim() },
+          })
+          .select();
       }
 
       setSuccess('SMS provider account added');
@@ -148,11 +156,12 @@ export default function SmsSettingsPage() {
     if (!editLabel.trim()) return;
     setError(null);
     try {
-      const { error: updateError } = await insforge.update(
-        'sms_provider_accounts',
-        { label: editLabel.trim(), updated_at: new Date().toISOString() },
-        { id: `eq.${accountId}` },
-      );
+      const { error: updateError } = await insforge.database
+        .from('sms_provider_accounts')
+        .update({ label: editLabel.trim(), updated_at: new Date().toISOString() })
+        .eq('id', accountId)
+        .select();
+
       if (updateError) {
         setError(updateError.message);
         return;
@@ -161,15 +170,18 @@ export default function SmsSettingsPage() {
       // Record audit log for provider account modification
       const account = accounts.find((a) => a.id === accountId);
       if (account) {
-        await insforge.insert('audit_logs', {
-          organization_id: account.organization_id,
-          actor_id: user?.id ?? null,
-          actor_type: 'user',
-          action: 'provider_account_modified',
-          resource_type: 'sms_provider_account',
-          resource_id: accountId,
-          metadata: { operation: 'update', label: editLabel.trim() },
-        });
+        await insforge.database
+          .from('audit_logs')
+          .insert({
+            organization_id: account.organization_id,
+            actor_id: user?.id ?? null,
+            actor_type: 'user',
+            action: 'provider_account_modified',
+            resource_type: 'sms_provider_account',
+            resource_id: accountId,
+            metadata: { operation: 'update', label: editLabel.trim() },
+          })
+          .select();
       }
 
       setEditingId(null);
@@ -188,9 +200,11 @@ export default function SmsSettingsPage() {
     }
     setError(null);
     try {
-      const { error: deleteError } = await insforge.delete('sms_provider_accounts', {
-        id: `eq.${accountId}`,
-      });
+      const { error: deleteError } = await insforge.database
+        .from('sms_provider_accounts')
+        .delete()
+        .eq('id', accountId);
+
       if (deleteError) {
         setError(deleteError.message);
         return;
@@ -199,15 +213,18 @@ export default function SmsSettingsPage() {
       // Record audit log for provider account removal
       const account = accounts.find((a) => a.id === accountId);
       if (account) {
-        await insforge.insert('audit_logs', {
-          organization_id: account.organization_id,
-          actor_id: user?.id ?? null,
-          actor_type: 'user',
-          action: 'provider_account_modified',
-          resource_type: 'sms_provider_account',
-          resource_id: accountId,
-          metadata: { operation: 'delete', provider: account.provider, label: account.label },
-        });
+        await insforge.database
+          .from('audit_logs')
+          .insert({
+            organization_id: account.organization_id,
+            actor_id: user?.id ?? null,
+            actor_type: 'user',
+            action: 'provider_account_modified',
+            resource_type: 'sms_provider_account',
+            resource_id: accountId,
+            metadata: { operation: 'delete', provider: account.provider, label: account.label },
+          })
+          .select();
       }
 
       setSuccess('Account removed');
@@ -223,13 +240,13 @@ export default function SmsSettingsPage() {
     setTestingId(accountId);
     setTestResult(null);
     try {
-      const token = insforge.getAccessToken();
+      const token = getAccessToken();
       const baseUrl = process.env.NEXT_PUBLIC_INSFORGE_URL ?? '';
       const res = await fetch(`${baseUrl}/functions/v1/test-channel-connection`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
           apikey: process.env.NEXT_PUBLIC_INSFORGE_ANON_KEY ?? '',
         },
         body: JSON.stringify({ channelType: 'sms', providerAccountId: accountId }),

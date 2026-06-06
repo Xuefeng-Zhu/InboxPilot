@@ -79,17 +79,16 @@ export default function KnowledgePage() {
     setLoading(true);
     setError(null);
     try {
-      const { data, error: fetchError } = await insforge.from<KnowledgeDocument>(
-        'knowledge_documents',
-        {
-          order: 'created_at.desc',
-        },
-      );
+      const { data, error: fetchError } = await insforge.database
+        .from('knowledge_documents')
+        .select()
+        .order('created_at', { ascending: false });
+
       if (fetchError) {
         setError(fetchError.message);
         return;
       }
-      setDocuments(Array.isArray(data) ? data : []);
+      setDocuments(Array.isArray(data) ? (data as KnowledgeDocument[]) : []);
     } catch {
       setError('Failed to load documents');
     } finally {
@@ -117,12 +116,16 @@ export default function KnowledgePage() {
     setAdding(true);
     setError(null);
     try {
-      const { data: insertedData, error: insertError } = await insforge.insert('knowledge_documents', {
-        title: newTitle.trim(),
-        source_type: newSourceType,
-        body: newBody.trim(),
-        status: 'pending',
-      });
+      const { data: insertedData, error: insertError } = await insforge.database
+        .from('knowledge_documents')
+        .insert({
+          title: newTitle.trim(),
+          source_type: newSourceType,
+          body: newBody.trim(),
+          status: 'pending',
+        })
+        .select();
+
       if (insertError) {
         setError(insertError.message);
         return;
@@ -132,15 +135,18 @@ export default function KnowledgePage() {
       const inserted = Array.isArray(insertedData) ? insertedData[0] : insertedData;
       if (inserted) {
         const doc = inserted as Record<string, unknown>;
-        await insforge.insert('audit_logs', {
-          organization_id: doc.organization_id ?? null,
-          actor_id: user?.id ?? null,
-          actor_type: 'user',
-          action: 'knowledge_document_created',
-          resource_type: 'knowledge_document',
-          resource_id: doc.id ?? null,
-          metadata: { title: newTitle.trim() },
-        });
+        await insforge.database
+          .from('audit_logs')
+          .insert({
+            organization_id: doc.organization_id ?? null,
+            actor_id: user?.id ?? null,
+            actor_type: 'user',
+            action: 'knowledge_document_created',
+            resource_type: 'knowledge_document',
+            resource_id: doc.id ?? null,
+            metadata: { title: newTitle.trim() },
+          })
+          .select();
       }
 
       setSuccess('Document added successfully');
@@ -163,10 +169,16 @@ export default function KnowledgePage() {
     try {
       const doc = documents.find((d) => d.id === docId);
       // Delete chunks first (cascade should handle this, but be explicit)
-      await insforge.delete('knowledge_chunks', { document_id: `eq.${docId}` });
-      const { error: deleteError } = await insforge.delete('knowledge_documents', {
-        id: `eq.${docId}`,
-      });
+      await insforge.database
+        .from('knowledge_chunks')
+        .delete()
+        .eq('document_id', docId);
+
+      const { error: deleteError } = await insforge.database
+        .from('knowledge_documents')
+        .delete()
+        .eq('id', docId);
+
       if (deleteError) {
         setError(deleteError.message);
         return;
@@ -174,15 +186,18 @@ export default function KnowledgePage() {
 
       // Record audit log entry for knowledge document deletion
       if (doc) {
-        await insforge.insert('audit_logs', {
-          organization_id: doc.organization_id,
-          actor_id: user?.id ?? null,
-          actor_type: 'user',
-          action: 'knowledge_document_deleted',
-          resource_type: 'knowledge_document',
-          resource_id: docId,
-          metadata: { title: doc.title },
-        });
+        await insforge.database
+          .from('audit_logs')
+          .insert({
+            organization_id: doc.organization_id,
+            actor_id: user?.id ?? null,
+            actor_type: 'user',
+            action: 'knowledge_document_deleted',
+            resource_type: 'knowledge_document',
+            resource_id: docId,
+            metadata: { title: doc.title },
+          })
+          .select();
       }
 
       setSuccess('Document deleted');

@@ -41,14 +41,11 @@ export function MessageThread({ conversationId }: MessageThreadProps) {
 
     try {
       // Fetch conversation with contact details
-      const { data: convoData, error: convoError } = await insforge.from<ConversationRow>(
-        'conversations',
-        {
-          select: '*, contacts(*)',
-          filter: { id: `eq.${conversationId}` },
-          single: true,
-        },
-      );
+      const { data: convoData, error: convoError } = await insforge.database
+        .from('conversations')
+        .select('*, contacts(*)')
+        .eq('id', conversationId)
+        .single();
 
       if (convoError || !convoData) {
         setError(convoError?.message ?? 'Failed to load conversation');
@@ -59,14 +56,11 @@ export function MessageThread({ conversationId }: MessageThreadProps) {
       setConversation(convoData as ConversationRow);
 
       // Fetch messages in chronological order (oldest first)
-      const { data: msgData, error: msgError } = await insforge.from<MessageRow>(
-        'messages',
-        {
-          select: '*',
-          filter: { conversation_id: `eq.${conversationId}` },
-          order: 'created_at.asc',
-        },
-      );
+      const { data: msgData, error: msgError } = await insforge.database
+        .from('messages')
+        .select('*')
+        .eq('conversation_id', conversationId)
+        .order('created_at', { ascending: true });
 
       if (msgError) {
         setError(msgError.message);
@@ -74,7 +68,7 @@ export function MessageThread({ conversationId }: MessageThreadProps) {
         return;
       }
 
-      setMessages(Array.isArray(msgData) ? msgData : msgData ? [msgData] : []);
+      setMessages(Array.isArray(msgData) ? (msgData as MessageRow[]) : msgData ? [msgData as MessageRow] : []);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load messages');
     } finally {

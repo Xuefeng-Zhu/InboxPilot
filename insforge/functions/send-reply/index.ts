@@ -19,6 +19,8 @@ import { createDbClient } from '../_shared/create-db-client.js';
 import { createRealtimePublisher } from '../_shared/create-realtime-publisher.js';
 import { log, logError, newRequestContext, withRequest, withRequestIdHeader } from '../_shared/logger.js';
 import { requireOrgMembership } from '../_shared/require-org-membership.js';
+import { requirePermission } from '../_shared/require-permission.js';
+import { getRequiredPermission } from '../_shared/endpoint-permissions.js';
 import { verifyJwt } from '../_shared/verify-jwt.js';
 
 import { ProviderRegistry } from '../../../packages/support-core/src/interfaces/provider-registry.js';
@@ -105,6 +107,28 @@ export default async function (req: Request): Promise<Response> {
       }
       const orgId = membership.organizationId;
       ctx.org_id = orgId;
+
+      // HIGH-1: enforce the per-endpoint RBAC permission. The map in
+      // `endpoint-permissions.ts` is the single source of truth for which
+      // permission this endpoint requires. Without this check, any member
+      // of the org (including viewers) could call send-reply, because the
+      // rbac module was previously 100% property-tested but 0% enforced
+      // (see docs/QA_BUG_HUNT.md, HIGH-1).
+      const permission = await requirePermission(
+        db,
+        userId,
+        orgId,
+        getRequiredPermission('send-reply'),
+      );
+      if (permission.kind === 'role_not_found') {
+        return jsonResponse({ error: 'Forbidden: member has no role' }, 500);
+      }
+      if (permission.kind === 'forbidden') {
+        return jsonResponse(
+          { error: 'Forbidden', reason: permission.reason },
+          403,
+        );
+      }
 
       const conversationRepo = new ConversationRepository(db);
       const contactRepo = new ContactRepository(db);

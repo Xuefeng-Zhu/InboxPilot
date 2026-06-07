@@ -1,0 +1,1712 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>InboxPilot · Knowledge base — design hand-off</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  /* ------------------------------------------------------------------ */
+  /*  Tokens                                                             */
+  /* ------------------------------------------------------------------ */
+  :root {
+    /* Linen palette */
+    --bg:        #FAF8F4;   /* page */
+    --surface:   #FFFFFF;   /* cards */
+    --surface-2: #F4F0E6;   /* subtle tint */
+    --ink:       #1A1815;   /* primary text */
+    --ink-2:     #6B655C;   /* secondary text */
+    --ink-3:     #9A9386;   /* tertiary / placeholder */
+    --line:      #E8E2D6;   /* hairlines */
+    --line-2:    #D7CFBE;   /* stronger borders */
+
+    /* Status palette */
+    --teal:      #0E5E5E;
+    --teal-2:    #0A4848;
+    --teal-soft: #E4EEEE;
+    --forest:    #4A7C3F;
+    --forest-bg: #EEF3E8;
+    --ochre:     #B8761E;
+    --ochre-bg:  #F6ECDC;
+    --terra:     #A8331F;
+    --terra-bg:  #F5E2DC;
+    --slate:     #6B655C;
+    --slate-bg:  #EFEBE0;
+
+    /* Type */
+    --serif: "Fraunces", "Iowan Old Style", Georgia, serif;
+    --sans:  "IBM Plex Sans", "Helvetica Neue", sans-serif;
+    --mono:  "IBM Plex Mono", ui-monospace, "SF Mono", monospace;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: var(--sans);
+    font-size: 14px;
+    line-height: 1.5;
+    color: var(--ink);
+    background: var(--bg);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* ------------------------------------------------------------------ */
+  /*  Layout                                                             */
+  /* ------------------------------------------------------------------ */
+  .canvas {
+    max-width: 1480px;
+    margin: 0 auto;
+    padding: 48px 56px 96px;
+  }
+
+  .file-header {
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 32px;
+    margin-bottom: 56px;
+  }
+  .file-header .crumb {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    margin-bottom: 12px;
+  }
+  .file-header h1 {
+    font-family: var(--serif);
+    font-weight: 500;
+    font-size: 44px;
+    line-height: 1.05;
+    letter-spacing: -0.02em;
+    margin: 0 0 12px;
+    font-variation-settings: "opsz" 96;
+  }
+  .file-header h1 em {
+    font-style: italic;
+    color: var(--teal);
+  }
+  .file-header .meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 24px;
+    color: var(--ink-2);
+    font-size: 13px;
+    margin-top: 18px;
+  }
+  .file-header .meta b {
+    font-weight: 500;
+    color: var(--ink);
+  }
+
+  /* ------------------------------------------------------------------ */
+  /*  Frame                                                              */
+  /* ------------------------------------------------------------------ */
+  .frame {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    overflow: hidden;
+    margin-bottom: 64px;
+  }
+  .frame-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    padding: 16px 24px;
+    border-bottom: 1px solid var(--line);
+    background: var(--surface-2);
+  }
+  .frame-head .num {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+  .frame-head h2 {
+    font-family: var(--serif);
+    font-weight: 500;
+    font-size: 20px;
+    margin: 0 0 0 16px;
+    font-variation-settings: "opsz" 36;
+    flex: 1;
+  }
+  .frame-head .states {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--ink-3);
+    letter-spacing: 0.05em;
+  }
+  .frame-stage {
+    padding: 40px;
+    background:
+      linear-gradient(var(--bg) 1px, transparent 1px) 0 0 / 100% 8px,
+      var(--surface);
+    position: relative;
+  }
+
+  /* Page chrome (recurring across frames) */
+  .page {
+    border: 1px solid var(--line-2);
+    border-radius: 10px;
+    background: var(--surface);
+    max-width: 920px;
+    margin: 0 auto;
+    overflow: hidden;
+  }
+  .page .topbar {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--line);
+    background: var(--surface);
+  }
+  .page .topbar .logo {
+    display: flex; align-items: center; gap: 8px;
+    font-family: var(--serif);
+    font-weight: 500;
+    font-size: 16px;
+    color: var(--ink);
+  }
+  .page .topbar .logo .dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--teal);
+  }
+  .page .topbar nav {
+    display: flex;
+    gap: 4px;
+    margin-left: 24px;
+  }
+  .page .topbar nav a {
+    color: var(--ink-2);
+    text-decoration: none;
+    font-size: 13px;
+    padding: 6px 10px;
+    border-radius: 6px;
+  }
+  .page .topbar nav a.active {
+    color: var(--ink);
+    background: var(--surface-2);
+  }
+  .page .topbar .right {
+    margin-left: auto;
+    display: flex; align-items: center; gap: 12px;
+    font-size: 12px;
+    color: var(--ink-2);
+  }
+  .page .topbar .avatar {
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    background: var(--surface-2);
+    color: var(--ink);
+    display: grid; place-items: center;
+    font-size: 12px; font-weight: 500;
+    border: 1px solid var(--line);
+  }
+
+  .page-header {
+    padding: 36px 40px 24px;
+    border-bottom: 1px solid var(--line);
+  }
+  .page-header .eyebrow {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--teal);
+    margin-bottom: 8px;
+  }
+  .page-header h1 {
+    font-family: var(--serif);
+    font-weight: 500;
+    font-size: 32px;
+    line-height: 1.1;
+    letter-spacing: -0.015em;
+    margin: 0 0 8px;
+    font-variation-settings: "opsz" 72;
+  }
+  .page-header p {
+    margin: 0;
+    color: var(--ink-2);
+    font-size: 14px;
+    max-width: 560px;
+  }
+
+  /* ------------------------------------------------------------------ */
+  /*  Reusable bits                                                      */
+  /* ------------------------------------------------------------------ */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 14px;
+    border-radius: 6px;
+    border: 1px solid transparent;
+    font-family: var(--sans);
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 1;
+    cursor: pointer;
+    text-decoration: none;
+  }
+  .btn-primary {
+    background: var(--teal);
+    color: #fff;
+  }
+  .btn-primary:hover { background: var(--teal-2); }
+  .btn-ghost {
+    background: transparent;
+    color: var(--ink);
+    border-color: var(--line-2);
+  }
+  .btn-danger {
+    background: var(--terra);
+    color: #fff;
+  }
+  .btn-link {
+    background: transparent;
+    color: var(--teal);
+    border: none;
+    padding: 4px 0;
+  }
+  .btn-link:hover { text-decoration: underline; }
+
+  .tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 500;
+    font-family: var(--sans);
+    letter-spacing: 0.01em;
+  }
+  .tag-faq       { background: var(--teal-soft); color: var(--teal); }
+  .tag-article   { background: var(--surface-2); color: var(--ink-2); }
+  .tag-policy    { background: var(--ochre-bg); color: var(--ochre); }
+  .tag-manual    { background: #ECE4F2; color: #5C4475; }
+  .tag-other     { background: var(--slate-bg); color: var(--ink-2); }
+
+  .status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--ink-2);
+  }
+  .status .dot {
+    width: 6px; height: 6px; border-radius: 50%;
+  }
+  .status-ready      .dot { background: var(--forest); }
+  .status-queued     .dot { background: var(--ink-3); }
+  .status-uploading  .dot { background: var(--teal); animation: pulse 1.4s ease-in-out infinite; }
+  .status-processing .dot { background: var(--ochre); animation: pulse 1.4s ease-in-out infinite; }
+  .status-failed     .dot { background: var(--terra); }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50%      { opacity: 0.35; }
+  }
+
+  .mono { font-family: var(--mono); font-size: 12px; }
+  .caption { color: var(--ink-2); font-size: 12px; }
+  .error-text { color: var(--terra); font-size: 12px; }
+  .teal { color: var(--teal); }
+
+  /* ------------------------------------------------------------------ */
+  /*  FRAME 1 — Drop zone                                                */
+  /* ------------------------------------------------------------------ */
+  .dropzone {
+    border: 1.5px dashed var(--line-2);
+    border-radius: 10px;
+    padding: 56px 32px;
+    text-align: center;
+    background: var(--surface);
+    transition: all .2s ease-out;
+  }
+  .dropzone .icon {
+    width: 40px; height: 40px;
+    margin: 0 auto 16px;
+    color: var(--ink-2);
+  }
+  .dropzone h3 {
+    font-family: var(--serif);
+    font-weight: 500;
+    font-size: 20px;
+    margin: 0 0 4px;
+    font-variation-settings: "opsz" 36;
+  }
+  .dropzone p {
+    color: var(--ink-2);
+    margin: 0 0 20px;
+    font-size: 13px;
+  }
+  .dropzone .specs {
+    display: block;
+    width: max-content;
+    max-width: 100%;
+    padding: 8px 14px;
+    background: var(--surface-2);
+    border-radius: 6px;
+    font-size: 11px;
+    color: var(--ink-2);
+    font-family: var(--mono);
+    letter-spacing: 0.02em;
+    line-height: 1.7;
+    margin: 0 auto;
+  }
+  .dropzone .specs .sep {
+    color: var(--ink-3);
+    margin: 0 8px;
+    user-select: none;
+  }
+
+  .dropzone-hover {
+    border-color: var(--teal);
+    background: var(--teal-soft);
+    border-style: solid;
+  }
+  .dropzone-hover .icon { color: var(--teal); }
+
+  .dropzone-error {
+    border-color: var(--terra);
+    background: var(--terra-bg);
+    border-style: solid;
+  }
+  .dropzone-error .icon { color: var(--terra); }
+
+  .dropzone-variants {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+  }
+  .dropzone-variants .label {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    margin-bottom: 8px;
+    text-align: center;
+  }
+
+  /* ------------------------------------------------------------------ */
+  /*  FRAME 2 — Upload progress                                          */
+  /* ------------------------------------------------------------------ */
+  .queue {
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    overflow: hidden;
+    background: var(--surface);
+  }
+  .queue .queue-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--line);
+    background: var(--surface-2);
+  }
+  .queue .queue-head h4 {
+    margin: 0;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--ink-2);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .queue .queue-head .count { color: var(--ink-3); font-size: 12px; }
+  .queue-row {
+    display: grid;
+    grid-template-columns: 1fr 120px 200px 60px;
+    align-items: center;
+    gap: 16px;
+    padding: 14px 16px;
+    border-top: 1px solid var(--line);
+  }
+  .queue-row:first-child { border-top: none; }
+  .queue-row .file {
+    display: flex; align-items: center; gap: 10px;
+  }
+  .queue-row .file .ico {
+    width: 32px; height: 32px;
+    border-radius: 6px;
+    background: var(--surface-2);
+    display: grid; place-items: center;
+    color: var(--ink-2);
+    flex-shrink: 0;
+  }
+  .queue-row .file .name {
+    font-weight: 500;
+    color: var(--ink);
+    font-size: 13px;
+  }
+  .queue-row .file .sub {
+    color: var(--ink-3);
+    font-size: 11px;
+    margin-top: 2px;
+  }
+  .queue-row .progress {
+    height: 4px;
+    background: var(--surface-2);
+    border-radius: 2px;
+    overflow: hidden;
+    width: 100%;
+  }
+  .queue-row .progress > div {
+    height: 100%;
+    background: var(--teal);
+    border-radius: 2px;
+    transition: width .3s;
+  }
+  .queue-row .progress.indeterminate {
+    position: relative;
+    overflow: hidden;
+  }
+  .queue-row .progress.indeterminate::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    width: 40%;
+    background: linear-gradient(90deg, transparent, var(--ochre), transparent);
+    animation: slide 1.6s linear infinite;
+  }
+  @keyframes slide {
+    0%   { transform: translateX(-100%); }
+    100% { transform: translateX(350%); }
+  }
+  .queue-row .meta {
+    color: var(--ink-2);
+    font-size: 12px;
+  }
+  .queue-row .meta .pct {
+    color: var(--ink);
+    font-family: var(--mono);
+    font-size: 12px;
+  }
+  .queue-row .cancel {
+    color: var(--ink-3);
+    font-size: 11px;
+    text-align: right;
+  }
+  .queue-row .cancel a { color: var(--ink-2); text-decoration: none; }
+  .queue-row .cancel a:hover { color: var(--ink); text-decoration: underline; }
+
+  /* ------------------------------------------------------------------ */
+  /*  FRAME 3 — Ready list                                               */
+  /* ------------------------------------------------------------------ */
+  .doc-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  .doc-table th, .doc-table td {
+    text-align: left;
+    padding: 14px 16px;
+    font-size: 13px;
+    border-bottom: 1px solid var(--line);
+    vertical-align: middle;
+  }
+  .doc-table thead th {
+    font-size: 11px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--ink-3);
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--line);
+  }
+  .doc-table tbody tr:last-child td { border-bottom: none; }
+  .doc-table tbody tr:hover { background: var(--bg); }
+  .doc-table .title-cell {
+    display: flex; align-items: center; gap: 10px;
+  }
+  .doc-table .title-cell .ico {
+    width: 28px; height: 32px;
+    border-radius: 4px;
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    color: var(--ink-2);
+    display: grid; place-items: center;
+    flex-shrink: 0;
+  }
+  .doc-table .title-cell .name {
+    font-weight: 500;
+    color: var(--ink);
+  }
+  .doc-table .title-cell .src {
+    color: var(--ink-3);
+    font-size: 11px;
+    margin-top: 1px;
+  }
+  .doc-table .num {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--ink-2);
+  }
+  .doc-table .actions {
+    text-align: right;
+  }
+  .doc-table .actions a {
+    color: var(--ink-2);
+    text-decoration: none;
+    margin-left: 12px;
+    font-size: 12px;
+  }
+  .doc-table .actions a:hover { color: var(--ink); }
+  .doc-table .actions a.danger { color: var(--terra); }
+  .doc-table .actions a.danger:hover { text-decoration: underline; }
+
+  .doc-table .stale {
+    color: var(--ochre);
+    font-size: 11px;
+    display: block;
+    margin-top: 2px;
+  }
+
+  /* ------------------------------------------------------------------ */
+  /*  FRAME 4 — Failed state                                             */
+  /* ------------------------------------------------------------------ */
+  .failed-row {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 20px;
+    align-items: start;
+    padding: 16px;
+    background: var(--terra-bg);
+    border: 1px solid #ECC6BC;
+    border-radius: 8px;
+    margin-top: 16px;
+  }
+  .failed-row .left { display: flex; gap: 12px; }
+  .failed-row .left .ico {
+    width: 32px; height: 32px;
+    border-radius: 6px;
+    background: rgba(168, 51, 31, 0.12);
+    color: var(--terra);
+    display: grid; place-items: center;
+    flex-shrink: 0;
+  }
+  .failed-row .name {
+    font-weight: 500;
+    color: var(--ink);
+    font-size: 13px;
+  }
+  .failed-row .reason {
+    color: var(--terra);
+    font-size: 13px;
+    margin: 4px 0 8px;
+    line-height: 1.4;
+  }
+  .failed-row .actions {
+    display: flex; align-items: center; gap: 16px;
+    margin-top: 8px;
+  }
+  .failed-row .actions a {
+    color: var(--terra);
+    font-size: 12px;
+    text-decoration: none;
+    border-bottom: 1px solid currentColor;
+    padding-bottom: 1px;
+  }
+  .failed-row .actions .primary {
+    background: var(--terra);
+    color: #fff;
+    border: none;
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+  }
+  .failed-row .right {
+    text-align: right;
+    color: var(--ink-3);
+    font-size: 11px;
+    font-family: var(--mono);
+  }
+
+  /* Failed list as a row in the table */
+  .doc-table .failed-inline {
+    background: var(--terra-bg);
+  }
+  .doc-table .failed-inline td { border-color: #ECC6BC; }
+  .doc-table .failed-inline .error-detail {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 12px 16px;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--ink-2);
+    line-height: 1.5;
+    white-space: pre-wrap;
+  }
+  .doc-table .failed-inline .error-detail .marker {
+    color: var(--terra);
+  }
+
+  /* ------------------------------------------------------------------ */
+  /*  FRAME 5 — Delete confirm                                           */
+  /* ------------------------------------------------------------------ */
+  .modal-wrap {
+    position: relative;
+    padding: 24px;
+    background: rgba(26, 24, 21, 0.45);
+    border-radius: 12px;
+    min-height: 480px;
+  }
+  .modal {
+    background: var(--surface);
+    border-radius: 10px;
+    box-shadow: 0 20px 50px -20px rgba(26, 24, 21, 0.25), 0 2px 6px rgba(26, 24, 21, 0.06);
+    max-width: 460px;
+    margin: 60px auto 0;
+    overflow: hidden;
+  }
+  .modal .body { padding: 28px 28px 24px; }
+  .modal h3 {
+    font-family: var(--serif);
+    font-weight: 500;
+    font-size: 22px;
+    margin: 0 0 12px;
+    font-variation-settings: "opsz" 36;
+    line-height: 1.2;
+  }
+  .modal p {
+    color: var(--ink-2);
+    font-size: 13.5px;
+    line-height: 1.55;
+    margin: 0 0 14px;
+  }
+  .modal p strong { color: var(--ink); font-weight: 500; }
+  .modal .footnote {
+    color: var(--ink-3);
+    font-size: 12px;
+    font-style: italic;
+  }
+  .modal .footer {
+    display: flex; justify-content: flex-end; align-items: center;
+    gap: 8px;
+    padding: 14px 20px;
+    background: var(--surface-2);
+    border-top: 1px solid var(--line);
+  }
+  .modal .footer .spacer { flex: 1; }
+
+  /* ------------------------------------------------------------------ */
+  /*  FRAME 6 — Document detail                                          */
+  /* ------------------------------------------------------------------ */
+  .detail {
+    display: grid;
+    grid-template-columns: 1fr 280px;
+    gap: 0;
+  }
+  .detail .main { padding: 32px 40px; border-right: 1px solid var(--line); }
+  .detail .side { padding: 32px 32px; background: var(--bg); }
+
+  .back {
+    display: inline-flex; align-items: center; gap: 4px;
+    color: var(--ink-2);
+    font-size: 12px;
+    text-decoration: none;
+    margin-bottom: 20px;
+  }
+  .back:hover { color: var(--ink); }
+
+  .detail h1 {
+    font-family: var(--serif);
+    font-weight: 500;
+    font-size: 28px;
+    line-height: 1.15;
+    margin: 0 0 4px;
+    font-variation-settings: "opsz" 72;
+  }
+  .detail .crumbs {
+    color: var(--ink-3);
+    font-size: 12px;
+    margin-bottom: 16px;
+  }
+  .detail .meta-strip {
+    display: flex; gap: 16px;
+    margin: 16px 0 24px;
+    flex-wrap: wrap;
+  }
+  .detail .meta-strip .pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 4px 10px;
+    background: var(--surface-2);
+    border-radius: 4px;
+    font-size: 12px;
+    color: var(--ink-2);
+  }
+  .detail .meta-strip .pill b { color: var(--ink); font-weight: 500; }
+
+  .detail h2 {
+    font-family: var(--serif);
+    font-weight: 500;
+    font-size: 16px;
+    margin: 24px 0 12px;
+    font-variation-settings: "opsz" 24;
+  }
+  .detail .body-preview {
+    background: var(--bg);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 20px 24px;
+    font-size: 13.5px;
+    line-height: 1.65;
+    color: var(--ink-2);
+    max-height: 220px;
+    overflow: hidden;
+    position: relative;
+  }
+  .detail .body-preview::after {
+    content: "";
+    position: absolute; left: 0; right: 0; bottom: 0; height: 60px;
+    background: linear-gradient(to bottom, transparent, var(--bg));
+  }
+  .detail .body-preview h3 { color: var(--ink); font-family: var(--serif); font-weight: 500; font-size: 14px; margin: 0 0 6px; }
+  .detail .body-preview p { margin: 0 0 10px; }
+
+  .side h3 {
+    font-size: 11px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--ink-3);
+    margin: 0 0 12px;
+  }
+  .side dl { margin: 0 0 28px; }
+  .side dt { color: var(--ink-3); font-size: 11px; margin-top: 10px; }
+  .side dt:first-child { margin-top: 0; }
+  .side dd {
+    margin: 2px 0 0;
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--ink);
+  }
+  .side dd.url { font-size: 12px; word-break: break-all; }
+  .side .actions { display: flex; flex-direction: column; gap: 8px; }
+
+  .timeline {
+    list-style: none; padding: 0; margin: 0;
+    border-left: 1px solid var(--line);
+  }
+  .timeline li {
+    position: relative;
+    padding: 0 0 16px 16px;
+  }
+  .timeline li::before {
+    content: "";
+    position: absolute;
+    left: -3px; top: 4px;
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--ink-3);
+  }
+  .timeline li.passed::before { background: var(--forest); }
+  .timeline li .when { color: var(--ink-3); font-size: 11px; }
+  .timeline li .what { color: var(--ink); font-size: 13px; }
+
+  /* ------------------------------------------------------------------ */
+  /*  Spec callouts                                                      */
+  /* ------------------------------------------------------------------ */
+  .callouts {
+    padding: 24px 40px 32px;
+    border-top: 1px solid var(--line);
+    background: var(--surface-2);
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 32px;
+  }
+  .callouts h5 {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--ink-3);
+    margin: 0 0 8px;
+    font-weight: 500;
+  }
+  .callouts p, .callouts ul { margin: 0; font-size: 12.5px; color: var(--ink-2); line-height: 1.5; }
+  .callouts ul { padding-left: 16px; }
+
+  /* ------------------------------------------------------------------ */
+  /*  Footer                                                             */
+  /* ------------------------------------------------------------------ */
+  .file-footer {
+    margin-top: 80px;
+    padding-top: 32px;
+    border-top: 1px solid var(--line);
+    color: var(--ink-2);
+    font-size: 12px;
+    display: flex; justify-content: space-between;
+  }
+  .file-footer code {
+    font-family: var(--mono);
+    background: var(--surface-2);
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-size: 11px;
+  }
+</style>
+</head>
+<body>
+
+<div class="canvas">
+
+  <header class="file-header">
+    <div class="crumb">InboxPilot · Design · Knowledge base</div>
+    <h1>Knowledge base <em>upload</em> &amp; document management</h1>
+    <p style="max-width:680px;color:var(--ink-2);font-size:15px;line-height:1.55;margin-top:8px;">
+      Six frames covering the full document lifecycle: drop, progress, ready, failed,
+      delete confirmation, and detail view. Hand-off for the
+      <a href="#" style="color:var(--teal);text-decoration:none;border-bottom:1px solid currentColor;">[P1] Knowledge base ingestion UI</a> build.
+    </p>
+    <div class="meta">
+      <span><b>File</b> knowledge-base-v1.fig</span>
+      <span><b>Frames</b> 6 (+ 2 variants)</span>
+      <span><b>Owner</b> design</span>
+      <span><b>Status</b> Ready for eng review</span>
+      <span><b>Updated</b> Jun 7, 2026</span>
+    </div>
+  </header>
+
+  <!-- ================================================================ -->
+  <!-- FRAME 1                                                          -->
+  <!-- ================================================================ -->
+  <section class="frame">
+    <header class="frame-head">
+      <span class="num">Frame 01</span>
+      <h2>Drop zone — default, hover, invalid</h2>
+      <span class="states">3 variants</span>
+    </header>
+
+    <div class="frame-stage">
+      <div class="page">
+        <div class="topbar">
+          <div class="logo"><span class="dot"></span> InboxPilot</div>
+          <nav>
+            <a href="#">Inbox</a>
+            <a href="#" class="active">Knowledge</a>
+            <a href="#">Analytics</a>
+            <a href="#">Settings</a>
+          </nav>
+          <div class="right">
+            <span>Acme Support</span>
+            <div class="avatar">MR</div>
+          </div>
+        </div>
+
+        <div class="page-header">
+          <div class="eyebrow">Knowledge</div>
+          <h1>Documents the AI can read from</h1>
+          <p>
+            Drop in FAQs, policies, and product docs. We chunk, embed,
+            and index them so the AI can quote them in replies. Updates go
+            live the moment a document is ready.
+          </p>
+        </div>
+
+        <div style="padding: 24px 40px 40px;">
+
+          <div class="dropzone-variants">
+
+            <div>
+              <div class="label">Default</div>
+              <div class="dropzone">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                  <polyline points="17 8 12 3 7 8"/>
+                  <line x1="12" y1="3" x2="12" y2="15"/>
+                </svg>
+                <h3>Drop files here, or click to browse</h3>
+                <p>Add to the AI's reading list. You can upload more than one at a time.</p>
+                <div class="specs">
+                  <span>PDF, Markdown, HTML, DOCX, TXT</span>
+                  <span class="sep">·</span>
+                  <span>up to 25 MB per file</span>
+                  <span class="sep">·</span>
+                  <span>50 docs / org</span>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <div class="label">Hover · dragging</div>
+              <div class="dropzone dropzone-hover">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+                <h3>Release to add</h3>
+                <p>We'll queue them, extract the text, and start indexing.</p>
+                <div class="specs">
+                  <span>Ready: 3 files detected</span>
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+          <div style="margin-top: 32px;">
+            <div class="label" style="text-align:left;font-family:var(--mono);font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--ink-3);margin-bottom:8px;">Invalid · unsupported file type</div>
+            <div class="dropzone dropzone-error">
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="12" y1="8" x2="12" y2="12"/>
+                <line x1="12" y1="16" x2="12.01" y2="16"/>
+              </svg>
+              <h3>We can't read that file type</h3>
+              <p>
+                <strong style="color:var(--ink);">family-photo.jpg</strong> isn't a text document, so there's nothing for the AI to learn from.
+                Try a PDF, Markdown, HTML, DOCX, or TXT file.
+              </p>
+              <div class="specs">
+                <span>Supported: PDF, Markdown, HTML, DOCX, TXT</span>
+              </div>
+            </div>
+          </div>
+
+          <p style="margin-top: 24px; color: var(--ink-3); font-size: 12px;">
+            Tip — a 30-page PDF typically takes about 15 seconds to index. Long manuals may take longer.
+          </p>
+
+        </div>
+      </div>
+    </div>
+
+    <div class="callouts">
+      <div>
+        <h5>Interaction</h5>
+        <ul>
+          <li>Click anywhere in the zone to open the file picker.</li>
+          <li>Hover state triggers on <code>dragenter</code>, not on every mouse-over.</li>
+          <li>Invalid state appears after drop, not during drag (don't yell at the user too early).</li>
+        </ul>
+      </div>
+      <div>
+        <h5>Copy rules</h5>
+        <ul>
+          <li>Lead with what the user did ("Drop files here…"), not what the system does.</li>
+          <li>Always name the file being rejected — generic errors are useless.</li>
+          <li>Footnote as a quiet tip, not a banner.</li>
+        </ul>
+      </div>
+      <div>
+        <h5>States not shown</h5>
+        <ul>
+          <li>Empty org (no docs ever) — same as default; the empty doc list below tells that story.</li>
+          <li>Uploading into the zone — see Frame 02 for the queue.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================================================================ -->
+  <!-- FRAME 2                                                          -->
+  <!-- ================================================================ -->
+  <section class="frame">
+    <header class="frame-head">
+      <span class="num">Frame 02</span>
+      <h2>Upload progress — queued, uploading, processing</h2>
+      <span class="states">3 states in one queue</span>
+    </header>
+
+    <div class="frame-stage">
+      <div class="page">
+        <div class="topbar">
+          <div class="logo"><span class="dot"></span> InboxPilot</div>
+          <nav>
+            <a href="#">Inbox</a>
+            <a href="#" class="active">Knowledge</a>
+            <a href="#">Analytics</a>
+            <a href="#">Settings</a>
+          </nav>
+          <div class="right">
+            <span>Acme Support</span>
+            <div class="avatar">MR</div>
+          </div>
+        </div>
+
+        <div class="page-header">
+          <div class="eyebrow">Knowledge</div>
+          <h1>Documents the AI can read from</h1>
+          <p>
+            Drop in FAQs, policies, and product docs. We chunk, embed,
+            and index them so the AI can quote them in replies. Updates go
+            live the moment a document is ready.
+          </p>
+        </div>
+
+        <div style="padding: 0 40px 32px;">
+
+          <div class="queue">
+            <div class="queue-head">
+              <h4>Indexing</h4>
+              <span class="count">3 of 3</span>
+            </div>
+
+            <div class="queue-row">
+              <div class="file">
+                <div class="ico">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                </div>
+                <div>
+                  <div class="name">return-policy.pdf</div>
+                  <div class="sub">2.4 MB · FAQ</div>
+                </div>
+              </div>
+              <div class="status status-queued">
+                <span class="dot"></span> Queued
+              </div>
+              <div class="meta">
+                <span class="caption">Waiting for a worker…</span>
+              </div>
+              <div class="cancel"><a href="#">Cancel</a></div>
+            </div>
+
+            <div class="queue-row">
+              <div class="file">
+                <div class="ico">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                </div>
+                <div>
+                  <div class="name">shipping-zones.md</div>
+                  <div class="sub">128 KB · Article</div>
+                </div>
+              </div>
+              <div class="status status-uploading">
+                <span class="dot"></span> Uploading
+              </div>
+              <div class="meta">
+                <div class="progress" style="margin-bottom: 4px;">
+                  <div style="width: 62%;"></div>
+                </div>
+                <span class="caption"><span class="pct">62%</span> · 1.2 MB / 2.0 MB</span>
+              </div>
+              <div class="cancel"><a href="#">Cancel</a></div>
+            </div>
+
+            <div class="queue-row">
+              <div class="file">
+                <div class="ico">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                </div>
+                <div>
+                  <div class="name">faq-v2.docx</div>
+                  <div class="sub">412 KB · FAQ</div>
+                </div>
+              </div>
+              <div class="status status-processing">
+                <span class="dot"></span> Processing
+              </div>
+              <div class="meta">
+                <div class="progress indeterminate" style="margin-bottom: 4px;"></div>
+                <span class="caption">Extracting text and chunking…</span>
+              </div>
+              <div class="cancel"><a href="#">Cancel</a></div>
+            </div>
+
+          </div>
+
+          <p style="margin-top: 16px; color: var(--ink-3); font-size: 12px;">
+            The queue lives at the top of the page while any document is still working. It disappears once everything is ready or failed.
+          </p>
+
+        </div>
+      </div>
+    </div>
+
+    <div class="callouts">
+      <div>
+        <h5>State definitions</h5>
+        <ul>
+          <li><b>Queued</b> — accepted by the server, waiting for a worker. No progress bar; the user knows it's in line.</li>
+          <li><b>Uploading</b> — bytes in flight. Deterministic % bar, MB counter.</li>
+          <li><b>Processing</b> — bytes are in. The system is chunking and embedding. Indeterminate bar; this is where the AI does the work.</li>
+        </ul>
+      </div>
+      <div>
+        <h5>Done &amp; failed handoffs</h5>
+        <ul>
+          <li>When a document becomes <b>Ready</b>, it slides into the main list (Frame 03) and the queue count decrements.</li>
+          <li>If a document <b>fails</b>, it stays in this queue as a separate failed row (Frame 04) with the error inline.</li>
+        </ul>
+      </div>
+      <div>
+        <h5>Eng note</h5>
+        <ul>
+          <li>Polling: every 2s while queue &gt; 0; switch to realtime once empty.</li>
+          <li>State machine: <code>queued → uploading → processing → ready | failed</code>.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================================================================ -->
+  <!-- FRAME 3                                                          -->
+  <!-- ================================================================ -->
+  <section class="frame">
+    <header class="frame-head">
+      <span class="num">Frame 03</span>
+      <h2>Document list — ready state</h2>
+      <span class="states">Default list view</span>
+    </header>
+
+    <div class="frame-stage">
+      <div class="page">
+        <div class="topbar">
+          <div class="logo"><span class="dot"></span> InboxPilot</div>
+          <nav>
+            <a href="#">Inbox</a>
+            <a href="#" class="active">Knowledge</a>
+            <a href="#">Analytics</a>
+            <a href="#">Settings</a>
+          </nav>
+          <div class="right">
+            <span>Acme Support</span>
+            <div class="avatar">MR</div>
+          </div>
+        </div>
+
+        <div class="page-header">
+          <div class="eyebrow">Knowledge · 24 documents</div>
+          <h1>Documents the AI can read from</h1>
+          <p>
+            Drop in FAQs, policies, and product docs. We chunk, embed,
+            and index them so the AI can quote them in replies. Updates go
+            live the moment a document is ready.
+          </p>
+        </div>
+
+        <div style="padding: 0 40px 40px;">
+
+          <table class="doc-table">
+            <thead>
+              <tr>
+                <th>Document</th>
+                <th>Type</th>
+                <th>Status</th>
+                <th>Chunks</th>
+                <th>Last tested</th>
+                <th>Updated</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>
+                  <div class="title-cell">
+                    <div class="ico">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                    </div>
+                    <div>
+                      <div class="name">Return policy</div>
+                      <div class="src">return-policy.pdf</div>
+                    </div>
+                  </div>
+                </td>
+                <td><span class="tag tag-faq">FAQ</span></td>
+                <td><div class="status status-ready"><span class="dot"></span> Ready</div></td>
+                <td><span class="num">142</span></td>
+                <td>
+                  <span class="caption">2 hours ago</span>
+                </td>
+                <td><span class="caption">Jun 6, 4:12 PM</span></td>
+                <td class="actions">
+                  <a href="#">Open</a>
+                  <a href="#" class="danger">Delete</a>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <div class="title-cell">
+                    <div class="ico">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                    </div>
+                    <div>
+                      <div class="name">Shipping zones</div>
+                      <div class="src">shipping-zones.md</div>
+                    </div>
+                  </div>
+                </td>
+                <td><span class="tag tag-article">Article</span></td>
+                <td><div class="status status-ready"><span class="dot"></span> Ready</div></td>
+                <td><span class="num">38</span></td>
+                <td>
+                  <span class="caption">Yesterday</span>
+                </td>
+                <td><span class="caption">Jun 5, 9:01 AM</span></td>
+                <td class="actions">
+                  <a href="#">Open</a>
+                  <a href="#" class="danger">Delete</a>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <div class="title-cell">
+                    <div class="ico">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                    </div>
+                    <div>
+                      <div class="name">Refund eligibility rules</div>
+                      <div class="src">refund-rules.docx</div>
+                    </div>
+                  </div>
+                </td>
+                <td><span class="tag tag-policy">Policy</span></td>
+                <td><div class="status status-ready"><span class="dot"></span> Ready</div></td>
+                <td><span class="num">86</span></td>
+                <td>
+                  <span class="caption">5 days ago</span>
+                  <span class="stale">Stale · 14 days since doc update</span>
+                </td>
+                <td><span class="caption">Jun 2, 2:44 PM</span></td>
+                <td class="actions">
+                  <a href="#">Open</a>
+                  <a href="#" class="danger">Delete</a>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <div class="title-cell">
+                    <div class="ico">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                    </div>
+                    <div>
+                      <div class="name">Q2 product catalog</div>
+                      <div class="src">https://acme.com/docs/q2-catalog</div>
+                    </div>
+                  </div>
+                </td>
+                <td><span class="tag tag-manual">Manual</span></td>
+                <td><div class="status status-ready"><span class="dot"></span> Ready</div></td>
+                <td><span class="num">214</span></td>
+                <td>
+                  <span class="caption">Never</span>
+                </td>
+                <td><span class="caption">May 30, 11:22 AM</span></td>
+                <td class="actions">
+                  <a href="#">Open</a>
+                  <a href="#" class="danger">Delete</a>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <div class="title-cell">
+                    <div class="ico">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                    </div>
+                    <div>
+                      <div class="name">Brand voice guide</div>
+                      <div class="src">brand-voice.pdf</div>
+                    </div>
+                  </div>
+                </td>
+                <td><span class="tag tag-other">Other</span></td>
+                <td><div class="status status-ready"><span class="dot"></span> Ready</div></td>
+                <td><span class="num">52</span></td>
+                <td>
+                  <span class="caption">1 week ago</span>
+                </td>
+                <td><span class="caption">May 29, 3:08 PM</span></td>
+                <td class="actions">
+                  <a href="#">Open</a>
+                  <a href="#" class="danger">Delete</a>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+
+        </div>
+      </div>
+    </div>
+
+    <div class="callouts">
+      <div>
+        <h5>Columns</h5>
+        <ul>
+          <li><b>Document</b> — human title + filename. Human title is what's quoted by the AI.</li>
+          <li><b>Type</b> — the user-set category. Tinted tag, not a colored badge.</li>
+          <li><b>Status</b> — green dot for ready, ochre for processing, terra for failed.</li>
+        </ul>
+      </div>
+      <div>
+        <h5>Health signals</h5>
+        <ul>
+          <li><b>Last tested</b> — when the AI was last quizzed against this doc. If "Never", it has never been validated against live questions.</li>
+          <li><b>Stale</b> — ochre warning if the document body hasn't been updated in 14+ days. Encourages re-upload.</li>
+        </ul>
+      </div>
+      <div>
+        <h5>Empty state</h5>
+        <ul>
+          <li>If <code>documents.length === 0</code> and no queue, show the Frame 01 drop zone as the page hero. Don't show an empty table.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================================================================ -->
+  <!-- FRAME 4                                                          -->
+  <!-- ================================================================ -->
+  <section class="frame">
+    <header class="frame-head">
+      <span class="num">Frame 04</span>
+      <h2>Failed state — error message, log link, retry</h2>
+      <span class="states">Inline in list + standalone</span>
+    </header>
+
+    <div class="frame-stage">
+      <div class="page">
+        <div class="topbar">
+          <div class="logo"><span class="dot"></span> InboxPilot</div>
+          <nav>
+            <a href="#">Inbox</a>
+            <a href="#" class="active">Knowledge</a>
+            <a href="#">Analytics</a>
+            <a href="#">Settings</a>
+          </nav>
+          <div class="right">
+            <span>Acme Support</span>
+            <div class="avatar">MR</div>
+          </div>
+        </div>
+
+        <div class="page-header">
+          <div class="eyebrow">Knowledge · 1 needs attention</div>
+          <h1>Documents the AI can read from</h1>
+          <p>
+            Drop in FAQs, policies, and product docs. We chunk, embed,
+            and index them so the AI can quote them in replies. Updates go
+            live the moment a document is ready.
+          </p>
+        </div>
+
+        <div style="padding: 0 40px 40px;">
+
+          <!-- Standalone failed callout (when there's also a working queue) -->
+          <div class="failed-row" style="margin-bottom: 24px;">
+            <div class="left">
+              <div class="ico">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                  <line x1="12" y1="9" x2="12" y2="13"/>
+                  <line x1="12" y1="17" x2="12.01" y2="17"/>
+                </svg>
+              </div>
+              <div>
+                <div class="name">annual-report-2024.pdf</div>
+                <div class="reason">Couldn't extract text — this PDF looks like a scanned image. OCR isn't enabled on your plan.</div>
+                <div class="actions">
+                  <button class="primary">Retry indexing</button>
+                  <a href="#">View server log ↗</a>
+                  <a href="#" style="color: var(--ink-2); border-color: var(--ink-3);">Remove from queue</a>
+                </div>
+              </div>
+            </div>
+            <div class="right">
+              FAILED 12:04<br/>
+              job_id 9c41…f3
+            </div>
+          </div>
+
+          <!-- And the same failure rendered as a row in the list (collapsed view) -->
+          <table class="doc-table">
+            <thead>
+              <tr>
+                <th>Document</th>
+                <th>Type</th>
+                <th>Status</th>
+                <th>Chunks</th>
+                <th>Last tested</th>
+                <th>Updated</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>
+                  <div class="title-cell">
+                    <div class="ico">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                    </div>
+                    <div>
+                      <div class="name">Return policy</div>
+                      <div class="src">return-policy.pdf</div>
+                    </div>
+                  </div>
+                </td>
+                <td><span class="tag tag-faq">FAQ</span></td>
+                <td><div class="status status-ready"><span class="dot"></span> Ready</div></td>
+                <td><span class="num">142</span></td>
+                <td><span class="caption">2 hours ago</span></td>
+                <td><span class="caption">Jun 6, 4:12 PM</span></td>
+                <td class="actions">
+                  <a href="#">Open</a>
+                  <a href="#" class="danger">Delete</a>
+                </td>
+              </tr>
+              <tr class="failed-inline">
+                <td colspan="7" style="padding: 16px;">
+                  <div style="display:grid; grid-template-columns: 32px 1fr auto; gap: 12px; align-items: start;">
+                    <div style="width:32px;height:32px;border-radius:6px;background:rgba(168,51,31,0.12);color:var(--terra);display:grid;place-items:center;">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                        <line x1="12" y1="9" x2="12" y2="13"/>
+                        <line x1="12" y1="17" x2="12.01" y2="17"/>
+                      </svg>
+                    </div>
+                    <div>
+                      <div style="font-weight:500;color:var(--ink);">annual-report-2024.pdf — <span class="error-text">indexing failed</span></div>
+                      <div class="error-detail" style="margin-top: 8px;"><span class="marker">ERROR</span>  pdf_parse: no extractable text (page rasterization detected, no text layer)
+<span class="marker">HINT</span>   this file appears to be a scanned image; enable OCR or re-export with a text layer
+<span class="marker">JOB</span>    9c41e2a4-…-f3  duration 8.2s  model text-embedding-3-small</div>
+                      <div style="margin-top: 12px; display: flex; gap: 16px;">
+                        <button class="btn btn-primary" style="background:var(--terra);border-color:var(--terra);">Retry</button>
+                        <a href="#" class="btn-link" style="color:var(--terra);">View full server log</a>
+                        <a href="#" class="btn-link" style="color:var(--ink-2);">Remove from queue</a>
+                      </div>
+                    </div>
+                    <div style="color:var(--ink-3);font-size:11px;font-family:var(--mono);text-align:right;">
+                      Failed 12:04<br/>attempt 1 of 3
+                    </div>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+
+        </div>
+      </div>
+    </div>
+
+    <div class="callouts">
+      <div>
+        <h5>Error message rules</h5>
+        <ul>
+          <li>Name what <i>happened</i>, not what <i>broke</i>. "Couldn't extract text" beats "PDFParseError".</li>
+          <li>Suggest the next step. The user shouldn't have to open a log to know what to try.</li>
+          <li>Show attempt count — "attempt 1 of 3" — so the user knows whether retry is worth it.</li>
+        </ul>
+      </div>
+      <div>
+        <h5>Server log link</h5>
+        <ul>
+          <li>Opens a new tab to the structured log for the failed <code>job_id</code>.</li>
+          <li>Include the job_id in both the inline callout and the log link so support can copy it.</li>
+        </ul>
+      </div>
+      <div>
+        <h5>Retry behavior</h5>
+        <ul>
+          <li>Optimistic — clicking "Retry" re-queues immediately, with a one-row flash of "Re-queued".</li>
+          <li>Auto-retry up to 3× on transient errors; beyond that, require a manual click.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================================================================ -->
+  <!-- FRAME 5                                                          -->
+  <!-- ================================================================ -->
+  <section class="frame">
+    <header class="frame-head">
+      <span class="num">Frame 05</span>
+      <h2>Delete confirm — soft confirm with consequence copy</h2>
+      <span class="states">1 modal, 1 trigger</span>
+    </header>
+
+    <div class="frame-stage">
+      <div class="modal-wrap">
+        <div class="modal" role="dialog" aria-labelledby="del-title" aria-modal="true">
+          <div class="body">
+            <h3 id="del-title">Delete <em style="font-style:italic;">Return policy.pdf</em>?</h3>
+            <p>
+              This removes the document and its cached embeddings from the
+              knowledge base. The AI will stop referencing it on the next
+              message it sends.
+            </p>
+            <p>
+              The action is logged for your audit trail and can't be undone
+              from here. If you want it back, you'll need to re-upload the file.
+            </p>
+            <p class="footnote">Customers won't see anything change until the AI's next reply.</p>
+          </div>
+          <div class="footer">
+            <button class="btn btn-link" style="color:var(--ink-2);">Cancel</button>
+            <button class="btn btn-danger">Delete document</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="callouts">
+      <div>
+        <h5>Why this isn't "Are you sure?"</h5>
+        <ul>
+          <li>It names the specific document, so the user is never deleting a stranger.</li>
+          <li>It tells them what <i>they</i> get (gone) and what <i>customers</i> get (nothing, until next reply).</li>
+          <li>It says "can't be undone from here" — softer than "permanent", more honest than "destructive".</li>
+        </ul>
+      </div>
+      <div>
+        <h5>Button hierarchy</h5>
+        <ul>
+          <li><b>Cancel</b> is a text link, not a button — the modal's safe action should be the default.</li>
+          <li><b>Delete document</b> is the only filled button, in terracotta. No icon, no exclamation.</li>
+          <li>Enter triggers Cancel. Esc triggers Cancel. The "nuclear" option is always the second one.</li>
+        </ul>
+      </div>
+      <div>
+        <h5>Eng note</h5>
+        <ul>
+          <li>Soft-confirm, not password re-entry. This isn't a billing action.</li>
+          <li>On confirm, optimistically remove the row and show a toast with an <b>Undo</b> link (10s window).</li>
+          <li>Audit log: <code>knowledge_document_deleted</code>, with the title in metadata.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================================================================ -->
+  <!-- FRAME 6                                                          -->
+  <!-- ================================================================ -->
+  <section class="frame">
+    <header class="frame-head">
+      <span class="num">Frame 06</span>
+      <h2>Document detail — chunks, tokens, last tested, source</h2>
+      <span class="states">Full view + sidebar</span>
+    </header>
+
+    <div class="frame-stage">
+      <div class="page">
+        <div class="topbar">
+          <div class="logo"><span class="dot"></span> InboxPilot</div>
+          <nav>
+            <a href="#">Inbox</a>
+            <a href="#" class="active">Knowledge</a>
+            <a href="#">Analytics</a>
+            <a href="#">Settings</a>
+          </nav>
+          <div class="right">
+            <span>Acme Support</span>
+            <div class="avatar">MR</div>
+          </div>
+        </div>
+
+        <div class="detail">
+
+          <div class="main">
+            <a href="#" class="back">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+              Back to knowledge
+            </a>
+            <div class="crumbs">Knowledge · FAQ · Return policy</div>
+            <h1>Return policy</h1>
+
+            <div class="meta-strip">
+              <span class="pill">Status: <b style="color:var(--forest);">Ready</b></span>
+              <span class="pill">Type: <b>FAQ</b></span>
+              <span class="pill">Updated <b>Jun 6, 4:12 PM</b></span>
+              <span class="pill">By <b>maya@acme.com</b></span>
+            </div>
+
+            <h2>Body</h2>
+            <div class="body-preview">
+              <h3>How to request a return</h3>
+              <p>Customers can request a return within 30 days of delivery for a full refund. The item must be unused and in its original packaging. To start a return, the customer should reply to their order confirmation email or message us here.</p>
+              <h3>Refund timing</h3>
+              <p>Refunds are issued to the original payment method within 5–7 business days of us receiving the returned item. The customer will get an email confirmation when the refund is on its way.</p>
+              <h3>Non-returnable items</h3>
+              <p>Gift cards, digital downloads, and perishable goods are not returnable. Custom orders can only be returned if they're defective on arrival…</p>
+            </div>
+
+            <h2 style="margin-top: 32px;">Test history</h2>
+            <ul class="timeline">
+              <li class="passed">
+                <div class="when">Today, 2:14 PM</div>
+                <div class="what">Passed — "What's your return window?" quoted chunk #14.</div>
+              </li>
+              <li class="passed">
+                <div class="when">Yesterday, 4:08 PM</div>
+                <div class="what">Passed — "Can I return a digital download?" correctly answered "no".</div>
+              </li>
+              <li>
+                <div class="when">Jun 4, 11:42 AM</div>
+                <div class="what">Test run — 5 questions, 4 passed, 1 skipped.</div>
+              </li>
+              <li>
+                <div class="when">Jun 1, 9:30 AM</div>
+                <div class="what">Imported from <code>return-policy.pdf</code>.</div>
+              </li>
+            </ul>
+          </div>
+
+          <aside class="side">
+            <h3>Stats</h3>
+            <dl>
+              <dt>Chunks</dt>
+              <dd>142</dd>
+              <dt>Token estimate</dt>
+              <dd>~18,400</dd>
+              <dt>Last tested</dt>
+              <dd>2 hours ago</dd>
+              <dt>Last update</dt>
+              <dd>Jun 6, 4:12 PM</dd>
+              <dt>Source</dt>
+              <dd>return-policy.pdf</dd>
+              <dt>Source URL</dt>
+              <dd class="url">—</dd>
+            </dl>
+
+            <h3>Manage</h3>
+            <div class="actions">
+              <button class="btn btn-ghost" style="justify-content:center;">Re-index</button>
+              <button class="btn btn-ghost" style="justify-content:center;">Download original</button>
+              <button class="btn btn-ghost" style="justify-content:center;color:var(--terra);border-color:var(--terra);">Delete document</button>
+            </div>
+          </aside>
+
+        </div>
+      </div>
+    </div>
+
+    <div class="callouts">
+      <div>
+        <h5>Sidebar numbers</h5>
+        <ul>
+          <li><b>Chunks</b> — count of embedded chunks. Mono font, monospace numbers.</li>
+          <li><b>Token estimate</b> — rough total of tokens across chunks. Shown with a <code>~</code>, not a promise.</li>
+          <li><b>Last tested</b> — when the AI was last quizzed on this doc. (Same field as the list view.)</li>
+        </ul>
+      </div>
+      <div>
+        <h5>Source URL</h5>
+        <ul>
+          <li>For URL imports: shown as a clickable link, opens in a new tab.</li>
+          <li>For file uploads: shown as a dash. Don't render a broken "—" string as if it were a URL.</li>
+          <li>For URL imports, also show "Last fetched" so the user knows the snapshot is fresh (or not).</li>
+        </ul>
+      </div>
+      <div>
+        <h5>Test history</h5>
+        <ul>
+          <li>Timeline, not a table. Each entry is one line, with a dot in the status color.</li>
+          <li>Passed questions quote the chunk that answered them, so reviewers can audit fast.</li>
+          <li>Skipped questions are still listed — they're signal too.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <footer class="file-footer">
+    <div>Hand-off package · <code>docs/design/index.html</code> + <code>docs/design/spec.md</code></div>
+    <div>Open <code>spec.md</code> for the asset list, copy table, and state-machine notes.</div>
+  </footer>
+
+</div>
+
+</body>
+</html>

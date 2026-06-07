@@ -1,0 +1,2154 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>InboxPilot · Inbox UI states — design hand-off</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  /* ------------------------------------------------------------------ */
+  /*  Tokens  (Linen — shared with knowledge-base + analytics)            */
+  /* ------------------------------------------------------------------ */
+  :root {
+    --bg:        #FAF8F4;
+    --surface:   #FFFFFF;
+    --surface-2: #F4F0E6;
+    --surface-3: #FBF7EC;
+    --ink:       #1A1815;
+    --ink-2:     #6B655C;
+    --ink-3:     #9A9386;
+    --line:      #E8E2D6;
+    --line-2:    #D7CFBE;
+
+    --teal:      #0E5E5E;
+    --teal-2:    #0A4848;
+    --teal-soft: #E4EEEE;
+    --forest:    #4A7C3F;
+    --forest-bg: #EEF3E8;
+    --ochre:     #B8761E;
+    --ochre-bg:  #F6ECDC;
+    --terra:     #A8331F;
+    --terra-bg:  #F5E2DC;
+    --slate:     #6B655C;
+    --slate-bg:  #EFEBE0;
+
+    --serif: "Fraunces", "Iowan Old Style", Georgia, serif;
+    --sans:  "IBM Plex Sans", "Helvetica Neue", sans-serif;
+    --mono:  "IBM Plex Mono", ui-monospace, "SF Mono", monospace;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: var(--sans);
+    font-size: 14px;
+    line-height: 1.5;
+    color: var(--ink);
+    background: var(--bg);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* ------------------------------------------------------------------ */
+  /*  Page chrome                                                        */
+  /* ------------------------------------------------------------------ */
+  .page {
+    max-width: 1320px;
+    margin: 0 auto;
+    padding: 56px 48px 96px;
+  }
+  .toc {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 8px;
+    margin: 16px 0 40px;
+    padding: 14px 16px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+  }
+  .toc-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    margin-right: 8px;
+    align-self: center;
+  }
+  .toc a {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--teal);
+    text-decoration: none;
+    padding: 3px 8px;
+    border-radius: 3px;
+    border: 1px solid var(--line);
+    background: var(--surface-3);
+  }
+  .toc a:hover { background: var(--teal-soft); }
+
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+  h1 {
+    font-family: var(--serif);
+    font-weight: 500;
+    font-size: 40px;
+    line-height: 1.05;
+    letter-spacing: -0.02em;
+    margin: 12px 0 12px;
+    color: var(--ink);
+  }
+  .lede {
+    font-size: 16px;
+    line-height: 1.55;
+    color: var(--ink-2);
+    max-width: 760px;
+    margin: 0 0 24px;
+  }
+  .lede strong { color: var(--ink); font-weight: 500; }
+
+  h2 {
+    font-family: var(--serif);
+    font-weight: 500;
+    font-size: 26px;
+    line-height: 1.15;
+    letter-spacing: -0.01em;
+    margin: 64px 0 8px;
+    padding-top: 32px;
+    border-top: 1px solid var(--line);
+    color: var(--ink);
+  }
+  h2 .num {
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    color: var(--ink-3);
+    margin-right: 12px;
+    vertical-align: 4px;
+  }
+  h3 {
+    font-family: var(--serif);
+    font-weight: 500;
+    font-size: 18px;
+    line-height: 1.3;
+    margin: 32px 0 12px;
+    color: var(--ink);
+  }
+  h4 {
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    margin: 0 0 8px;
+  }
+  p { margin: 0 0 12px; color: var(--ink-2); }
+  p strong { color: var(--ink); font-weight: 500; }
+  code, kbd {
+    font-family: var(--mono);
+    font-size: 0.92em;
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    padding: 1px 5px;
+    color: var(--ink);
+  }
+  kbd {
+    background: var(--surface);
+    border-color: var(--line-2);
+    box-shadow: 0 1px 0 var(--line-2);
+  }
+
+  /* ------------------------------------------------------------------ */
+  /*  Frames                                                             */
+  /* ------------------------------------------------------------------ */
+  .frame-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 24px;
+    margin: 16px 0 32px;
+  }
+  .frame-grid.three { grid-template-columns: repeat(3, 1fr); }
+  .frame {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  .frame-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--line);
+  }
+  .frame-id {
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.06em;
+    color: var(--ink-3);
+  }
+  .frame-name {
+    font-family: var(--sans);
+    font-size: 12.5px;
+    font-weight: 500;
+    color: var(--ink);
+  }
+  .frame-body {
+    background: var(--bg);
+    min-height: 200px;
+  }
+
+  /* ------------------------------------------------------------------ */
+  /*  Inbox chrome (shared frame backdrop)                               */
+  /* ------------------------------------------------------------------ */
+  .inbox {
+    display: grid;
+    grid-template-columns: 320px 1fr 280px;
+    height: 540px;
+    background: var(--bg);
+  }
+  .inbox-rail {
+    background: var(--surface);
+    border-right: 1px solid var(--line);
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+  .inbox-rail-head {
+    padding: 14px 16px 10px;
+    border-bottom: 1px solid var(--line);
+  }
+  .inbox-rail-search {
+    margin-top: 10px;
+    position: relative;
+  }
+  .inbox-rail-search input {
+    width: 100%;
+    font-family: var(--sans);
+    font-size: 12.5px;
+    padding: 7px 10px 7px 28px;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    background: var(--surface-3);
+    color: var(--ink);
+  }
+  .inbox-rail-search input:focus {
+    outline: none;
+    border-color: var(--teal);
+    box-shadow: 0 0 0 3px var(--teal-soft);
+  }
+  .inbox-rail-search .icon {
+    position: absolute;
+    left: 9px; top: 50%;
+    transform: translateY(-50%);
+    color: var(--ink-3);
+  }
+  .inbox-rail-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: 10px 12px 8px;
+    border-bottom: 1px solid var(--line);
+    background: var(--surface-3);
+  }
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-family: var(--sans);
+    font-size: 11.5px;
+    font-weight: 500;
+    color: var(--ink-2);
+    padding: 4px 9px;
+    border-radius: 999px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    cursor: default;
+  }
+  .chip .dot {
+    width: 6px; height: 6px;
+    border-radius: 999px;
+    background: var(--ink-3);
+  }
+  .chip .count {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--ink-3);
+  }
+  .chip.is-active {
+    background: var(--ink);
+    color: var(--bg);
+    border-color: var(--ink);
+  }
+  .chip.is-active .count { color: var(--ink-3); }
+  .chip.is-active.escalated { background: var(--terra-bg); color: var(--terra); border-color: var(--terra); }
+  .chip.is-active.escalated .dot { background: var(--terra); }
+  .chip.is-active.escalated .count { color: var(--terra); }
+  .chip.escalated .dot { background: var(--terra); }
+
+  .inbox-rail-list {
+    flex: 1;
+    overflow-y: auto;
+  }
+  .rail-item {
+    width: 100%;
+    text-align: left;
+    background: transparent;
+    border: 0;
+    border-bottom: 1px solid var(--line);
+    border-left: 2px solid transparent;
+    padding: 11px 14px 11px 12px;
+    cursor: pointer;
+    font-family: var(--sans);
+  }
+  .rail-item:hover { background: var(--surface-3); }
+  .rail-item.is-selected {
+    background: var(--teal-soft);
+    border-left-color: var(--teal);
+  }
+  .rail-item.is-escalated { border-left-color: var(--terra); }
+  .rail-item-row {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  }
+  .rail-item-name {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 13px; font-weight: 500; color: var(--ink);
+    min-width: 0;
+  }
+  .rail-item-name .name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .rail-item-time {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--ink-3);
+    flex-shrink: 0;
+  }
+  .rail-item-subj {
+    font-size: 12px;
+    color: var(--ink-2);
+    margin-top: 2px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .rail-item-meta {
+    margin-top: 6px;
+    display: flex; align-items: center; gap: 6px;
+  }
+
+  .inbox-thread {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    background: var(--bg);
+  }
+  .thread-head {
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px 18px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--line);
+  }
+  .thread-head h2 {
+    font-family: var(--serif);
+    font-weight: 500;
+    font-size: 17px;
+    margin: 0;
+    color: var(--ink);
+    border: 0;
+    padding: 0;
+  }
+  .thread-head .subj {
+    font-size: 12.5px;
+    color: var(--ink-2);
+  }
+  .thread-head .spacer { flex: 1; }
+  .thread-head .focused {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--teal);
+    background: var(--teal-soft);
+    padding: 3px 8px;
+    border-radius: 3px;
+  }
+  .thread-head .focused .dot {
+    width: 6px; height: 6px; border-radius: 999px; background: var(--teal);
+  }
+
+  .thread-body {
+    flex: 1; overflow-y: auto;
+    padding: 18px;
+    display: flex; flex-direction: column; gap: 12px;
+  }
+  .bubble {
+    max-width: 76%;
+    padding: 10px 13px;
+    border-radius: 10px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--ink);
+  }
+  .bubble.contact { align-self: flex-start; background: var(--surface); }
+  .bubble.user    { align-self: flex-end;   background: var(--teal); color: #fff; border-color: var(--teal); }
+  .bubble.ai      { align-self: flex-start; background: var(--teal-soft); border-color: var(--teal); }
+  .bubble.system  { align-self: center; max-width: 100%; text-align: center; font-size: 11.5px; color: var(--ink-3); background: transparent; border: 0; }
+  .bubble .meta {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--ink-3);
+    margin-top: 4px;
+  }
+  .bubble.user .meta { color: rgba(255,255,255,0.7); }
+
+  .inbox-side {
+    background: var(--surface);
+    border-left: 1px solid var(--line);
+    padding: 14px 16px;
+    overflow-y: auto;
+  }
+  .inbox-side h4 { margin-top: 0; }
+
+  /* ------------------------------------------------------------------ */
+  /*  STATUS BADGES (component)                                          */
+  /* ------------------------------------------------------------------ */
+  .badge {
+    display: inline-flex; align-items: center; gap: 5px;
+    font-family: var(--sans);
+    font-size: 11px;
+    font-weight: 500;
+    padding: 2px 8px;
+    border-radius: 999px;
+    border: 1px solid transparent;
+  }
+  .badge .dot { width: 5px; height: 5px; border-radius: 999px; }
+  .badge.open       { background: var(--forest-bg); color: var(--forest); border-color: rgba(74,124,63,0.25); }
+  .badge.open .dot  { background: var(--forest); }
+  .badge.pending    { background: var(--ochre-bg);  color: var(--ochre);  border-color: rgba(184,118,30,0.25); }
+  .badge.pending .dot { background: var(--ochre); }
+  .badge.escalated  { background: var(--terra-bg);  color: var(--terra);  border-color: rgba(168,51,31,0.30); }
+  .badge.escalated .dot { background: var(--terra); }
+  .badge.resolved   { background: var(--slate-bg);  color: var(--slate);  border-color: var(--line-2); }
+  .badge.resolved .dot { background: var(--slate); }
+  .badge.ai-thinking { background: var(--teal-soft); color: var(--teal); border-color: var(--teal-soft); }
+  .badge.ai-drafted  { background: var(--teal-soft); color: var(--teal); border-color: var(--teal-soft); }
+  .badge.ai-auto     { background: var(--forest-bg); color: var(--forest); border-color: rgba(74,124,63,0.25); }
+  .badge.ai-needs    { background: var(--terra-bg); color: var(--terra); border-color: rgba(168,51,31,0.30); }
+  .badge.ai-failed   { background: var(--terra-bg); color: var(--terra); border-color: rgba(168,51,31,0.30); }
+
+  /* ------------------------------------------------------------------ */
+  /*  ConversationList — states                                          */
+  /* ------------------------------------------------------------------ */
+  .cl-empty {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    height: 100%;
+    text-align: center;
+    padding: 32px 24px;
+    color: var(--ink-2);
+  }
+  .cl-empty .glyph {
+    width: 56px; height: 56px;
+    border-radius: 50%;
+    background: var(--surface-2);
+    display: flex; align-items: center; justify-content: center;
+    color: var(--ink-3);
+    margin-bottom: 14px;
+  }
+  .cl-empty h4 {
+    font-family: var(--serif);
+    font-size: 16px; font-weight: 500;
+    color: var(--ink);
+    margin-bottom: 4px;
+    text-transform: none;
+    letter-spacing: 0;
+  }
+  .cl-empty p { font-size: 12.5px; max-width: 240px; margin-bottom: 14px; }
+  .cl-empty .hint {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--ink-3);
+  }
+
+  .cl-skel { padding: 4px 0; }
+  .cl-skel-item { padding: 12px 14px; border-bottom: 1px solid var(--line); border-left: 2px solid transparent; }
+  .skel {
+    background: linear-gradient(90deg, var(--surface-2) 0%, var(--surface-3) 50%, var(--surface-2) 100%);
+    background-size: 200% 100%;
+    animation: shimmer 1.4s infinite linear;
+    border-radius: 3px;
+    height: 10px;
+  }
+  .skel.row-1 { width: 60%; height: 11px; margin-bottom: 8px; }
+  .skel.row-2 { width: 85%; height: 9px;  margin-bottom: 6px; }
+  .skel.row-3 { width: 40%; height: 9px;  }
+  @keyframes shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+
+  .cl-error {
+    padding: 16px 14px;
+  }
+  .cl-error-box {
+    background: var(--terra-bg);
+    border: 1px solid rgba(168,51,31,0.30);
+    border-left: 3px solid var(--terra);
+    border-radius: 4px;
+    padding: 12px 14px;
+  }
+  .cl-error-box h4 {
+    font-family: var(--sans);
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--terra);
+    margin: 0 0 4px;
+    text-transform: none;
+    letter-spacing: 0;
+  }
+  .cl-error-box p {
+    font-size: 12px; color: var(--ink-2);
+    margin-bottom: 10px;
+  }
+  .cl-error-box .actions { display: flex; gap: 8px; }
+  .btn {
+    font-family: var(--sans);
+    font-size: 12px;
+    font-weight: 500;
+    padding: 6px 12px;
+    border-radius: 4px;
+    border: 1px solid var(--line-2);
+    background: var(--surface);
+    color: var(--ink);
+    cursor: default;
+  }
+  .btn.primary { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+  .btn.danger  { background: var(--terra); color: #fff; border-color: var(--terra); }
+
+  /* ------------------------------------------------------------------ */
+  /*  AiDraftPanel — states                                              */
+  /* ------------------------------------------------------------------ */
+  .ai-panel {
+    background: var(--teal-soft);
+    border-top: 1px solid var(--teal);
+    border-bottom: 1px solid var(--teal);
+    padding: 12px 18px;
+  }
+  .ai-panel.thinking { background: var(--surface-3); border-color: var(--line-2); }
+  .ai-panel.escalated { background: var(--terra-bg); border-color: var(--terra); }
+  .ai-panel.failed    { background: var(--terra-bg); border-color: var(--terra); }
+  .ai-panel.drafted   { background: var(--teal-soft); border-color: var(--teal); }
+
+  .ai-head {
+    display: flex; align-items: center; gap: 8px;
+    margin-bottom: 8px;
+  }
+  .ai-head .label {
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--teal);
+  }
+  .ai-panel.escalated .ai-head .label,
+  .ai-panel.failed    .ai-head .label { color: var(--terra); }
+  .ai-head .conf {
+    margin-left: auto;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--ink-2);
+    background: var(--surface);
+    padding: 1px 6px;
+    border-radius: 3px;
+    border: 1px solid var(--line-2);
+  }
+
+  /* Thinking state — three skeleton lines + elapsed time */
+  .ai-thinking {
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .ai-thinking .row {
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .ai-thinking .skel { background: linear-gradient(90deg, var(--line) 0%, var(--surface-3) 50%, var(--line) 100%); background-size: 200% 100%; animation: shimmer 1.4s infinite linear; border-radius: 3px; height: 9px; }
+  .ai-thinking .skel.a { width: 92%; }
+  .ai-thinking .skel.b { width: 78%; }
+  .ai-thinking .skel.c { width: 64%; }
+  .ai-thinking .elapsed {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--ink-3);
+    white-space: nowrap;
+  }
+  .ai-thinking .elapsed .pulse {
+    display: inline-block;
+    width: 6px; height: 6px; border-radius: 999px;
+    background: var(--teal);
+    margin-right: 6px;
+    animation: pulse 1.4s ease-in-out infinite;
+    vertical-align: 1px;
+  }
+  @keyframes pulse { 0%, 100% { opacity: 0.35; } 50% { opacity: 1; } }
+
+  /* Drafted state — show text + actions */
+  .ai-draft-text {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 10px 12px;
+    font-size: 12.5px;
+    color: var(--ink);
+    margin-bottom: 10px;
+  }
+  .ai-draft-actions {
+    display: flex; gap: 8px; align-items: center;
+  }
+  .ai-draft-meta {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--ink-3);
+    margin-left: auto;
+  }
+
+  /* Escalated state — reason + "take over" */
+  .ai-esc {
+    display: flex; gap: 10px; align-items: flex-start;
+  }
+  .ai-esc .glyph {
+    width: 28px; height: 28px; border-radius: 50%;
+    background: var(--terra);
+    color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .ai-esc .body { flex: 1; }
+  .ai-esc .title {
+    font-family: var(--sans);
+    font-size: 13px; font-weight: 600;
+    color: var(--terra);
+    margin-bottom: 2px;
+  }
+  .ai-esc .reason {
+    font-size: 12.5px; color: var(--ink);
+    margin-bottom: 8px;
+  }
+  .ai-esc .meta {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--terra);
+    opacity: 0.8;
+  }
+
+  /* Failed state */
+  .ai-fail {
+    display: flex; gap: 10px; align-items: flex-start;
+  }
+  .ai-fail .body { flex: 1; }
+  .ai-fail .title {
+    font-family: var(--sans);
+    font-size: 13px; font-weight: 600;
+    color: var(--terra);
+    margin-bottom: 2px;
+  }
+  .ai-fail .reason {
+    font-size: 12.5px; color: var(--ink-2);
+    margin-bottom: 8px;
+  }
+  .ai-fail .err {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--terra);
+    background: var(--surface);
+    border: 1px solid rgba(168,51,31,0.30);
+    padding: 4px 8px;
+    border-radius: 3px;
+    margin-bottom: 8px;
+    display: inline-block;
+  }
+
+  /* Empty state */
+  .ai-empty {
+    text-align: center;
+    padding: 18px 12px;
+    color: var(--ink-3);
+    font-size: 12px;
+  }
+
+  /* ------------------------------------------------------------------ */
+  /*  ReplyComposer — states                                             */
+  /* ------------------------------------------------------------------ */
+  .composer {
+    background: var(--surface);
+    border-top: 1px solid var(--line);
+    padding: 10px 14px 12px;
+  }
+  .composer .field {
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    background: var(--surface-3);
+    padding: 8px 10px;
+    font-family: var(--sans);
+    font-size: 13px;
+    color: var(--ink);
+    min-height: 56px;
+    line-height: 1.45;
+  }
+  .composer .field.placeholder { color: var(--ink-3); }
+  .composer .field.focused {
+    border-color: var(--teal);
+    box-shadow: 0 0 0 3px var(--teal-soft);
+    background: var(--surface);
+  }
+  .composer .field.disabled { color: var(--ink-3); cursor: not-allowed; }
+  .composer .toolbar {
+    display: flex; align-items: center; gap: 8px; margin-top: 8px;
+  }
+  .composer .hint {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--ink-3);
+  }
+  .composer .send {
+    margin-left: auto;
+    font-family: var(--sans);
+    font-size: 12.5px;
+    font-weight: 500;
+    padding: 6px 14px;
+    border-radius: 4px;
+    background: var(--teal);
+    color: #fff;
+    border: 0;
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  .composer .send[disabled] { background: var(--ink-3); cursor: not-allowed; opacity: 0.7; }
+  .composer .send .kbd-hint {
+    font-family: var(--mono);
+    font-size: 10px;
+    background: rgba(255,255,255,0.18);
+    border-radius: 2px;
+    padding: 1px 5px;
+  }
+  .composer .error {
+    margin-top: 8px;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--terra);
+    background: var(--terra-bg);
+    border: 1px solid rgba(168,51,31,0.30);
+    padding: 4px 8px;
+    border-radius: 3px;
+  }
+  .composer .sending {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--ink-3);
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  .composer .sending .spin {
+    width: 10px; height: 10px; border-radius: 50%;
+    border: 1.5px solid var(--line-2);
+    border-top-color: var(--teal);
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .composer.success {
+    background: var(--forest-bg);
+  }
+  .composer.success .field { background: var(--surface); border-color: rgba(74,124,63,0.3); }
+  .composer .success-line {
+    display: flex; align-items: center; gap: 8px;
+    color: var(--forest);
+    font-size: 12.5px;
+  }
+
+  /* ------------------------------------------------------------------ */
+  /*  MessageThread — states                                             */
+  /* ------------------------------------------------------------------ */
+  .mt-loading { display: flex; flex-direction: column; gap: 12px; }
+  .mt-loading .row { display: flex; gap: 10px; align-items: flex-end; }
+  .mt-loading .row.r { justify-content: flex-end; }
+  .mt-loading .bubble-skel {
+    width: 60%; height: 56px;
+    background: linear-gradient(90deg, var(--surface-2) 0%, var(--surface-3) 50%, var(--surface-2) 100%);
+    background-size: 200% 100%;
+    animation: shimmer 1.4s infinite linear;
+    border-radius: 10px;
+  }
+  .mt-loading .bubble-skel.s { width: 40%; }
+  .mt-loading .bubble-skel.l { width: 76%; }
+
+  .mt-empty {
+    flex: 1;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    color: var(--ink-2);
+    text-align: center;
+    padding: 24px;
+  }
+  .mt-empty .glyph {
+    width: 52px; height: 52px;
+    border-radius: 50%;
+    background: var(--surface-2);
+    color: var(--ink-3);
+    display: flex; align-items: center; justify-content: center;
+    margin-bottom: 12px;
+  }
+  .mt-empty h4 {
+    font-family: var(--serif);
+    font-size: 15px; font-weight: 500; color: var(--ink);
+    margin: 0 0 4px;
+    text-transform: none; letter-spacing: 0;
+  }
+  .mt-empty p { font-size: 12.5px; max-width: 260px; }
+
+  .mt-error {
+    margin: 18px;
+    background: var(--terra-bg);
+    border: 1px solid rgba(168,51,31,0.30);
+    border-left: 3px solid var(--terra);
+    border-radius: 4px;
+    padding: 14px 16px;
+  }
+  .mt-error h4 {
+    font-family: var(--sans);
+    font-size: 13px; font-weight: 600;
+    color: var(--terra);
+    margin: 0 0 4px;
+    text-transform: none; letter-spacing: 0;
+  }
+  .mt-error p { font-size: 12.5px; color: var(--ink-2); margin-bottom: 10px; }
+  .mt-error .actions { display: flex; gap: 8px; }
+
+  /* ------------------------------------------------------------------ */
+  /*  StatusBadge — full state set                                       */
+  /* ------------------------------------------------------------------ */
+  .sb-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .sb-section { padding: 16px 18px; }
+  .sb-section + .sb-section { border-top: 1px solid var(--line); }
+  .sb-section h4 { margin-bottom: 10px; }
+  .sb-legend {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--ink-3);
+  }
+
+  /* ------------------------------------------------------------------ */
+  /*  Escalated lane zoom                                                */
+  /* ------------------------------------------------------------------ */
+  .esc-zoom {
+    background: var(--bg);
+    padding: 18px;
+  }
+  .esc-zoom .inbox-rail { border-right: 0; box-shadow: 0 0 0 1px var(--line); border-radius: 5px 0 0 5px; }
+  .esc-row { display: grid; grid-template-columns: 320px 1fr; gap: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+  .esc-side {
+    background: var(--surface);
+    padding: 18px;
+    border-left: 1px solid var(--line);
+  }
+  .esc-side h4 { margin-top: 0; }
+  .esc-side .legend {
+    display: flex; flex-direction: column; gap: 12px;
+    margin-top: 12px;
+  }
+  .esc-side .legend-row {
+    display: flex; gap: 10px; align-items: flex-start;
+    font-size: 12px; color: var(--ink-2);
+  }
+  .esc-side .legend-row .swatch {
+    width: 14px; height: 14px; border-radius: 3px;
+    flex-shrink: 0; margin-top: 1px;
+  }
+
+  /* ------------------------------------------------------------------ */
+  /*  Keyboard shortcut panel                                            */
+  /* ------------------------------------------------------------------ */
+  .kbd-table {
+    width: 100%; border-collapse: collapse;
+    margin: 12px 0 0;
+    font-size: 13px;
+  }
+  .kbd-table th, .kbd-table td {
+    text-align: left;
+    padding: 9px 12px;
+    border-bottom: 1px solid var(--line);
+  }
+  .kbd-table th {
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    background: var(--surface-2);
+  }
+  .kbd-table td.acts { color: var(--ink); font-weight: 500; }
+  .kbd-table td.scope { font-family: var(--mono); font-size: 11px; color: var(--ink-3); }
+  .kbd-table td.desc { color: var(--ink-2); }
+
+  .help-overlay {
+    background: var(--ink);
+    color: var(--bg);
+    border-radius: 8px;
+    padding: 18px 22px;
+    max-width: 480px;
+    box-shadow: 0 18px 60px -20px rgba(26,24,21,0.5);
+  }
+  .help-overlay h4 {
+    font-family: var(--serif);
+    font-size: 16px; font-weight: 500;
+    color: var(--bg);
+    margin: 0 0 12px;
+    text-transform: none; letter-spacing: 0;
+  }
+  .help-overlay table { width: 100%; border-collapse: collapse; }
+  .help-overlay td { padding: 5px 0; font-size: 12.5px; color: var(--ink-3); vertical-align: middle; }
+  .help-overlay td.acts { color: var(--bg); }
+  .help-overlay kbd {
+    background: rgba(255,255,255,0.08);
+    color: var(--bg);
+    border-color: rgba(255,255,255,0.15);
+    box-shadow: none;
+  }
+
+  /* ------------------------------------------------------------------ */
+  /*  Focus / hover annotations                                          */
+  /* ------------------------------------------------------------------ */
+  .annot {
+    border: 1.5px dashed var(--teal);
+    border-radius: 3px;
+    position: relative;
+  }
+  .annot::before {
+    content: attr(data-annot);
+    position: absolute;
+    top: -10px; left: -1.5px;
+    background: var(--teal);
+    color: #fff;
+    font-family: var(--mono);
+    font-size: 9.5px;
+    font-weight: 500;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 2px 7px;
+    border-radius: 3px 3px 0 0;
+  }
+  .annot.terra { border-color: var(--terra); }
+  .annot.terra::before { background: var(--terra); }
+  .annot.ochre { border-color: var(--ochre); }
+  .annot.ochre::before { background: var(--ochre); }
+
+  /* ------------------------------------------------------------------ */
+  /*  Eng hand-off block                                                 */
+  /* ------------------------------------------------------------------ */
+  .handoff {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--teal);
+    border-radius: 4px;
+    padding: 18px 22px;
+    margin: 24px 0;
+  }
+  .handoff h4 {
+    font-family: var(--sans);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--teal);
+    margin: 0 0 6px;
+    text-transform: none; letter-spacing: 0;
+  }
+  .handoff p { font-size: 13px; color: var(--ink-2); margin-bottom: 0; }
+
+  /* small utilities */
+  .stack-8 { display: flex; flex-direction: column; gap: 8px; }
+  .row-gap-8 { display: flex; gap: 8px; align-items: center; }
+  .mono { font-family: var(--mono); }
+  .ink-2 { color: var(--ink-2); }
+  .ink-3 { color: var(--ink-3); }
+  .small { font-size: 12px; }
+  .center { text-align: center; }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="eyebrow">P1 · Inbox UI states · hand-off</div>
+  <h1>Inbox UI states — design hand-off</h1>
+  <p class="lede">
+    Five components, twenty frames, one design language. The inbox is where a support agent
+    lives for <strong>eight hours a day</strong> — every state has to be intentional. Loading
+    is honest, error is actionable, escalation never gets lost, the AI never pretends to be faster
+    than it is. This document is the contract; the <code>inbox-states.html</code> frames are the proof.
+  </p>
+
+  <nav class="toc" aria-label="Table of contents">
+    <span class="toc-label">Contents</span>
+    <a href="#escalated">1. The Escalated lane</a>
+    <a href="#cl">2. ConversationList</a>
+    <a href="#mt">3. MessageThread</a>
+    <a href="#ai">4. AiDraftPanel</a>
+    <a href="#rc">5. ReplyComposer</a>
+    <a href="#sb">6. StatusBadge</a>
+    <a href="#kbd">7. Keyboard shortcuts</a>
+    <a href="#handoff">8. Eng hand-off</a>
+  </nav>
+
+  <!-- ================================================================ -->
+  <!--  1. ESCALATED LANE                                                -->
+  <!-- ================================================================ -->
+  <h2 id="escalated"><span class="num">01</span>The Escalated lane</h2>
+  <p>
+    The escalated conversation is the most expensive thing on the screen. It costs SLA
+    time, it costs a human's attention, and it's the single most likely place a customer
+    is going to leave. The "Escalated" lane lives as a <strong>filter chip</strong> at the top
+    of <code>ConversationList</code>, with three distinct visual states below.
+  </p>
+
+  <h3>Treatment decision</h3>
+  <ul>
+    <li><strong>Filter chip</strong> at the top of the rail, not a separate column. Agents need the full conversation list to triage; a dedicated column would force them to context-switch.</li>
+    <li>Default sort: <code>last_message_at DESC</code>. When the Escalated chip is active, sort by <code>escalated_at DESC</code> instead — the most recent escalation floats to the top, even if a customer replied minutes later.</li>
+    <li><strong>Color</strong>: <code>--terra</code> (#A8331F), never terra on a colored fill, only on a 2&nbsp;px left border + terra text in the badge. Terra is for attention, not for wallpaper.</li>
+    <li><strong>Badge label</strong> stays as "Escalated". We considered "Urgent" but the word is louder than the action — agents should treat escalation as <em>do it now</em>, not <em>panic</em>.</li>
+    <li><strong>No badge with a count on the chip</strong> — count is on the chip itself, in mono, so the eye learns the rhythm.</li>
+  </ul>
+
+  <div class="frame-grid three">
+    <!-- INACTIVE -->
+    <div class="frame">
+      <div class="frame-head">
+        <span class="frame-id">ESC-1a</span>
+        <span class="frame-name">Escalated chip · inactive</span>
+      </div>
+      <div class="frame-body">
+        <div class="inbox" style="grid-template-columns: 320px 1fr;">
+          <div class="inbox-rail">
+            <div class="inbox-rail-head">
+              <div class="row-gap-8">
+                <span class="eyebrow">Inbox</span>
+                <span class="ink-3 mono small" style="margin-left:auto;">47 open</span>
+              </div>
+              <div class="inbox-rail-search">
+                <span class="icon">⌕</span>
+                <input placeholder="Search conversations…" />
+              </div>
+            </div>
+            <div class="inbox-rail-filters">
+              <span class="chip is-active">All <span class="count">47</span></span>
+              <span class="chip">Open <span class="count">31</span></span>
+              <span class="chip">Pending <span class="count">9</span></span>
+              <span class="chip escalated"><span class="dot"></span>Escalated <span class="count">3</span></span>
+              <span class="chip">Resolved <span class="count">142</span></span>
+            </div>
+            <div class="inbox-rail-list">
+              <div class="rail-item">
+                <div class="rail-item-row">
+                  <div class="rail-item-name"><span class="name">Priya Anand</span></div>
+                  <div class="rail-item-time">2m</div>
+                </div>
+                <div class="rail-item-subj">Order #38291 still showing pending</div>
+                <div class="rail-item-meta">
+                  <span class="badge open"><span class="dot"></span>Open</span>
+                  <span class="badge ai-thinking">AI Thinking</span>
+                </div>
+              </div>
+              <div class="rail-item">
+                <div class="rail-item-row">
+                  <div class="rail-item-name"><span class="name">Marco Diaz</span></div>
+                  <div class="rail-item-time">8m</div>
+                </div>
+                <div class="rail-item-subj">Refund question</div>
+                <div class="rail-item-meta">
+                  <span class="badge open"><span class="dot"></span>Open</span>
+                </div>
+              </div>
+              <div class="rail-item">
+                <div class="rail-item-row">
+                  <div class="rail-item-name"><span class="name">Asha Patel</span></div>
+                  <div class="rail-item-time">14m</div>
+                </div>
+                <div class="rail-item-subj">API 500 errors since 09:14</div>
+                <div class="rail-item-meta">
+                  <span class="badge pending"><span class="dot"></span>Pending</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="inbox-thread">
+            <div style="flex:1; display:flex; align-items:center; justify-content:center; color: var(--ink-3); font-size: 12.5px;">
+              Select a conversation to open the thread.
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ACTIVE -->
+    <div class="frame">
+      <div class="frame-head">
+        <span class="frame-id">ESC-1b</span>
+        <span class="frame-name">Escalated chip · active (filter on)</span>
+      </div>
+      <div class="frame-body">
+        <div class="inbox" style="grid-template-columns: 320px 1fr;">
+          <div class="inbox-rail">
+            <div class="inbox-rail-head">
+              <div class="row-gap-8">
+                <span class="eyebrow">Inbox</span>
+                <span class="ink-3 mono small" style="margin-left:auto;">3 escalated</span>
+              </div>
+              <div class="inbox-rail-search">
+                <span class="icon">⌕</span>
+                <input placeholder="Search conversations…" />
+              </div>
+            </div>
+            <div class="inbox-rail-filters">
+              <span class="chip">All <span class="count">47</span></span>
+              <span class="chip">Open <span class="count">31</span></span>
+              <span class="chip">Pending <span class="count">9</span></span>
+              <span class="chip is-active escalated"><span class="dot"></span>Escalated <span class="count">3</span></span>
+              <span class="chip">Resolved <span class="count">142</span></span>
+            </div>
+            <div class="inbox-rail-list">
+              <div class="rail-item is-escalated is-selected">
+                <div class="rail-item-row">
+                  <div class="rail-item-name"><span class="name">Lena Okafor</span></div>
+                  <div class="rail-item-time">just now</div>
+                </div>
+                <div class="rail-item-subj">Service down — production outage</div>
+                <div class="rail-item-meta">
+                  <span class="badge escalated"><span class="dot"></span>Escalated</span>
+                  <span class="ink-3 mono small">SLA 14m left</span>
+                </div>
+              </div>
+              <div class="rail-item is-escalated">
+                <div class="rail-item-row">
+                  <div class="rail-item-name"><span class="name">Ravi Krishnan</span></div>
+                  <div class="rail-item-time">22m</div>
+                </div>
+                <div class="rail-item-subj">Billing dispute — $4,200</div>
+                <div class="rail-item-meta">
+                  <span class="badge escalated"><span class="dot"></span>Escalated</span>
+                  <span class="ink-3 mono small">SLA 1h 02m</span>
+                </div>
+              </div>
+              <div class="rail-item is-escalated">
+                <div class="rail-item-row">
+                  <div class="rail-item-name"><span class="name">Min-Jae Park</span></div>
+                  <div class="rail-item-time">1h</div>
+                </div>
+                <div class="rail-item-subj">Legal request — data deletion</div>
+                <div class="rail-item-meta">
+                  <span class="badge escalated"><span class="dot"></span>Escalated</span>
+                  <span class="ink-3 mono small">SLA 23h</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="inbox-thread">
+            <div class="thread-head">
+              <h2>Lena Okafor</h2>
+              <span class="subj">— Service down — production outage</span>
+              <span class="spacer"></span>
+              <span class="focused"><span class="dot"></span>Focused · J/K to navigate</span>
+            </div>
+            <div class="thread-body">
+              <div class="bubble system">Channel: SMS · opened 12 min ago</div>
+              <div class="bubble contact">
+                Our production is down. Customers can't check out. This is the third time this month.
+                <div class="meta">12:04 · SMS</div>
+              </div>
+              <div class="bubble user">
+                Looking into this now, Lena. Can you share the affected region?
+                <div class="meta">12:05 · you</div>
+              </div>
+              <div class="bubble contact">
+                us-east-1. Started at 11:47 UTC.
+                <div class="meta">12:06 · SMS</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- EMPTY / FOCUSED -->
+    <div class="frame">
+      <div class="frame-head">
+        <span class="frame-id">ESC-1c</span>
+        <span class="frame-name">Escalated · empty state</span>
+      </div>
+      <div class="frame-body">
+        <div class="inbox" style="grid-template-columns: 320px 1fr;">
+          <div class="inbox-rail">
+            <div class="inbox-rail-head">
+              <div class="row-gap-8">
+                <span class="eyebrow">Inbox</span>
+                <span class="ink-3 mono small" style="margin-left:auto;">0 escalated</span>
+              </div>
+              <div class="inbox-rail-search">
+                <span class="icon">⌕</span>
+                <input placeholder="Search conversations…" />
+              </div>
+            </div>
+            <div class="inbox-rail-filters">
+              <span class="chip">All <span class="count">47</span></span>
+              <span class="chip">Open <span class="count">31</span></span>
+              <span class="chip">Pending <span class="count">9</span></span>
+              <span class="chip is-active escalated"><span class="dot"></span>Escalated <span class="count">0</span></span>
+              <span class="chip">Resolved <span class="count">142</span></span>
+            </div>
+            <div class="cl-empty">
+              <div class="glyph">✓</div>
+              <h4>Inbox zero — nothing escalated</h4>
+              <p>When a conversation is escalated to a human, it'll show up here.</p>
+              <span class="hint">Press <kbd>S</kbd> to resolve, <kbd>E</kbd> to escalate</span>
+            </div>
+          </div>
+          <div class="inbox-thread">
+            <div class="mt-empty">
+              <div class="glyph">◯</div>
+              <h4>No conversation selected</h4>
+              <p>The escalation queue is clear. Press <kbd>J</kbd> / <kbd>K</kbd> to navigate, <kbd>Esc</kbd> to leave the rail.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="handoff">
+    <h4>ENG NOTE — Escalated lane</h4>
+    <p>
+      <code>ConversationList</code> needs a <code>filter</code> state ('all' | 'open' | 'pending' | 'escalated' | 'resolved') and a
+      <code>sort</code> state (default <code>last_message_at DESC</code>; when <code>filter === 'escalated'</code>, switch to
+      <code>escalated_at DESC NULLS LAST</code>). The chip's <code>is-active.escalated</code> class paints the chip
+      in terra; the rail item's <code>is-escalated</code> class paints the 2&nbsp;px left border in terra. SLA countdown is
+      <code>escalated_at + sla_minutes</code> minus now, rendered in mono, in <code>--ink-3</code> until &lt; 15 min, then in <code>--terra</code>.
+    </p>
+  </div>
+
+  <!-- ================================================================ -->
+  <!--  2. CONVERSATIONLIST                                              -->
+  <!-- ================================================================ -->
+  <h2 id="cl"><span class="num">02</span>ConversationList</h2>
+  <p>Three states beyond the active list (loading, error, empty) plus the populated state with hover, focus, and selection. The rail is 320&nbsp;px wide and never scrolls horizontally.</p>
+
+  <div class="frame-grid">
+    <!-- LOADING -->
+    <div class="frame">
+      <div class="frame-head">
+        <span class="frame-id">CL-1</span>
+        <span class="frame-name">Loading</span>
+      </div>
+      <div class="frame-body">
+        <div class="inbox" style="grid-template-columns: 320px 1fr;">
+          <div class="inbox-rail">
+            <div class="inbox-rail-head">
+              <div class="row-gap-8">
+                <span class="eyebrow">Inbox</span>
+                <span class="ink-3 mono small" style="margin-left:auto;">…</span>
+              </div>
+              <div class="inbox-rail-search">
+                <span class="icon">⌕</span>
+                <input placeholder="Search conversations…" />
+              </div>
+            </div>
+            <div class="inbox-rail-filters">
+              <span class="chip is-active">All <span class="count">…</span></span>
+              <span class="chip">Open <span class="count">…</span></span>
+              <span class="chip">Pending <span class="count">…</span></span>
+              <span class="chip escalated"><span class="dot"></span>Escalated <span class="count">…</span></span>
+              <span class="chip">Resolved <span class="count">…</span></span>
+            </div>
+            <div class="inbox-rail-list">
+              <div class="cl-skel">
+                <div class="cl-skel-item">
+                  <div class="skel row-1"></div>
+                  <div class="skel row-2"></div>
+                  <div class="skel row-3"></div>
+                </div>
+                <div class="cl-skel-item">
+                  <div class="skel row-1"></div>
+                  <div class="skel row-2"></div>
+                  <div class="skel row-3"></div>
+                </div>
+                <div class="cl-skel-item">
+                  <div class="skel row-1"></div>
+                  <div class="skel row-2"></div>
+                  <div class="skel row-3"></div>
+                </div>
+                <div class="cl-skel-item">
+                  <div class="skel row-1"></div>
+                  <div class="skel row-2"></div>
+                  <div class="skel row-3"></div>
+                </div>
+                <div class="cl-skel-item">
+                  <div class="skel row-1"></div>
+                  <div class="skel row-2"></div>
+                  <div class="skel row-3"></div>
+                </div>
+                <div class="cl-skel-item">
+                  <div class="skel row-1"></div>
+                  <div class="skel row-2"></div>
+                  <div class="skel row-3"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="inbox-thread">
+            <div class="mt-loading" style="padding: 24px;">
+              <div class="row"><div class="bubble-skel l"></div></div>
+              <div class="row r"><div class="bubble-skel s"></div></div>
+              <div class="row"><div class="bubble-skel l"></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ERROR -->
+    <div class="frame">
+      <div class="frame-head">
+        <span class="frame-id">CL-2</span>
+        <span class="frame-name">Error</span>
+      </div>
+      <div class="frame-body">
+        <div class="inbox" style="grid-template-columns: 320px 1fr;">
+          <div class="inbox-rail">
+            <div class="inbox-rail-head">
+              <div class="row-gap-8">
+                <span class="eyebrow">Inbox</span>
+                <span class="ink-3 mono small" style="margin-left:auto;">offline</span>
+              </div>
+              <div class="inbox-rail-search">
+                <span class="icon">⌕</span>
+                <input placeholder="Search conversations…" />
+              </div>
+            </div>
+            <div class="inbox-rail-filters">
+              <span class="chip is-active">All <span class="count">47</span></span>
+              <span class="chip">Open <span class="count">31</span></span>
+              <span class="chip">Pending <span class="count">9</span></span>
+              <span class="chip escalated"><span class="dot"></span>Escalated <span class="count">3</span></span>
+              <span class="chip">Resolved <span class="count">142</span></span>
+            </div>
+            <div class="cl-error">
+              <div class="cl-error-box">
+                <h4>Couldn't load conversations</h4>
+                <p>Network error — we'll keep retrying. Last successful sync was 2 min ago.</p>
+                <div class="actions">
+                  <button class="btn primary">Retry</button>
+                  <button class="btn">View cached (3)</button>
+                </div>
+              </div>
+              <div style="margin-top: 14px;">
+                <div class="cl-skel">
+                  <div class="cl-skel-item">
+                    <div class="skel row-1"></div>
+                    <div class="skel row-2"></div>
+                    <div class="skel row-3"></div>
+                  </div>
+                </div>
+                <div class="ink-3 mono small" style="padding: 6px 4px;">Showing cached results</div>
+                <div class="cl-skel">
+                  <div class="cl-skel-item">
+                    <div class="skel row-1"></div>
+                    <div class="skel row-2"></div>
+                    <div class="skel row-3"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="inbox-thread">
+            <div class="mt-error">
+              <h4>Couldn't load thread</h4>
+              <p>We're having trouble reaching the server. Your draft is saved locally and will send when the connection returns.</p>
+              <div class="actions">
+                <button class="btn primary">Retry</button>
+                <button class="btn">Open last cached</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- EMPTY -->
+    <div class="frame">
+      <div class="frame-head">
+        <span class="frame-id">CL-3</span>
+        <span class="frame-name">Empty (no conversations)</span>
+      </div>
+      <div class="frame-body">
+        <div class="inbox" style="grid-template-columns: 320px 1fr;">
+          <div class="inbox-rail">
+            <div class="inbox-rail-head">
+              <div class="row-gap-8">
+                <span class="eyebrow">Inbox</span>
+                <span class="ink-3 mono small" style="margin-left:auto;">0 open</span>
+              </div>
+              <div class="inbox-rail-search">
+                <span class="icon">⌕</span>
+                <input placeholder="Search conversations…" />
+              </div>
+            </div>
+            <div class="inbox-rail-filters">
+              <span class="chip is-active">All <span class="count">0</span></span>
+              <span class="chip">Open <span class="count">0</span></span>
+              <span class="chip">Pending <span class="count">0</span></span>
+              <span class="chip escalated"><span class="dot"></span>Escalated <span class="count">0</span></span>
+              <span class="chip">Resolved <span class="count">142</span></span>
+            </div>
+            <div class="cl-empty">
+              <div class="glyph">✉</div>
+              <h4>You're all caught up</h4>
+              <p>New customer messages will appear here. Nothing to triage right now.</p>
+              <span class="hint">Tip — adjust AI auto-reply in <kbd>Settings → AI</kbd></span>
+            </div>
+          </div>
+          <div class="inbox-thread">
+            <div class="mt-empty">
+              <div class="glyph">◯</div>
+              <h4>No conversation selected</h4>
+              <p>Pick a thread from the rail, or press <kbd>J</kbd> to jump to the next conversation.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- POPULATED + HOVER + FOCUS + SELECTED -->
+    <div class="frame">
+      <div class="frame-head">
+        <span class="frame-id">CL-4</span>
+        <span class="frame-name">Populated · hover, focus, selected</span>
+      </div>
+      <div class="frame-body">
+        <div class="inbox" style="grid-template-columns: 320px 1fr;">
+          <div class="inbox-rail">
+            <div class="inbox-rail-head">
+              <div class="row-gap-8">
+                <span class="eyebrow">Inbox</span>
+                <span class="ink-3 mono small" style="margin-left:auto;">47 open</span>
+              </div>
+              <div class="inbox-rail-search">
+                <span class="icon">⌕</span>
+                <input placeholder="Search conversations…" />
+              </div>
+            </div>
+            <div class="inbox-rail-filters">
+              <span class="chip is-active">All <span class="count">47</span></span>
+              <span class="chip">Open <span class="count">31</span></span>
+              <span class="chip">Pending <span class="count">9</span></span>
+              <span class="chip escalated"><span class="dot"></span>Escalated <span class="count">3</span></span>
+              <span class="chip">Resolved <span class="count">142</span></span>
+            </div>
+            <div class="inbox-rail-list">
+              <div class="rail-item">
+                <div class="rail-item-row">
+                  <div class="rail-item-name"><span class="name">Priya Anand</span></div>
+                  <div class="rail-item-time">2m</div>
+                </div>
+                <div class="rail-item-subj">Order #38291 still showing pending</div>
+                <div class="rail-item-meta">
+                  <span class="badge open"><span class="dot"></span>Open</span>
+                  <span class="badge ai-thinking">AI Thinking</span>
+                </div>
+              </div>
+              <div class="rail-item" style="background: var(--surface-3);">
+                <div class="rail-item-row">
+                  <div class="rail-item-name"><span class="name">Marco Diaz</span></div>
+                  <div class="rail-item-time">8m</div>
+                </div>
+                <div class="rail-item-subj">Refund question</div>
+                <div class="rail-item-meta">
+                  <span class="badge open"><span class="dot"></span>Open</span>
+                </div>
+                <div class="annot terra" data-annot="HOVER · bg --surface-3" style="margin-top: 6px; padding: 4px 6px; font-size: 10.5px; color: var(--ink-3); font-family: var(--mono);">hover state</div>
+              </div>
+              <div class="rail-item is-selected">
+                <div class="rail-item-row">
+                  <div class="rail-item-name"><span class="name">Asha Patel</span></div>
+                  <div class="rail-item-time">14m</div>
+                </div>
+                <div class="rail-item-subj">API 500 errors since 09:14</div>
+                <div class="rail-item-meta">
+                  <span class="badge pending"><span class="dot"></span>Pending</span>
+                </div>
+              </div>
+              <div class="rail-item" style="box-shadow: inset 0 0 0 2px var(--teal);">
+                <div class="rail-item-row">
+                  <div class="rail-item-name"><span class="name">Jonas Berg</span></div>
+                  <div class="rail-item-time">22m</div>
+                </div>
+                <div class="rail-item-subj">Invoice #1130 missing line item</div>
+                <div class="rail-item-meta">
+                  <span class="badge open"><span class="dot"></span>Open</span>
+                  <span class="badge ai-drafted">AI Draft</span>
+                </div>
+                <div class="annot" data-annot="FOCUS · 2px --teal ring" style="margin-top: 6px; padding: 4px 6px; font-size: 10.5px; color: var(--ink-3); font-family: var(--mono);">focus state (J/K ring)</div>
+              </div>
+              <div class="rail-item is-escalated">
+                <div class="rail-item-row">
+                  <div class="rail-item-name"><span class="name">Lena Okafor</span></div>
+                  <div class="rail-item-time">1h</div>
+                </div>
+                <div class="rail-item-subj">Service down — production outage</div>
+                <div class="rail-item-meta">
+                  <span class="badge escalated"><span class="dot"></span>Escalated</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="inbox-thread">
+            <div class="thread-head">
+              <h2>Asha Patel</h2>
+              <span class="subj">— API 500 errors since 09:14</span>
+              <span class="spacer"></span>
+              <span class="focused"><span class="dot"></span>Selected</span>
+            </div>
+            <div class="thread-body">
+              <div class="bubble system">Channel: Email · opened 14 min ago</div>
+              <div class="bubble contact">
+                Getting 500 errors on <code>POST /v2/checkout</code> since 09:14 UTC. This is blocking
+                a customer migration that was supposed to go live today.
+                <div class="meta">09:18 · Email</div>
+              </div>
+              <div class="bubble user">
+                Thanks Asha — pulling logs now. Will update within 5 min.
+                <div class="meta">09:20 · you</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================================================================ -->
+  <!--  3. MESSAGETHREAD                                                 -->
+  <!-- ================================================================ -->
+  <h2 id="mt"><span class="num">03</span>MessageThread</h2>
+  <p>The thread is the canvas. Empty is friendly, loading is honest, error preserves the draft, success is the steady state.</p>
+
+  <div class="frame-grid">
+    <div class="frame">
+      <div class="frame-head">
+        <span class="frame-id">MT-1</span>
+        <span class="frame-name">Loading</span>
+      </div>
+      <div class="frame-body" style="padding: 18px;">
+        <div class="mt-loading">
+          <div class="row"><div class="bubble-skel l"></div></div>
+          <div class="row r"><div class="bubble-skel s"></div></div>
+          <div class="row"><div class="bubble-skel l"></div></div>
+          <div class="row r"><div class="bubble-skel s"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="frame">
+      <div class="frame-head">
+        <span class="frame-id">MT-2</span>
+        <span class="frame-name">Empty (new conversation)</span>
+      </div>
+      <div class="frame-body" style="height: 320px; display: flex;">
+        <div class="mt-empty">
+          <div class="glyph">✉</div>
+          <h4>No messages yet</h4>
+          <p>This conversation just opened. The customer's first message will appear here when it arrives.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="frame">
+      <div class="frame-head">
+        <span class="frame-id">MT-3</span>
+        <span class="frame-name">Error (with draft preservation)</span>
+      </div>
+      <div class="frame-body" style="padding: 18px; height: 320px;">
+        <div class="mt-error">
+          <h4>Couldn't load this thread</h4>
+          <p>We're having trouble reaching the server. The conversation is still open in our records — your draft is saved locally and will send when the connection returns.</p>
+          <div class="actions">
+            <button class="btn primary">Retry</button>
+            <button class="btn">Open cached</button>
+            <button class="btn">Report issue</button>
+          </div>
+        </div>
+        <div class="ink-3 mono small" style="margin-top: 16px;">Draft preserved · 142 chars · last saved 2s ago</div>
+      </div>
+    </div>
+
+    <div class="frame">
+      <div class="frame-head">
+        <span class="frame-id">MT-4</span>
+        <span class="frame-name">Success · focus state</span>
+      </div>
+      <div class="frame-body" style="padding: 18px;">
+        <div style="background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 16px;">
+          <div style="display: flex; flex-direction: column; gap: 10px;">
+            <div class="bubble system" style="margin: 0;">Channel: SMS · opened 14 min ago</div>
+            <div class="bubble contact">
+              Order #38291 still showing pending. Should have shipped 3 days ago.
+              <div class="meta">09:18 · SMS</div>
+            </div>
+            <div class="bubble ai">
+              <div class="row-gap-8" style="margin-bottom: 4px;">
+                <span class="badge ai-drafted">AI Draft</span>
+                <span class="ink-3 mono small">82% confidence</span>
+              </div>
+              Hi Priya — I checked order #38291 and it looks like it's still awaiting carrier handoff.
+              I've flagged it for our fulfilment team to look into today. Can you confirm the shipping
+              address on file?
+              <div class="meta">09:19 · AI draft</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================================================================ -->
+  <!--  4. AIDRAFTPANEL                                                  -->
+  <!-- ================================================================ -->
+  <h2 id="ai"><span class="num">04</span>AiDraftPanel</h2>
+  <p>
+    The AI panel has the most states. The most important rule: <strong>no spinner on the
+    thinking state</strong>. AI thinking is open-ended — a spinner with no progress is a
+    lie. Instead: skeleton lines, an elapsed-time label, and a quiet pulse on a single dot.
+  </p>
+
+  <h3>AI-draft pending — design decision</h3>
+  <ul>
+    <li><strong>Skeleton</strong>, not spinner. Three lines, ~92% / 78% / 64% width, animating left-to-right (shimmer). After 5 seconds, the panel collapses to a single subdued line: <em>"Drafting… 0:05 elapsed"</em> — the eye learns that the AI is working, then forgets about it.</li>
+    <li><strong>Elapsed-time label</strong> updates every second, in mono, in <code>--ink-3</code>. Format <code>M:SS</code> for under a minute, <code>H:MM:SS</code> after. Stays visible the whole time — never replaced with a spinner, never hidden.</li>
+    <li><strong>No "Draft ready" toast</strong>. The draft appears in place, with a 1&nbsp;px teal border to signal it's new. The eye is already on this part of the screen.</li>
+    <li><strong>Confidence</strong> is shown as a small mono label, never a colored bar. 0-49% is a terra outline ("low confidence — review carefully"), 50-74% is ochre, 75-100% is forest. Never trust the AI silently.</li>
+    <li><strong>Keyboard</strong>: <kbd>Tab</kbd> from composer moves to <strong>Approve</strong>, then to <strong>Regenerate</strong>. <kbd>Cmd</kbd>+<kbd>Enter</kbd> approves when the AI panel is focused.</li>
+  </ul>
+
+  <div class="frame-grid">
+    <div class="frame">
+      <div class="frame-head">
+        <span class="frame-id">AI-1</span>
+        <span class="frame-name">Thinking (skeleton + elapsed)</span>
+      </div>
+      <div class="frame-body">
+        <div class="ai-panel thinking">
+          <div class="ai-head">
+            <span class="label">● AI thinking</span>
+            <span class="conf">elapsed 0:04</span>
+          </div>
+          <div class="ai-thinking">
+            <div class="row"><div class="skel a"></div></div>
+            <div class="row"><div class="skel b"></div></div>
+            <div class="row">
+              <div class="skel c"></div>
+              <span class="elapsed"><span class="pulse"></span>drafting…</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="frame">
+      <div class="frame-head">
+        <span class="frame-id">AI-2</span>
+        <span class="frame-name">Drafted (ready for review)</span>
+      </div>
+      <div class="frame-body">
+        <div class="ai-panel drafted">
+          <div class="ai-head">
+            <span class="label">● AI draft ready</span>
+            <span class="conf">82% confidence</span>
+          </div>
+          <div class="ai-draft-text">
+            Hi Priya — I checked order #38291 and it looks like it's still awaiting carrier handoff.
+            I've flagged it for our fulfilment team to look into today. Can you confirm the shipping
+            address on file?
+          </div>
+          <div class="ai-draft-actions">
+            <button class="btn primary">Approve &amp; send</button>
+            <button class="btn">Regenerate</button>
+            <button class="btn">Edit</button>
+            <span class="ai-draft-meta">took 3.2s · grounded in 2 docs</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="frame">
+      <div class="frame-head">
+        <span class="frame-id">AI-3</span>
+        <span class="frame-name">Escalated (AI handed off to human)</span>
+      </div>
+      <div class="frame-body">
+        <div class="ai-panel escalated">
+          <div class="ai-head">
+            <span class="label">● Escalated to human</span>
+            <span class="conf">confidence 41%</span>
+          </div>
+          <div class="ai-esc">
+            <div class="glyph">!</div>
+            <div class="body">
+              <div class="title">AI handed this off</div>
+              <div class="reason">Customer mentions legal action and a potential data deletion request — outside the configured response scope.</div>
+              <div class="meta">13:42 · reasoning: detected "legal" + "deletion" keywords; confidence below 50% threshold</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="frame">
+      <div class="frame-head">
+        <span class="frame-id">AI-4</span>
+        <span class="frame-name">Failed (AI error, retry available)</span>
+      </div>
+      <div class="frame-body">
+        <div class="ai-panel failed">
+          <div class="ai-head">
+            <span class="label">● AI failed</span>
+            <span class="conf">error 0x42</span>
+          </div>
+          <div class="ai-fail">
+            <div class="body">
+              <div class="title">Draft couldn't be generated</div>
+              <div class="reason">The AI service timed out after 30s. You can retry now, or write the reply manually.</div>
+              <div class="err">UpstreamError: anthropic /messages — request_timeout (request_id: req_8f2k…)</div>
+              <div class="ai-draft-actions">
+                <button class="btn">Retry draft</button>
+                <button class="btn">Write manually</button>
+                <button class="btn">Report bug</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="frame">
+      <div class="frame-head">
+        <span class="frame-id">AI-5</span>
+        <span class="frame-name">Loading (fetching the draft)</span>
+      </div>
+      <div class="frame-body">
+        <div class="ai-panel drafted">
+          <div class="ai-head">
+            <span class="label">● AI draft</span>
+            <span class="conf">loading…</span>
+          </div>
+          <div class="ai-thinking">
+            <div class="row"><div class="skel a"></div></div>
+            <div class="row"><div class="skel b"></div></div>
+            <div class="row"><div class="skel c"></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="frame">
+      <div class="frame-head">
+        <span class="frame-id">AI-6</span>
+        <span class="frame-name">Empty / idle (no draft needed)</span>
+      </div>
+      <div class="frame-body">
+        <div class="ai-empty">
+          <span class="ink-3">AI is idle. Type a reply below, or press</span>
+          <span style="margin-top: 6px;"><kbd>R</kbd> to focus reply · <kbd>Shift</kbd>+<kbd>R</kbd> to ask the AI to draft</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================================================================ -->
+  <!--  5. REPLYCOMPOSER                                                 -->
+  <!-- ================================================================ -->
+  <h2 id="rc"><span class="num">05</span>ReplyComposer</h2>
+  <p>Five states: idle (focused, with text), idle (empty), sending, success, error. The composer is the single most-clicked surface; the affordances have to be obvious from a peripheral glance.</p>
+
+  <div class="frame-grid">
+    <div class="frame">
+      <div class="frame-head">
+        <span class="frame-id">RC-1</span>
+        <span class="frame-name">Idle · focused, with draft</span>
+      </div>
+      <div class="frame-body">
+        <div class="composer">
+          <div class="field focused" style="min-height: 64px;">
+            Hi Priya — I checked order #38291 and it's still awaiting carrier handoff. I've flagged it for fulfilment to look into today. Can you confirm the shipping address on file?—
+            <span class="mono ink-3" style="display: block; margin-top: 4px; font-size: 11px;">|</span>
+          </div>
+          <div class="toolbar">
+            <span class="hint">142 chars · 23 words</span>
+            <button class="send">Send <span class="kbd-hint">⌘ ⏎</span></button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="frame">
+      <div class="frame-head">
+        <span class="frame-id">RC-2</span>
+        <span class="frame-name">Idle · empty</span>
+      </div>
+      <div class="frame-body">
+        <div class="composer">
+          <div class="field placeholder">Type a reply… <span class="mono ink-3" style="font-size: 11px;">(press R to focus)</span></div>
+          <div class="toolbar">
+            <span class="hint">⏎ to send · ⇧⏎ for newline</span>
+            <button class="send" disabled>Send <span class="kbd-hint">⌘ ⏎</span></button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="frame">
+      <div class="frame-head">
+        <span class="frame-id">RC-3</span>
+        <span class="frame-name">Sending</span>
+      </div>
+      <div class="frame-body">
+        <div class="composer">
+          <div class="field disabled">Hi Priya — I checked order #38291 and it's still awaiting carrier handoff…</div>
+          <div class="toolbar">
+            <span class="sending"><span class="spin"></span>sending…</span>
+            <button class="send" disabled>Sending…</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="frame">
+      <div class="frame-head">
+        <span class="frame-id">RC-4</span>
+        <span class="frame-name">Success</span>
+      </div>
+      <div class="frame-body">
+        <div class="composer success">
+          <div class="field" style="min-height: 28px; display: flex; align-items: center;">
+            <span class="success-line">✓ Sent to Priya · delivered at 13:47:08</span>
+          </div>
+          <div class="toolbar">
+            <span class="hint">draft cleared · conversation marked Open</span>
+            <button class="send" style="background: var(--ink);">Resolve <span class="kbd-hint">S</span></button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="frame">
+      <div class="frame-head">
+        <span class="frame-id">RC-5</span>
+        <span class="frame-name">Error (network) — draft preserved</span>
+      </div>
+      <div class="frame-body">
+        <div class="composer">
+          <div class="field" style="min-height: 64px;">Hi Priya — I checked order #38291 and it's still awaiting carrier handoff. I've flagged it for fulfilment to look into today. Can you confirm the shipping address on file?—</div>
+          <div class="error">Couldn't reach the server. Draft saved locally — will retry every 5s for the next 2 min.</div>
+          <div class="toolbar">
+            <span class="hint">142 chars · last saved 2s ago</span>
+            <button class="send">Retry now <span class="kbd-hint">⌘ ⏎</span></button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="frame">
+      <div class="frame-head">
+        <span class="frame-id">RC-6</span>
+        <span class="frame-name">Disabled (AI auto-replying)</span>
+      </div>
+      <div class="frame-body">
+        <div class="composer" style="background: var(--surface-2);">
+          <div class="field disabled" style="background: var(--surface-2); color: var(--ink-3); font-style: italic;">AI is drafting a response — composer will unlock in a moment.</div>
+          <div class="toolbar">
+            <span class="hint">press <kbd>Esc</kbd> to take over manually</span>
+            <button class="send" disabled>Send <span class="kbd-hint">⌘ ⏎</span></button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================================================================ -->
+  <!--  6. STATUSBADGE                                                   -->
+  <!-- ================================================================ -->
+  <h2 id="sb"><span class="num">06</span>StatusBadge</h2>
+  <p>Two badge families — <strong>conversation status</strong> and <strong>AI state</strong> — and how they look alone, paired, and at small sizes.</p>
+
+  <div class="frame">
+    <div class="frame-head">
+      <span class="frame-id">SB-1</span>
+      <span class="frame-name">All badge states</span>
+    </div>
+    <div class="frame-body" style="padding: 0;">
+      <div class="sb-section">
+        <h4>Conversation status</h4>
+        <div class="sb-row">
+          <span class="badge open"><span class="dot"></span>Open</span>
+          <span class="badge pending"><span class="dot"></span>Pending</span>
+          <span class="badge escalated"><span class="dot"></span>Escalated</span>
+          <span class="badge resolved"><span class="dot"></span>Resolved</span>
+        </div>
+        <div class="sb-legend" style="margin-top: 10px;">
+          forest · ochre · terra · slate — same Linen palette as analytics and knowledge-base. Never on a colored fill.
+        </div>
+      </div>
+      <div class="sb-section">
+        <h4>AI state</h4>
+        <div class="sb-row">
+          <span class="badge ai-thinking">● AI Thinking</span>
+          <span class="badge ai-drafted">● AI Draft</span>
+          <span class="badge ai-auto">✓ Auto-replied</span>
+          <span class="badge ai-needs">● Needs Human</span>
+          <span class="badge ai-failed">● AI Failed</span>
+        </div>
+        <div class="sb-legend" style="margin-top: 10px;">
+          The leading dot is a pulse animation only for <code>thinking</code>. For all other states, the dot is static — the action is done.
+        </div>
+      </div>
+      <div class="sb-section">
+        <h4>Paired (status + AI)</h4>
+        <div class="sb-row">
+          <span class="badge open"><span class="dot"></span>Open</span><span class="badge ai-drafted">● AI Draft</span>
+          <span class="badge pending"><span class="dot"></span>Pending</span>
+          <span class="badge ai-thinking">● AI Thinking</span>
+          <span class="badge escalated"><span class="dot"></span>Escalated</span>
+          <span class="badge ai-needs">● Needs Human</span>
+          <span class="badge resolved"><span class="dot"></span>Resolved</span>
+          <span class="badge ai-auto">✓ Auto-replied</span>
+        </div>
+        <div class="sb-legend" style="margin-top: 10px;">
+          Status badge first, AI badge second. They never collapse into a single glyph — two badges = two ideas, and the agent needs both at a glance.
+        </div>
+      </div>
+      <div class="sb-section">
+        <h4>Hover &amp; focus</h4>
+        <div class="sb-row">
+          <span class="badge open" style="outline: 2px solid var(--teal); outline-offset: 1px;"><span class="dot"></span>Open</span>
+          <span class="sb-legend">Focused badge — teal outline, 1px offset, never a fill change. Same focus ring style across the whole product.</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================================================================ -->
+  <!--  7. KEYBOARD SHORTCUTS                                            -->
+  <!-- ================================================================ -->
+  <h2 id="kbd"><span class="num">07</span>Keyboard shortcuts</h2>
+  <p>
+    Shortcuts are scoped to the inbox focus zone. When the message thread is focused, J/K
+    navigate the list and R focuses the composer. When the composer is focused, ⌘⏎ sends
+    and Esc leaves. Outside the inbox, no shortcut fires — we never steal global keystrokes.
+  </p>
+
+  <table class="kbd-table">
+    <thead>
+      <tr>
+        <th>Shortcut</th>
+        <th>Action</th>
+        <th>Scope</th>
+        <th>When</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><kbd>J</kbd></td>
+        <td class="acts">Next conversation</td>
+        <td class="scope">inbox · list focused</td>
+        <td class="desc">Moves focus + selection down. Wraps to first row at end.</td>
+      </tr>
+      <tr>
+        <td><kbd>K</kbd></td>
+        <td class="acts">Previous conversation</td>
+        <td class="scope">inbox · list focused</td>
+        <td class="desc">Moves focus + selection up. Wraps to last row at top.</td>
+      </tr>
+      <tr>
+        <td><kbd>↑</kbd> / <kbd>↓</kbd></td>
+        <td class="acts">Next / prev conversation</td>
+        <td class="scope">inbox · list focused</td>
+        <td class="desc">Same as J/K; included for muscle memory.</td>
+      </tr>
+      <tr>
+        <td><kbd>R</kbd></td>
+        <td class="acts">Focus reply composer</td>
+        <td class="scope">inbox · thread focused</td>
+        <td class="desc">Caret placed at end of existing draft or empty position.</td>
+      </tr>
+      <tr>
+        <td><kbd>Shift</kbd>+<kbd>R</kbd></td>
+        <td class="acts">Ask AI to draft a reply</td>
+        <td class="scope">inbox · thread focused</td>
+        <td class="desc">Triggers AI draft flow even when a draft already exists. Existing draft is preserved as previous version.</td>
+      </tr>
+      <tr>
+        <td><kbd>⌘ ⏎</kbd> / <kbd>Ctrl ⏎</kbd></td>
+        <td class="acts">Send reply</td>
+        <td class="scope">composer focused</td>
+        <td class="desc">Disabled when composer is empty or already sending. Triggers the same handler as the Send button.</td>
+      </tr>
+      <tr>
+        <td><kbd>⇧ ⏎</kbd></td>
+        <td class="acts">Newline in composer</td>
+        <td class="scope">composer focused</td>
+        <td class="desc">Default textarea behavior. Never sends.</td>
+      </tr>
+      <tr>
+        <td><kbd>E</kbd></td>
+        <td class="acts">Escalate</td>
+        <td class="scope">inbox · thread focused</td>
+        <td class="desc">Prompts for a reason (one-line textarea), then sets <code>status = escalated</code> and notifies the team channel. Cannot escalate an already-resolved conversation without a confirm step.</td>
+      </tr>
+      <tr>
+        <td><kbd>S</kbd></td>
+        <td class="acts">Resolve</td>
+        <td class="scope">inbox · thread focused</td>
+        <td class="desc">Sets <code>status = resolved</code>, archives from default rail. Sends a brief "Anything else?" auto-reply only if AI is in <code>auto_reply</code> mode and the org has it enabled.</td>
+      </tr>
+      <tr>
+        <td><kbd>Esc</kbd></td>
+        <td class="acts">Leave current focus zone</td>
+        <td class="scope">any</td>
+        <td class="desc">Composer → thread → list → page header. Never closes the page.</td>
+      </tr>
+      <tr>
+        <td><kbd>/</kbd></td>
+        <td class="acts">Focus search</td>
+        <td class="scope">inbox</td>
+        <td class="desc">Slashes into the search input; Esc returns focus to the list.</td>
+      </tr>
+      <tr>
+        <td><kbd>?</kbd></td>
+        <td class="acts">Show shortcuts help</td>
+        <td class="scope">inbox</td>
+        <td class="desc">Opens a modal with the table below. Closes on Esc or any other key.</td>
+      </tr>
+      <tr>
+        <td><kbd>1</kbd>–<kbd>5</kbd></td>
+        <td class="acts">Switch filter chip</td>
+        <td class="scope">inbox · list focused</td>
+        <td class="desc">1=All, 2=Open, 3=Pending, 4=Escalated, 5=Resolved. Mirrors the chip order on screen.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>The "?" overlay</h3>
+  <div class="frame">
+    <div class="frame-head">
+      <span class="frame-id">KBD-1</span>
+      <span class="frame-name">? overlay (in-app help)</span>
+    </div>
+    <div class="frame-body" style="padding: 24px;">
+      <div class="help-overlay">
+        <h4>Inbox shortcuts</h4>
+        <table>
+          <tr><td class="acts" style="width: 38%;"><kbd>J</kbd> <kbd>K</kbd></td><td>Next / prev conversation</td></tr>
+          <tr><td class="acts"><kbd>R</kbd></td><td>Focus reply</td></tr>
+          <tr><td class="acts"><kbd>⌘ ⏎</kbd></td><td>Send</td></tr>
+          <tr><td class="acts"><kbd>E</kbd></td><td>Escalate</td></tr>
+          <tr><td class="acts"><kbd>S</kbd></td><td>Resolve</td></tr>
+          <tr><td class="acts"><kbd>/</kbd></td><td>Search</td></tr>
+          <tr><td class="acts"><kbd>?</kbd></td><td>This help</td></tr>
+          <tr><td class="acts"><kbd>Esc</kbd></td><td>Leave zone</td></tr>
+        </table>
+        <div style="margin-top: 14px; font-size: 11px; opacity: 0.6; font-family: var(--mono);">press any key to close</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================================================================ -->
+  <!--  8. ENG HAND-OFF                                                  -->
+  <!-- ================================================================ -->
+  <h2 id="handoff"><span class="num">08</span>Eng hand-off</h2>
+
+  <div class="handoff">
+    <h4>Frame map (for the [P1] Inbox UI end-to-end eng card)</h4>
+    <p>
+      All 20 mock states are in this single HTML file. Open <code>inbox-states.html</code> in a browser — no build step.
+      Frame IDs are stable and referencable: <strong>ESC-1a/b/c</strong>, <strong>CL-1/2/3/4</strong>,
+      <strong>MT-1/2/3/4</strong>, <strong>AI-1/2/3/4/5/6</strong>, <strong>RC-1/2/3/4/5/6</strong>,
+      <strong>SB-1</strong>, <strong>KBD-1</strong>.
+    </p>
+  </div>
+
+  <h3>Component-by-component hand-off</h3>
+
+  <h4>ConversationList — frames CL-1…CL-4, ESC-1a/b/c</h4>
+  <ul>
+    <li>Loading uses <code>.cl-skel</code> with 6 skeleton items. Skeletons match the real <code>.rail-item</code> vertical rhythm (≈64&nbsp;px tall) so there's no jump when content arrives.</li>
+    <li>Error keeps a cached list visible below the error box (see CL-2). Retry button is primary. "View cached" is secondary, never the only option.</li>
+    <li>Empty state on first load (CL-3) is distinct from "filter returned 0 results" — use a different copy and a "Show all" link.</li>
+    <li>Hover, focus, and selected are independent: <code>hover:bg-surface-3</code>, focus = 2&nbsp;px teal ring inset, selected = teal-soft bg + 2&nbsp;px teal left border. <strong>Never combine hover + selected</strong>; selected wins.</li>
+    <li>Escalated item: <code>is-escalated</code> class paints the 2&nbsp;px left border in <code>--terra</code>. The badge color stays consistent across all three states.</li>
+  </ul>
+
+  <h4>MessageThread — frames MT-1…MT-4</h4>
+  <ul>
+    <li>Loading bubbles are <em>alternating</em> (contact / user / contact) so the user sees the conversation shape, not just a wall of gray. Width 76% / 40% / 76% — matches typical content ratios.</li>
+    <li>Empty state never says "Nothing here". It says "No messages yet — the customer's first message will appear here when it arrives." Time-bound, not negative.</li>
+    <li>Error state always mentions the draft is preserved. The single most important thing the agent needs to know: "did I lose my work?" Answer: no.</li>
+    <li>AI messages in the thread get a <code>.bubble.ai</code> style (teal-soft bg, teal border, never teal text). They sit on the contact side (left) — the AI is talking on behalf of the system, not the agent.</li>
+  </ul>
+
+  <h4>AiDraftPanel — frames AI-1…AI-6</h4>
+  <ul>
+    <li><strong>AI-1 (thinking)</strong> uses a 3-line skeleton + elapsed-time label, no spinner. The elapsed label updates every 1s, mono, <code>--ink-3</code>. After 30s, switch to <code>--ochre</code>. After 60s, switch to <code>--terra</code> and add a "stuck? regenerate" inline action.</li>
+    <li><strong>AI-2 (drafted)</strong>: confidence is always shown, never hidden. <code>75-100%</code> = forest outline, <code>50-74%</code> = ochre outline, <code>0-49%</code> = terra outline with a "review carefully" hint. The button is "Approve &amp; send" (verb + delivery confirmation), not just "Approve".</li>
+    <li><strong>AI-3 (escalated)</strong>: this is a human handoff, not an error. The panel uses terra for attention but the icon is a <code>!</code> in a terra circle, not a warning triangle — the agent needs to feel "take over", not "something broke".</li>
+    <li><strong>AI-4 (failed)</strong>: always include the request id in mono for support escalation. Provide three actions: <strong>Retry draft</strong>, <strong>Write manually</strong>, <strong>Report bug</strong>. Never trap the agent.</li>
+    <li><strong>AI-5 (loading)</strong> and <strong>AI-1 (thinking)</strong> look similar but serve different purposes. <strong>Thinking</strong> = the AI hasn't produced anything yet. <strong>Loading</strong> = there is a draft on the server and we're fetching the body. The label should distinguish: "AI thinking" vs "Loading AI draft".</li>
+    <li><strong>AI-6 (idle)</strong> is the only state where the panel can render nothing — but if we render the "press Shift+R to ask the AI" hint, we teach the agent a shortcut.</li>
+  </ul>
+
+  <h4>ReplyComposer — frames RC-1…RC-6</h4>
+  <ul>
+    <li>Composer is always 320&nbsp;px tall max, scrolls internally if the user pastes a long message. Never grows taller than the thread itself.</li>
+    <li>The <kbd>⌘ ⏎</kbd> hint on the Send button is always visible (even on hover, even when disabled) — it's a learnable affordance, not a tooltip.</li>
+    <li><strong>RC-4 (success)</strong>: after sending, the composer is replaced by a single confirmation line for 1.5s, then a "Resolve" CTA appears. The agent's next action is "do I close this or wait for a reply?" — we surface both options.</li>
+    <li><strong>RC-5 (error)</strong>: the draft is <em>always</em> preserved. The error message includes a retry counter ("will retry every 5s for the next 2 min") so the agent knows the system is still trying.</li>
+    <li><strong>RC-6 (disabled)</strong>: when the AI is in <code>auto_reply</code> mode, the composer is disabled and italicized. <kbd>Esc</kbd> takes over manually. This is a power-user path, not a daily one.</li>
+  </ul>
+
+  <h4>StatusBadge — frames SB-1</h4>
+  <ul>
+    <li>Two separate components, <code>&lt;StatusBadge status="…" /&gt;</code> and <code>&lt;AiStateIndicator aiState="…" /&gt;</code>. Never merge.</li>
+    <li>Badges use the same Linen token palette as the rest of the product. The dot is 5×5&nbsp;px, 999&nbsp;px radius. Font is IBM Plex Sans 11&nbsp;px medium.</li>
+    <li>Hover state: 2&nbsp;px teal outline at 1&nbsp;px offset. Same focus style as everywhere else in the product.</li>
+  </ul>
+
+  <h4>Keyboard shortcuts — frame KBD-1</h4>
+  <ul>
+    <li>Implement in a single <code>useInboxShortcuts</code> hook attached to the inbox page, not at the document level. Scoping prevents stealing keys from modals, the composer, and input fields.</li>
+    <li>The <code>?</code> overlay is a focus-trapped modal that closes on Esc or any other key. It uses the dark <code>--ink</code> panel — the same treatment as the analytics page's "no data" states.</li>
+    <li>J/K and ↑/↓ do the same thing. Implementing both is cheap and respects muscle memory from Gmail, Linear, and Front.</li>
+  </ul>
+
+  <div class="handoff">
+    <h4>What this hand-off is not</h4>
+    <p>
+      This is not a Figma file. It's a self-contained HTML document with 20 frames and a spec
+      attached. Eng should be able to take any frame ID (e.g. <code>AI-1</code>) and find the
+      exact pixel treatment for that state in this file. If a frame needs to change, the
+      change lives in <code>inbox-states.html</code> first, then in code, not the other way
+      around — the design file is the source of truth for visual decisions.
+    </p>
+  </div>
+
+</div>
+</body>
+</html>

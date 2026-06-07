@@ -1,0 +1,160 @@
+# .github/workflows/eval-gate.yml — AI evaluation regression gate.
+#
+# Runs the AI golden-conversation harness on every PR that touches
+# support-core or eval scripts, compares the result to a stored
+# baseline, and fails the build if rubric pass rate (or decision
+# accuracy) drops >5pp.
+#
+# On main, after the eval passes, the workflow refreshes the baseline
+# (eval-output/baseline.json) so the next PR compares against the
+# last green commit.
+#
+# Required configuration:
+#   - No secrets. The default mock recording is fully offline.
+#   - Optional: OPENROUTER_API_KEY to run against real models.
+#     Set the workflow's `use_live_models` input to true to enable.
+#
+# Local sanity check:
+#   npm run eval
+#   npm run eval:gate -- --synthetic-drop 10
+#     (exit 1 — proves the gate fires on a >5pp drop)
+
+name: AI Eval Gate
+
+on:
+  pull_request:
+    paths:
+      - 'packages/support-core/**'
+      - 'scripts/eval/**'
+      - '.github/workflows/eval-gate.yml'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'tsconfig.json'
+  push:
+    branches: [main]
+    paths:
+      - 'packages/support-core/**'
+      - 'scripts/eval/**'
+
+jobs:
+  eval:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      # Force deterministic mock for the gate; live models are opt-in
+      # via the workflow_dispatch `use_live_models` input below.
+      EVAL_LABEL: mock-gpt-4o-mini
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Run AI eval harness
+        id: eval
+        run: |
+          npm run eval 2>&1 | tee eval-output/last-run.log
+          # Find the most recent summary the harness just wrote
+          SUMMARY=$(ls -1t eval-output/results-*.json | head -1)
+          echo "summary=$SUMMARY" >> "$GITHUB_OUTPUT"
+          cat "$SUMMARY"
+
+      - name: Compare against baseline
+        if: github.event_name == 'pull_request'
+        run: |
+          if [ ! -f eval-output/baseline.json ]; then
+            echo "::warning::No baseline.json — first run after seeding. Skipping gate."
+            exit 0
+          fi
+          npm run eval:gate -- --current-label mock-gpt-4o-mini --threshold 5 --metric both
+
+      - name: Synthetic 10pp drop self-test
+        if: github.event_name == 'pull_request'
+        run: |
+          # Verify the gate actually fires on a >5pp drop. The test runs
+          # the gate against the just-produced summary with a synthetic
+          # 10pp drop in-memory; the gate MUST exit non-zero. If it
+          # doesn't, the gate is broken (would not catch a real regression).
+          set +e
+          npm run eval:gate -- --current-label mock-gpt-4o-mini --synthetic-drop 10 --threshold 5
+          rc=$?
+          set -e
+          if [ "$rc" -ne 1 ]; then
+            echo "::error::Synthetic 10pp drop did NOT fail the gate (rc=$rc). The gate is broken — it would not catch a real regression."
+            exit 1
+          fi
+          echo "Synthetic 10pp drop correctly fired the gate (rc=1)."
+
+      - name: Refresh baseline on main
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          SUMMARY: ${{ steps.eval.outputs.summary }}
+        run: |
+          # On main, after a green eval, update the stored baseline so
+          # subsequent PRs compare against the latest green commit.
+          cp "$SUMMARY" eval-output/baseline.json
+          echo "Refreshed eval-output/baseline.json from $SUMMARY"
+          cat eval-output/baseline.json
+
+      - name: Upload eval artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-eval-output
+          path: |
+            eval-output/results-*.csv
+            eval-output/results-*.md
+            eval-output/results-*.json
+            eval-output/compare-*.csv
+            eval-output/compare-*.md
+            eval-output/compare-*.json
+            eval-output/baseline.json
+          if-no-files-found: warn
+          retention-days: 30
+
+  # Optional: run a live OpenRouter comparison on a schedule. Skipped by
+  # default — set the workflow_dispatch input to enable. Requires the
+  # OPENROUTER_API_KEY secret.
+  eval-live:
+    runs-on: ubuntu-latest
+    needs: eval
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.OPENROUTER_ENABLED == 'true'
+    timeout-minutes: 30
+    env:
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - name: Install deps
+        run: npm ci
+      - name: Verify API key present
+        run: |
+          if [ -z "$OPENROUTER_API_KEY" ]; then
+            echo "::error::OPENROUTER_API_KEY secret is empty. Set it in Settings → Secrets to enable live comparison."
+            exit 1
+          fi
+      - name: Live OpenRouter comparison
+        run: |
+          npx tsx scripts/eval/run-eval-live.ts \
+            --models openai/gpt-4o-mini,anthropic/claude-3-haiku \
+            --concurrency 4 \
+            --out-dir eval-output/live
+          npx tsx scripts/eval/run-eval-compare.ts \
+            --left-label live-gpt-4o-mini --left-recording eval-output/live/recording-live-gpt-4o-mini.json \
+            --right-label live-claude-haiku --right-recording eval-output/live/recording-live-claude-haiku.json
+      - name: Upload live artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-eval-live
+          path: eval-output/live/
+          retention-days: 90

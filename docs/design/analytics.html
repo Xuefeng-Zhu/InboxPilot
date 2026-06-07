@@ -1,0 +1,2059 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>InboxPilot · Analytics dashboard — design hand-off</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  /* ------------------------------------------------------------------ */
+  /*  Tokens  (shared with the knowledge-base spec)                      */
+  /* ------------------------------------------------------------------ */
+  :root {
+    --bg:        #FAF8F4;
+    --surface:   #FFFFFF;
+    --surface-2: #F4F0E6;
+    --ink:       #1A1815;
+    --ink-2:     #6B655C;
+    --ink-3:     #9A9386;
+    --line:      #E8E2D6;
+    --line-2:    #D7CFBE;
+
+    --teal:      #0E5E5E;
+    --teal-2:    #0A4848;
+    --teal-soft: #E4EEEE;
+    --forest:    #4A7C3F;
+    --forest-bg: #EEF3E8;
+    --ochre:     #B8761E;
+    --ochre-bg:  #F6ECDC;
+    --terra:     #A8331F;
+    --terra-bg:  #F5E2DC;
+    --slate:     #6B655C;
+    --slate-bg:  #EFEBE0;
+
+    --serif: "Fraunces", "Iowan Old Style", Georgia, serif;
+    --sans:  "IBM Plex Sans", "Helvetica Neue", sans-serif;
+    --mono:  "IBM Plex Mono", ui-monospace, "SF Mono", monospace;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: var(--sans);
+    font-size: 14px;
+    line-height: 1.5;
+    color: var(--ink);
+    background: var(--bg);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  a { color: var(--teal); text-decoration: none; }
+  a:hover { color: var(--teal-2); }
+
+  /* ------------------------------------------------------------------ */
+  /*  Index strip at the top of the file                                 */
+  /* ------------------------------------------------------------------ */
+  .index {
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    background: rgba(250, 248, 244, 0.92);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--line);
+    padding: 12px 40px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    font-size: 12px;
+    color: var(--ink-2);
+  }
+  .index .index-label {
+    font-family: var(--mono);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--ink-3);
+    margin-right: 8px;
+  }
+  .index a { color: var(--ink-2); }
+  .index a:hover { color: var(--ink); }
+  .index .sep { color: var(--ink-3); }
+  .index .spacer { flex: 1; }
+  .index .scope {
+    font-family: var(--mono);
+    color: var(--ink-3);
+  }
+
+  /* ------------------------------------------------------------------ */
+  /*  Frame wrapper                                                      */
+  /* ------------------------------------------------------------------ */
+  .frame {
+    padding: 56px 40px 72px;
+    max-width: 1280px;
+    margin: 0 auto;
+  }
+  .frame + .frame { border-top: 1px solid var(--line); }
+  .frame-head {
+    margin-bottom: 32px;
+  }
+  .frame-num {
+    font-family: var(--mono);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: 11px;
+    color: var(--ink-3);
+    margin-bottom: 6px;
+  }
+  .frame-title {
+    font-family: var(--serif);
+    font-weight: 500;
+    font-size: 22px;
+    line-height: 1.2;
+    letter-spacing: -0.01em;
+    color: var(--ink);
+    margin: 0 0 4px;
+  }
+  .frame-sub {
+    font-size: 13px;
+    color: var(--ink-2);
+    max-width: 64ch;
+  }
+
+  .canvas {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 1px 0 rgba(26, 24, 21, 0.02);
+  }
+  .canvas.dark { background: #1A1815; }
+  .canvas-bleed {
+    background: var(--bg);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 24px;
+  }
+
+  /* ------------------------------------------------------------------ */
+  /*  App chrome (top bar) — shared across all frames                    */
+  /* ------------------------------------------------------------------ */
+  .topbar {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    padding: 14px 32px;
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--line);
+    font-size: 13px;
+  }
+  .topbar .brand {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--serif);
+    font-weight: 500;
+    font-size: 16px;
+    color: var(--ink);
+  }
+  .topbar .brand .dot {
+    width: 10px; height: 10px; border-radius: 50%;
+    background: var(--teal);
+  }
+  .topbar nav {
+    display: flex; gap: 4px;
+  }
+  .topbar nav a {
+    padding: 6px 10px;
+    border-radius: 6px;
+    color: var(--ink-2);
+    font-size: 13px;
+  }
+  .topbar nav a:hover { background: rgba(0,0,0,0.04); color: var(--ink); }
+  .topbar nav a.active {
+    background: var(--surface);
+    color: var(--ink);
+    box-shadow: inset 0 0 0 1px var(--line);
+  }
+  .topbar .right { margin-left: auto; display: flex; align-items: center; gap: 12px; }
+  .topbar .org {
+    font-family: var(--mono);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--ink-3);
+    padding: 4px 8px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+  }
+  .topbar .avatar {
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #B8761E 0%, #4A7C3F 100%);
+    color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--mono); font-size: 11px;
+  }
+
+  /* ------------------------------------------------------------------ */
+  /*  Page header — eyebrow + title + status pill                       */
+  /* ------------------------------------------------------------------ */
+  .page-head {
+    display: flex;
+    align-items: flex-end;
+    gap: 24px;
+    padding: 32px 32px 24px;
+    border-bottom: 1px solid var(--line);
+  }
+  .page-head .left { flex: 1; min-width: 0; }
+  .page-head .eyebrow {
+    font-family: var(--mono);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: 11px;
+    color: var(--ink-3);
+    margin-bottom: 6px;
+  }
+  .page-head h1 {
+    font-family: var(--serif);
+    font-weight: 500;
+    font-size: 32px;
+    line-height: 1.10;
+    letter-spacing: -0.015em;
+    margin: 0 0 6px;
+  }
+  .page-head .sub {
+    font-size: 14px;
+    color: var(--ink-2);
+    max-width: 64ch;
+  }
+  .page-head .right {
+    display: flex; flex-direction: column; align-items: flex-end; gap: 10px;
+  }
+
+  /* Status pill — the headline of the dashboard */
+  .status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px 6px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 1;
+  }
+  .status-pill .dot {
+    width: 8px; height: 8px; border-radius: 50%;
+  }
+  .status-pill.green { background: var(--forest-bg); color: var(--forest); }
+  .status-pill.green .dot { background: var(--forest); }
+  .status-pill.yellow { background: var(--ochre-bg); color: var(--ochre); }
+  .status-pill.yellow .dot { background: var(--ochre); }
+  .status-pill.red { background: var(--terra-bg); color: var(--terra); }
+  .status-pill.red .dot { background: var(--terra); }
+
+  /* Date range picker */
+  .date-range {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    border: 1px solid var(--line-2);
+    border-radius: 6px;
+    background: var(--surface);
+    font-size: 12px;
+    color: var(--ink);
+  }
+  .date-range .mono { font-family: var(--mono); }
+  .date-range .chev {
+    width: 10px; height: 10px;
+    border-right: 1.5px solid var(--ink-3);
+    border-bottom: 1.5px solid var(--ink-3);
+    transform: rotate(45deg);
+    margin-left: 4px;
+  }
+  .preset-tabs {
+    display: inline-flex;
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 2px;
+    gap: 2px;
+  }
+  .preset-tabs button {
+    appearance: none;
+    background: transparent;
+    border: 0;
+    padding: 4px 10px;
+    font: inherit;
+    font-size: 12px;
+    color: var(--ink-2);
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  .preset-tabs button.active {
+    background: var(--surface);
+    color: var(--ink);
+    box-shadow: inset 0 0 0 1px var(--line);
+  }
+  .preset-tabs button:hover:not(.active) { color: var(--ink); }
+
+  /* ------------------------------------------------------------------ */
+  /*  KPI tile                                                           */
+  /* ------------------------------------------------------------------ */
+  .kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 16px;
+    padding: 24px 32px;
+    border-bottom: 1px solid var(--line);
+  }
+  .kpi {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    min-height: 132px;
+  }
+  .kpi.warn { border-color: var(--ochre); }
+  .kpi.crit { border-color: var(--terra); }
+
+  .kpi .label {
+    display: flex; align-items: center; justify-content: space-between;
+    font-family: var(--mono);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: 10px;
+    color: var(--ink-3);
+    margin-bottom: 10px;
+  }
+  .kpi .info {
+    width: 12px; height: 12px;
+    border-radius: 50%;
+    border: 1px solid var(--ink-3);
+    color: var(--ink-3);
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 8px; line-height: 1;
+    font-family: var(--serif);
+    cursor: help;
+  }
+  .kpi .value {
+    font-family: var(--serif);
+    font-weight: 500;
+    font-size: 32px;
+    line-height: 1.05;
+    letter-spacing: -0.02em;
+    color: var(--ink);
+    margin-bottom: 6px;
+  }
+  .kpi .value .unit {
+    font-size: 16px;
+    color: var(--ink-2);
+    margin-left: 2px;
+  }
+  .kpi .delta-row {
+    display: flex; align-items: center; gap: 8px;
+    margin-bottom: 10px;
+  }
+  .kpi .delta {
+    display: inline-flex; align-items: center; gap: 3px;
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 2px 6px;
+    border-radius: 4px;
+  }
+  .kpi .delta.up   { background: var(--forest-bg); color: var(--forest); }
+  .kpi .delta.down { background: var(--terra-bg); color: var(--terra); }
+  .kpi .delta.flat { background: var(--slate-bg); color: var(--ink-2); }
+  /* Inverse semantics: for some metrics, "up" is bad */
+  .kpi.inverse .delta.up   { background: var(--terra-bg); color: var(--terra); }
+  .kpi.inverse .delta.down { background: var(--forest-bg); color: var(--forest); }
+  .kpi .delta-arrow {
+    display: inline-block;
+    width: 0; height: 0;
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+  }
+  .kpi .delta.up   .delta-arrow { border-bottom: 5px solid currentColor; }
+  .kpi .delta.down .delta-arrow { border-top: 5px solid currentColor; }
+  .kpi .delta.flat .delta-arrow {
+    width: 6px; height: 2px; border: 0; background: currentColor;
+  }
+  .kpi .vs {
+    font-size: 11px;
+    color: var(--ink-3);
+  }
+  .kpi .spark {
+    margin-top: auto;
+    height: 28px;
+  }
+  .kpi .spark svg { display: block; width: 100%; height: 100%; }
+
+  /* ------------------------------------------------------------------ */
+  /*  Chart sections                                                     */
+  /* ------------------------------------------------------------------ */
+  .section {
+    padding: 32px;
+    border-bottom: 1px solid var(--line);
+  }
+  .section:last-child { border-bottom: 0; }
+  .section-head {
+    display: flex; align-items: flex-end; justify-content: space-between;
+    margin-bottom: 20px;
+  }
+  .section-head h2 {
+    font-family: var(--serif);
+    font-weight: 500;
+    font-size: 18px;
+    margin: 0 0 2px;
+  }
+  .section-head .sub {
+    font-size: 12px;
+    color: var(--ink-2);
+  }
+  .section-head .legend {
+    display: flex; gap: 14px;
+    font-size: 12px;
+    color: var(--ink-2);
+  }
+  .section-head .legend .swatch {
+    display: inline-block;
+    width: 10px; height: 10px;
+    border-radius: 2px;
+    margin-right: 6px;
+    vertical-align: middle;
+  }
+
+  /* Trendline chart — shared axis (volume, AI-resolved, escalations) */
+  .chart-trend {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+  }
+  .chart-card {
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 16px;
+    background: var(--surface);
+    display: flex; flex-direction: column;
+  }
+  .chart-card.warn { border-color: var(--ochre); }
+  .chart-card.crit { border-color: var(--terra); }
+  .chart-card .head {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 8px;
+  }
+  .chart-card .head .name {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--ink);
+  }
+  .chart-card .head .head-right {
+    display: flex; align-items: center; gap: 8px;
+  }
+  .chart-card .head .total {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--ink-2);
+  }
+  .chart-card .axis {
+    flex: 1;
+    height: 140px;
+    position: relative;
+  }
+  .chart-card .axis svg { width: 100%; height: 100%; display: block; overflow: visible; }
+  .chart-card .axis .y-labels,
+  .chart-card .axis .x-labels {
+    font-family: var(--mono);
+    font-size: 9px;
+    fill: var(--ink-3);
+  }
+  .chart-card .axis .grid-line {
+    stroke: var(--line);
+    stroke-dasharray: 2 3;
+  }
+  .chart-card .axis .series {
+    fill: none;
+    stroke-width: 1.75;
+    stroke-linejoin: round;
+    stroke-linecap: round;
+  }
+  .chart-card .axis .area {
+    opacity: 0.18;
+  }
+  .chart-card .axis .point {
+    r: 2.5;
+  }
+  .chart-card .axis .point.halo {
+    fill: transparent;
+    stroke: transparent;
+  }
+  .chart-card .axis .threshold {
+    stroke: var(--terra);
+    stroke-width: 1;
+    stroke-dasharray: 3 3;
+    opacity: 0.6;
+  }
+  .chart-card .axis .threshold-label {
+    font-family: var(--mono);
+    font-size: 9px;
+    fill: var(--terra);
+  }
+  .chart-card .x-row {
+    display: flex; justify-content: space-between;
+    margin-top: 6px;
+    font-family: var(--mono);
+    font-size: 9px;
+    color: var(--ink-3);
+  }
+
+  /* Bar chart for channel split */
+  .chart-bars {
+    display: flex; flex-direction: column; gap: 10px;
+  }
+  .bar-row {
+    display: grid;
+    grid-template-columns: 80px 1fr 56px;
+    align-items: center;
+    gap: 12px;
+    font-size: 13px;
+  }
+  .bar-row .name { color: var(--ink); }
+  .bar-row .track {
+    height: 8px;
+    background: var(--surface-2);
+    border-radius: 4px;
+    overflow: hidden;
+    position: relative;
+  }
+  .bar-row .fill {
+    height: 100%;
+    background: var(--teal);
+    border-radius: 4px;
+  }
+  .bar-row .pct {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--ink-2);
+    text-align: right;
+  }
+
+  /* ------------------------------------------------------------------ */
+  /*  Drilldown tables                                                   */
+  /* ------------------------------------------------------------------ */
+  .drilldown {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 16px;
+  }
+  .table-card {
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--surface);
+    overflow: hidden;
+    display: flex; flex-direction: column;
+  }
+  .table-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--line);
+  }
+  .table-head .name {
+    font-size: 13px; font-weight: 500;
+  }
+  .table-head .name .count {
+    font-family: var(--mono);
+    font-weight: 400;
+    color: var(--ink-3);
+    margin-left: 6px;
+    font-size: 11px;
+  }
+  .table-head .export {
+    appearance: none;
+    background: transparent;
+    border: 1px solid var(--line-2);
+    border-radius: 4px;
+    padding: 4px 8px;
+    font: inherit;
+    font-size: 11px;
+    color: var(--ink-2);
+    cursor: pointer;
+    display: inline-flex; align-items: center; gap: 4px;
+  }
+  .table-head .export:hover { background: var(--surface-2); color: var(--ink); }
+  .table-head .export .icon {
+    width: 10px; height: 10px;
+  }
+  table.t {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12.5px;
+  }
+  table.t th, table.t td {
+    text-align: left;
+    padding: 8px 16px;
+    border-bottom: 1px solid var(--line);
+  }
+  table.t th {
+    font-family: var(--mono);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: 10px;
+    font-weight: 500;
+    color: var(--ink-3);
+    cursor: pointer;
+    user-select: none;
+    background: var(--surface-2);
+  }
+  table.t th .sort-arrow {
+    color: var(--ink-3);
+    margin-left: 4px;
+    display: inline-block;
+    width: 0; height: 0;
+    border-left: 3px solid transparent;
+    border-right: 3px solid transparent;
+    border-top: 4px solid currentColor;
+    vertical-align: middle;
+  }
+  table.t th.active .sort-arrow { color: var(--ink); }
+  table.t tbody tr:last-child td { border-bottom: 0; }
+  table.t tbody tr:hover { background: var(--surface-2); }
+  table.t td.num {
+    font-family: var(--mono);
+    text-align: right;
+    color: var(--ink-2);
+  }
+  table.t td .delta {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--ink-3);
+    margin-left: 4px;
+  }
+  table.t td .keyword {
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  table.t td .hash {
+    font-family: var(--mono); color: var(--ink-3); font-size: 11px;
+    width: 16px;
+  }
+  table.t td .contact {
+    display: flex; align-items: center; gap: 8px;
+  }
+  table.t td .contact .av {
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 10px; color: #fff; font-family: var(--mono);
+  }
+  table.t td .contact .name { color: var(--ink); }
+  table.t td .contact .id {
+    color: var(--ink-3); font-family: var(--mono); font-size: 10px;
+    display: block; line-height: 1.2;
+  }
+  table.t td .chip {
+    display: inline-block;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-family: var(--mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  table.t td .chip.email  { background: var(--teal-soft); color: var(--teal); }
+  table.t td .chip.sms    { background: var(--ochre-bg);  color: var(--ochre); }
+  table.t td .chip.web    { background: var(--surface-2); color: var(--ink-2); }
+  table.t td .chip.voice  { background: #ECE4F2;          color: #5C4475; }
+
+  /* ------------------------------------------------------------------ */
+  /*  Threshold legend (Frame 05)                                        */
+  /* ------------------------------------------------------------------ */
+  .threshold-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  .threshold-table th, .threshold-table td {
+    text-align: left;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--line);
+  }
+  .threshold-table th {
+    font-family: var(--mono);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: 10px;
+    color: var(--ink-3);
+    font-weight: 500;
+    background: var(--surface-2);
+  }
+  .threshold-table td.tier {
+    font-weight: 500;
+    width: 140px;
+  }
+  .threshold-table .swatch {
+    display: inline-block; width: 8px; height: 8px;
+    border-radius: 50%; margin-right: 8px; vertical-align: middle;
+  }
+  .threshold-table .tier.green  .swatch { background: var(--forest); }
+  .threshold-table .tier.yellow .swatch { background: var(--ochre); }
+  .threshold-table .tier.red    .swatch { background: var(--terra); }
+  .threshold-table .num {
+    font-family: var(--mono);
+    color: var(--ink-2);
+  }
+  .threshold-table .range {
+    font-family: var(--mono);
+  }
+  .threshold-table code {
+    font-family: var(--mono);
+    font-size: 11px;
+    background: var(--surface-2);
+    padding: 2px 6px;
+    border-radius: 3px;
+    color: var(--ink);
+  }
+
+  /* ------------------------------------------------------------------ */
+  /*  Mobile frame                                                       */
+  /* ------------------------------------------------------------------ */
+  .mobile-wrap {
+    display: flex; justify-content: center;
+    background: #1A1815;
+    border-radius: 16px;
+    padding: 32px;
+  }
+  .mobile {
+    width: 390px;
+    background: var(--bg);
+    border-radius: 32px;
+    padding: 12px;
+    box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+  }
+  .mobile .screen {
+    background: var(--bg);
+    border-radius: 22px;
+    overflow: hidden;
+    border: 1px solid var(--line-2);
+  }
+  .mobile .notch {
+    height: 28px;
+    background: var(--bg);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .mobile .notch::before {
+    content: ''; width: 110px; height: 6px;
+    background: #1A1815; border-radius: 3px;
+  }
+  .mobile .m-top {
+    padding: 8px 20px 12px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .mobile .m-top .m-brand {
+    font-family: var(--serif);
+    font-size: 14px; font-weight: 500;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .mobile .m-top .m-brand .dot {
+    width: 7px; height: 7px; border-radius: 50%; background: var(--teal);
+  }
+  .mobile .m-top .m-av {
+    width: 24px; height: 24px; border-radius: 50%;
+    background: linear-gradient(135deg, #B8761E 0%, #4A7C3F 100%);
+    color: #fff; display: flex; align-items: center; justify-content: center;
+    font-family: var(--mono); font-size: 9px;
+  }
+  .mobile .m-page-head {
+    padding: 12px 20px 16px;
+    border-bottom: 1px solid var(--line);
+  }
+  .mobile .m-eyebrow {
+    font-family: var(--mono); text-transform: uppercase; letter-spacing: 0.08em;
+    font-size: 9px; color: var(--ink-3); margin-bottom: 4px;
+  }
+  .mobile .m-title {
+    font-family: var(--serif); font-weight: 500; font-size: 22px;
+    line-height: 1.15; letter-spacing: -0.01em; margin: 0 0 10px;
+  }
+  .mobile .m-status-row {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 8px;
+  }
+  .mobile .m-range {
+    font-family: var(--mono);
+    font-size: 11px; color: var(--ink-2);
+  }
+  .mobile .m-kpi-list {
+    padding: 16px 20px;
+    display: flex; flex-direction: column; gap: 10px;
+  }
+  .mobile .m-kpi {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 12px 14px;
+    display: flex; align-items: center; gap: 12px;
+  }
+  .mobile .m-kpi.crit { border-color: var(--terra); }
+  .mobile .m-kpi.warn { border-color: var(--ochre); }
+  .mobile .m-kpi .left { flex: 1; min-width: 0; }
+  .mobile .m-kpi .label {
+    font-family: var(--mono); text-transform: uppercase; letter-spacing: 0.08em;
+    font-size: 9px; color: var(--ink-3); margin-bottom: 4px;
+  }
+  .mobile .m-kpi .value {
+    font-family: var(--serif); font-weight: 500; font-size: 22px;
+    letter-spacing: -0.015em; line-height: 1.1;
+  }
+  .mobile .m-kpi .delta {
+    font-family: var(--mono); font-size: 10px; margin-top: 2px;
+  }
+  .mobile .m-kpi .delta.up { color: var(--forest); }
+  .mobile .m-kpi .delta.down { color: var(--terra); }
+  .mobile .m-kpi .delta.flat { color: var(--ink-3); }
+  .mobile .m-kpi.inverse .delta.up { color: var(--terra); }
+  .mobile .m-kpi.inverse .delta.down { color: var(--forest); }
+  .mobile .m-kpi .spark {
+    width: 64px; height: 32px; flex-shrink: 0;
+  }
+  .mobile .m-kpi .spark svg { width: 100%; height: 100%; display: block; }
+  .mobile .m-trend {
+    padding: 12px 20px 16px;
+    border-top: 1px solid var(--line);
+  }
+  .mobile .m-trend h3 {
+    font-family: var(--serif); font-weight: 500; font-size: 14px;
+    margin: 0 0 10px;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .mobile .m-trend h3 .tag {
+    font-family: var(--mono); font-size: 10px; color: var(--ink-3);
+    text-transform: uppercase; letter-spacing: 0.05em;
+  }
+  .mobile .m-trend .axis { height: 60px; position: relative; }
+  .mobile .m-trend .axis svg { width: 100%; height: 100%; }
+  .mobile .m-trend .axis .series { fill: none; stroke-width: 1.5; }
+  .mobile .m-trend-list {
+    padding: 0 20px 20px;
+    display: flex; flex-direction: column; gap: 10px;
+    border-top: 1px solid var(--line); padding-top: 16px;
+  }
+  .mobile .m-trend-list .t-row {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 12px 14px;
+  }
+  .mobile .m-trend-list .t-row .head {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 6px;
+  }
+  .mobile .m-trend-list .t-row .name { font-size: 12px; font-weight: 500; }
+  .mobile .m-trend-list .t-row .total {
+    font-family: var(--mono); font-size: 11px; color: var(--ink-2);
+  }
+  .mobile .m-trend-list .t-row .axis { height: 44px; }
+  .mobile .m-trend-list .t-row .axis svg { width: 100%; height: 100%; }
+  .mobile .m-trend-list .t-row .axis .series { fill: none; stroke-width: 1.5; }
+  .mobile .m-bottom-nav {
+    border-top: 1px solid var(--line);
+    background: var(--surface-2);
+    display: flex;
+    padding: 10px 0 18px;
+  }
+  .mobile .m-bottom-nav a {
+    flex: 1;
+    text-align: center;
+    font-size: 9px;
+    color: var(--ink-3);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-family: var(--mono);
+  }
+  .mobile .m-bottom-nav a.active { color: var(--teal); }
+  .mobile .m-bottom-nav a .icn {
+    display: block; margin: 0 auto 4px;
+    width: 18px; height: 18px;
+  }
+
+  /* ------------------------------------------------------------------ */
+  /*  Notes / annotation                                                 */
+  /* ------------------------------------------------------------------ */
+  .annotation {
+    margin-top: 16px;
+    padding: 12px 16px;
+    border: 1px dashed var(--line-2);
+    border-radius: 8px;
+    font-size: 12px;
+    color: var(--ink-2);
+    background: var(--surface-2);
+  }
+  .annotation strong {
+    font-family: var(--mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--ink-3);
+    display: block;
+    margin-bottom: 4px;
+    font-weight: 500;
+  }
+
+  /* Two-up: side by side small frames */
+  .two-up {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+  }
+  .two-up .canvas-bleed { padding: 24px; }
+
+  /* Mini KPI for the "what good looks like" frame */
+  .mini-row { display: flex; gap: 12px; flex-wrap: wrap; }
+  .mini-kpi {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 10px 12px;
+    min-width: 130px;
+  }
+  .mini-kpi .l {
+    font-family: var(--mono); text-transform: uppercase; letter-spacing: 0.08em;
+    font-size: 9px; color: var(--ink-3); margin-bottom: 4px;
+  }
+  .mini-kpi .v {
+    font-family: var(--serif); font-weight: 500; font-size: 18px;
+    line-height: 1.1;
+  }
+  .mini-kpi .d {
+    font-family: var(--mono); font-size: 10px; color: var(--ink-3); margin-top: 2px;
+  }
+
+  /* Threshold bar (visual) */
+  .threshold-bar {
+    position: relative;
+    height: 8px;
+    background: linear-gradient(to right, var(--forest) 0%, var(--forest) 50%, var(--ochre) 50%, var(--ochre) 80%, var(--terra) 80%, var(--terra) 100%);
+    border-radius: 4px;
+    margin: 6px 0 4px;
+  }
+  .threshold-bar .marker {
+    position: absolute;
+    top: -4px; bottom: -4px;
+    width: 2px;
+    background: var(--ink);
+  }
+  .threshold-bar .marker::after {
+    content: attr(data-label);
+    position: absolute;
+    top: -18px; left: 50%; transform: translateX(-50%);
+    font-family: var(--mono);
+    font-size: 9px;
+    color: var(--ink);
+    white-space: nowrap;
+  }
+  .threshold-bar-labels {
+    display: flex; justify-content: space-between;
+    font-family: var(--mono);
+    font-size: 9px;
+    color: var(--ink-3);
+  }
+</style>
+</head>
+<body>
+
+<!-- ================================================================== -->
+<!--  Index strip                                                        -->
+<!-- ================================================================== -->
+<div class="index">
+  <span class="index-label">InboxPilot · Analytics dashboard</span>
+  <a href="#frame-1">01 Scan</a>
+  <span class="sep">·</span>
+  <a href="#frame-2">02 KPI tiles</a>
+  <span class="sep">·</span>
+  <a href="#frame-3">03 Trendlines</a>
+  <span class="sep">·</span>
+  <a href="#frame-4">04 Drilldowns</a>
+  <span class="sep">·</span>
+  <a href="#frame-5">05 Thresholds</a>
+  <span class="sep">·</span>
+  <a href="#frame-6">06 Mobile</a>
+  <span class="spacer"></span>
+  <span class="scope">desktop · 1280 / mobile · 390</span>
+</div>
+
+<!-- ================================================================== -->
+<!--  FRAME 1 — 5-second scan (the entire above-the-fold experience)     -->
+<!-- ================================================================== -->
+<div class="frame" id="frame-1">
+  <div class="frame-head">
+    <div class="frame-num">Frame 01 · the 5-second scan</div>
+    <h2 class="frame-title">"Are we ok this week?" — answered above the fold</h2>
+    <p class="frame-sub">The support lead's eye lands on the status pill first, then sweeps the six KPI tiles, and only then commits to reading. If the pill is red, the rest of the dashboard is detail for the post-mortem — not a reason to leave the page.</p>
+  </div>
+
+  <div class="canvas">
+    <!-- Top bar -->
+    <div class="topbar">
+      <div class="brand"><span class="dot"></span> InboxPilot</div>
+      <nav>
+        <a href="#">Inbox</a>
+        <a href="#">Knowledge</a>
+        <a href="#" class="active">Analytics</a>
+        <a href="#">Settings</a>
+      </nav>
+      <div class="right">
+        <span class="org">ACME · PROD</span>
+        <div class="avatar">MR</div>
+      </div>
+    </div>
+
+    <!-- Page head -->
+    <div class="page-head">
+      <div class="left">
+        <div class="eyebrow">Analytics</div>
+        <h1>This week in support</h1>
+        <p class="sub">Mon 02 Jun — Sun 08 Jun 2025 · all channels · 7 day window compared to the prior 7 days.</p>
+      </div>
+      <div class="right">
+        <span class="status-pill yellow">
+          <span class="dot"></span>
+          Watch · escalations climbing
+        </span>
+        <div style="display:flex; gap:8px;">
+          <div class="preset-tabs">
+            <button>24h</button>
+            <button>7d</button>
+            <button class="active">7d</button>
+            <button>30d</button>
+            <button>90d</button>
+          </div>
+          <div class="date-range">
+            <span class="mono">Jun 02 → Jun 08</span>
+            <span class="chev"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- KPI tile row (6 tiles) -->
+    <div class="kpi-grid">
+
+      <!-- Tile 1: Volume -->
+      <div class="kpi">
+        <div class="label">
+          <span>Volume</span>
+          <span class="info">i</span>
+        </div>
+        <div class="value">1,284</div>
+        <div class="delta-row">
+          <span class="delta up">▲ 8.2%</span>
+          <span class="vs">vs prior 7d</span>
+        </div>
+        <div class="spark">
+          <svg viewBox="0 0 100 28" preserveAspectRatio="none">
+            <path d="M0,22 L12,18 L24,20 L36,15 L48,12 L60,14 L72,8 L84,6 L100,4 L100,28 L0,28 Z" fill="#EEF3E8" />
+            <path d="M0,22 L12,18 L24,20 L36,15 L48,12 L60,14 L72,8 L84,6 L100,4" fill="none" stroke="#4A7C3F" stroke-width="1.25" />
+          </svg>
+        </div>
+      </div>
+
+      <!-- Tile 2: AI-resolved -->
+      <div class="kpi">
+        <div class="label">
+          <span>AI-resolved</span>
+          <span class="info">i</span>
+        </div>
+        <div class="value">812<span class="unit">/1,284</span></div>
+        <div class="delta-row">
+          <span class="delta up">▲ 3.1%</span>
+          <span class="vs">63.2% rate</span>
+        </div>
+        <div class="spark">
+          <svg viewBox="0 0 100 28" preserveAspectRatio="none">
+            <path d="M0,14 L12,15 L24,12 L36,16 L48,11 L60,13 L72,10 L84,8 L100,7 L100,28 L0,28 Z" fill="#E4EEEE" />
+            <path d="M0,14 L12,15 L24,12 L36,16 L48,11 L60,13 L72,10 L84,8 L100,7" fill="none" stroke="#0E5E5E" stroke-width="1.25" />
+          </svg>
+        </div>
+      </div>
+
+      <!-- Tile 3: Escalated (inverse — up is bad) -->
+      <div class="kpi inverse warn">
+        <div class="label">
+          <span>Escalated</span>
+          <span class="info">i</span>
+        </div>
+        <div class="value">142<span class="unit">/1,284</span></div>
+        <div class="delta-row">
+          <span class="delta up">▲ 27.4%</span>
+          <span class="vs">11.1% rate</span>
+        </div>
+        <div class="spark">
+          <svg viewBox="0 0 100 28" preserveAspectRatio="none">
+            <path d="M0,22 L12,21 L24,20 L36,17 L48,16 L60,12 L72,9 L84,5 L100,2 L100,28 L0,28 Z" fill="#F6ECDC" />
+            <path d="M0,22 L12,21 L24,20 L36,17 L48,16 L60,12 L72,9 L84,5 L100,2" fill="none" stroke="#B8761E" stroke-width="1.5" />
+            <line x1="80" y1="0" x2="80" y2="28" stroke="#A8331F" stroke-dasharray="2 2" stroke-width="0.75" />
+          </svg>
+        </div>
+      </div>
+
+      <!-- Tile 4: First-response time -->
+      <div class="kpi">
+        <div class="label">
+          <span>First response</span>
+          <span class="info">i</span>
+        </div>
+        <div class="value">2<span class="unit">m 14s</span></div>
+        <div class="delta-row">
+          <span class="delta down">▼ 12s</span>
+          <span class="vs">vs prior 7d</span>
+        </div>
+        <div class="spark">
+          <svg viewBox="0 0 100 28" preserveAspectRatio="none">
+            <path d="M0,8 L12,10 L24,7 L36,9 L48,6 L60,8 L72,5 L84,7 L100,4 L100,28 L0,28 Z" fill="#EEF3E8" />
+            <path d="M0,8 L12,10 L24,7 L36,9 L48,6 L60,8 L72,5 L84,7 L100,4" fill="none" stroke="#4A7C3F" stroke-width="1.25" />
+          </svg>
+        </div>
+      </div>
+
+      <!-- Tile 5: Backlog -->
+      <div class="kpi">
+        <div class="label">
+          <span>Open backlog</span>
+          <span class="info">i</span>
+        </div>
+        <div class="value">38</div>
+        <div class="delta-row">
+          <span class="delta flat">— 0.0%</span>
+          <span class="vs">unchanged</span>
+        </div>
+        <div class="spark">
+          <svg viewBox="0 0 100 28" preserveAspectRatio="none">
+            <path d="M0,14 L100,14 L100,28 L0,28 Z" fill="#EFEBE0" />
+            <line x1="0" y1="14" x2="100" y2="14" stroke="#6B655C" stroke-width="1.25" />
+          </svg>
+        </div>
+      </div>
+
+      <!-- Tile 6: CSAT -->
+      <div class="kpi">
+        <div class="label">
+          <span>CSAT</span>
+          <span class="info">i</span>
+        </div>
+        <div class="value">4.3<span class="unit">/5</span></div>
+        <div class="delta-row">
+          <span class="delta up">▲ 0.2</span>
+          <span class="vs">86% positive</span>
+        </div>
+        <div class="spark">
+          <svg viewBox="0 0 100 28" preserveAspectRatio="none">
+            <path d="M0,18 L12,16 L24,17 L36,14 L48,15 L60,12 L72,10 L84,11 L100,8 L100,28 L0,28 Z" fill="#EEF3E8" />
+            <path d="M0,18 L12,16 L24,17 L36,14 L48,15 L60,12 L72,10 L84,11 L100,8" fill="none" stroke="#4A7C3F" stroke-width="1.25" />
+          </svg>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="annotation">
+    <strong>Scan order</strong>
+    The status pill is the headline — it collapses every KPI into one bit. Yellow here because one tile (Escalations) is in ochre. If even one tile crosses to red, the pill flips to red and the dashed line on its sparkline shows the threshold it crossed. The dotted line on the sparkline marks the threshold the metric crossed.
+  </div>
+</div>
+
+<!-- ================================================================== -->
+<!--  FRAME 2 — KPI tile anatomy + states                                -->
+<!-- ================================================================== -->
+<div class="frame" id="frame-2">
+  <div class="frame-head">
+    <div class="frame-num">Frame 02 · KPI tile anatomy</div>
+    <h2 class="frame-title">Six tiles, same shape, different meaning</h2>
+    <p class="frame-sub">Every tile is the same five-row block: label, value, delta, sparkline. Two visual states are reserved for the boundaries — ochre border on watch, terra border on action. Inverse metrics (escalations, response time when it's already fast) flip the delta polarity.</p>
+  </div>
+
+  <div class="two-up">
+    <div>
+      <div class="frame-num" style="margin-bottom:8px;">Healthy — green tile</div>
+      <div class="kpi" style="min-height:140px;">
+        <div class="label"><span>Volume</span><span class="info">i</span></div>
+        <div class="value">1,284</div>
+        <div class="delta-row">
+          <span class="delta up"><span class="delta-arrow"></span>8.2%</span>
+          <span class="vs">vs prior 7d</span>
+        </div>
+        <div class="spark">
+          <svg viewBox="0 0 100 28" preserveAspectRatio="none">
+            <path d="M0,22 L12,18 L24,20 L36,15 L48,12 L60,14 L72,8 L84,6 L100,4 L100,28 L0,28 Z" fill="#EEF3E8" />
+            <path d="M0,22 L12,18 L24,20 L36,15 L48,12 L60,14 L72,8 L84,6 L100,4" fill="none" stroke="#4A7C3F" stroke-width="1.25" />
+          </svg>
+        </div>
+      </div>
+      <div class="annotation">
+        <strong>Anatomy</strong>
+        Eyebrow label → big number with optional inline unit → mono delta with arrow + percent → "vs prior 7d" suffix → 7-day sparkline with same-series fill. The dotted threshold line is hidden on healthy tiles.
+      </div>
+    </div>
+
+    <div>
+      <div class="frame-num" style="margin-bottom:8px;">Watch — ochre tile (border only, not fill)</div>
+      <div class="kpi inverse warn" style="min-height:140px;">
+        <div class="label"><span>Escalated</span><span class="info">i</span></div>
+        <div class="value">142<span class="unit">/1,284</span></div>
+        <div class="delta-row">
+          <span class="delta up"><span class="delta-arrow"></span>27.4%</span>
+          <span class="vs">11.1% rate</span>
+        </div>
+        <div class="spark">
+          <svg viewBox="0 0 100 28" preserveAspectRatio="none">
+            <path d="M0,22 L12,21 L24,20 L36,17 L48,16 L60,12 L72,9 L84,5 L100,2 L100,28 L0,28 Z" fill="#F6ECDC" />
+            <path d="M0,22 L12,21 L24,20 L36,17 L48,16 L60,12 L72,9 L84,5 L100,2" fill="none" stroke="#B8761E" stroke-width="1.5" />
+            <line x1="80" y1="0" x2="80" y2="28" stroke="#A8331F" stroke-dasharray="2 2" stroke-width="0.75" />
+          </svg>
+        </div>
+      </div>
+      <div class="annotation">
+        <strong>Why border, not fill</strong>
+        Filling the tile would make the page look like an alert. A 1 px ochre border on the offending tile is enough to draw the eye; the rest of the row stays calm. The dotted line in the sparkline marks the threshold the metric crossed.
+      </div>
+    </div>
+
+    <div>
+      <div class="frame-num" style="margin-bottom:8px;">Action — terra tile (worst case)</div>
+      <div class="kpi inverse crit" style="min-height:140px;">
+        <div class="label"><span>Escalated</span><span class="info">i</span></div>
+        <div class="value">198<span class="unit">/1,284</span></div>
+        <div class="delta-row">
+          <span class="delta up"><span class="delta-arrow"></span>51.5%</span>
+          <span class="vs">15.4% rate</span>
+        </div>
+        <div class="spark">
+          <svg viewBox="0 0 100 28" preserveAspectRatio="none">
+            <path d="M0,22 L12,21 L24,19 L36,16 L48,15 L60,11 L72,7 L84,3 L100,1 L100,28 L0,28 Z" fill="#F5E2DC" />
+            <path d="M0,22 L12,21 L24,19 L36,16 L48,15 L60,11 L72,7 L84,3 L100,1" fill="none" stroke="#A8331F" stroke-width="1.5" />
+            <line x1="60" y1="0" x2="60" y2="28" stroke="#A8331F" stroke-dasharray="2 2" stroke-width="0.75" />
+          </svg>
+        </div>
+      </div>
+      <div class="annotation">
+        <strong>Two terra tiles</strong>
+        When two tiles cross the red threshold at once, the page-level status pill flips to red. The tiles themselves don't escalate beyond a terra border — escalation is one step, not two, by design.
+      </div>
+    </div>
+
+    <div>
+      <div class="frame-num" style="margin-bottom:8px;">Flat — slate delta, dashed sparkline</div>
+      <div class="kpi" style="min-height:140px;">
+        <div class="label"><span>Open backlog</span><span class="info">i</span></div>
+        <div class="value">38</div>
+        <div class="delta-row">
+          <span class="delta flat"><span class="delta-arrow"></span>0.0%</span>
+          <span class="vs">unchanged</span>
+        </div>
+        <div class="spark">
+          <svg viewBox="0 0 100 28" preserveAspectRatio="none">
+            <path d="M0,14 L100,14 L100,28 L0,28 Z" fill="#EFEBE0" />
+            <line x1="0" y1="14" x2="100" y2="14" stroke="#6B655C" stroke-width="1.25" />
+          </svg>
+        </div>
+      </div>
+      <div class="annotation">
+        <strong>Flat is data</strong>
+        A backlog that hasn't moved in a week is itself a signal — but not necessarily a problem. Slate delta says "no movement" without claiming health. Eng should compute delta against the same 7-day window, not day-over-day.
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================================================================== -->
+<!--  FRAME 3 — Three trendline charts with shared axis                  -->
+<!-- ================================================================== -->
+<div class="frame" id="frame-3">
+  <div class="frame-head">
+    <div class="frame-num">Frame 03 · trendlines</div>
+    <h2 class="frame-title">Three lines, one timeline, one story</h2>
+    <p class="frame-sub">Volume, AI-resolved, and escalations share the same x-axis (Jun 02 → Jun 08) and the same height, so the support lead can spot the day a metric diverged without re-orienting across charts. Threshold lines are drawn on the charts that have them.</p>
+  </div>
+
+  <div class="canvas">
+    <div class="section">
+      <div class="section-head">
+        <div>
+          <h2>Volume vs AI-resolved vs Escalations</h2>
+          <div class="sub">Daily counts · last 7 days · all channels</div>
+        </div>
+        <div class="legend">
+          <span><span class="swatch" style="background:var(--ink-2);"></span>Volume</span>
+          <span><span class="swatch" style="background:var(--teal);"></span>AI-resolved</span>
+          <span><span class="swatch" style="background:var(--terra);"></span>Escalated</span>
+        </div>
+      </div>
+
+      <div class="chart-trend">
+
+        <!-- Volume chart -->
+        <div class="chart-card">
+          <div class="head">
+            <span class="name">Volume</span>
+            <span class="head-right">
+              <span class="total">Σ 1,284</span>
+            </span>
+          </div>
+          <div class="axis">
+            <svg viewBox="0 0 220 140" preserveAspectRatio="none">
+              <!-- grid -->
+              <line class="grid-line" x1="0" y1="20" x2="220" y2="20" />
+              <line class="grid-line" x1="0" y1="60" x2="220" y2="60" />
+              <line class="grid-line" x1="0" y1="100" x2="220" y2="100" />
+              <!-- y labels -->
+              <text class="y-labels" x="0" y="14">240</text>
+              <text class="y-labels" x="0" y="54">160</text>
+              <text class="y-labels" x="0" y="94">80</text>
+              <text class="y-labels" x="0" y="134">0</text>
+              <!-- area + line -->
+              <path class="area" d="M0,100 L35,90 L70,80 L105,70 L140,55 L175,50 L210,40 L210,140 L0,140 Z" fill="#6B655C" />
+              <path class="series" d="M0,100 L35,90 L70,80 L105,70 L140,55 L175,50 L210,40" stroke="#6B655C" />
+              <!-- points -->
+              <circle class="point" cx="0"   cy="100" fill="#6B655C" />
+              <circle class="point" cx="35"  cy="90"  fill="#6B655C" />
+              <circle class="point" cx="70"  cy="80"  fill="#6B655C" />
+              <circle class="point" cx="105" cy="70"  fill="#6B655C" />
+              <circle class="point" cx="140" cy="55"  fill="#6B655C" />
+              <circle class="point" cx="175" cy="50"  fill="#6B655C" />
+              <circle class="point halo" cx="210" cy="40"  fill="none" stroke="#6B655C" stroke-width="6" />
+              <circle class="point" cx="210" cy="40"  fill="#6B655C" />
+              <!-- end-cap value -->
+              <text class="y-labels" x="206" y="32" text-anchor="end" style="fill:var(--ink); font-size:10px;">210</text>
+            </svg>
+          </div>
+          <div class="x-row">
+            <span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span>
+          </div>
+        </div>
+
+        <!-- AI-resolved chart -->
+        <div class="chart-card">
+          <div class="head">
+            <span class="name">AI-resolved</span>
+            <span class="head-right">
+              <span class="total">Σ 812 · 63.2%</span>
+            </span>
+          </div>
+          <div class="axis">
+            <svg viewBox="0 0 220 140" preserveAspectRatio="none">
+              <line class="grid-line" x1="0" y1="20" x2="220" y2="20" />
+              <line class="grid-line" x1="0" y1="60" x2="220" y2="60" />
+              <line class="grid-line" x1="0" y1="100" x2="220" y2="100" />
+              <text class="y-labels" x="0" y="14">160</text>
+              <text class="y-labels" x="0" y="54">100</text>
+              <text class="y-labels" x="0" y="94">50</text>
+              <text class="y-labels" x="0" y="134">0</text>
+              <path class="area" d="M0,90 L35,80 L70,75 L105,65 L140,50 L175,40 L210,30 L210,140 L0,140 Z" fill="#0E5E5E" />
+              <path class="series" d="M0,90 L35,80 L70,75 L105,65 L140,50 L175,40 L210,30" stroke="#0E5E5E" />
+              <circle class="point" cx="0"   cy="90" fill="#0E5E5E" />
+              <circle class="point" cx="35"  cy="80" fill="#0E5E5E" />
+              <circle class="point" cx="70"  cy="75" fill="#0E5E5E" />
+              <circle class="point" cx="105" cy="65" fill="#0E5E5E" />
+              <circle class="point" cx="140" cy="50" fill="#0E5E5E" />
+              <circle class="point" cx="175" cy="40" fill="#0E5E5E" />
+              <circle class="point" cx="210" cy="30" fill="#0E5E5E" />
+              <text class="y-labels" x="206" y="22" text-anchor="end" style="fill:var(--ink); font-size:10px;">140</text>
+            </svg>
+          </div>
+          <div class="x-row">
+            <span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span>
+          </div>
+        </div>
+
+        <!-- Escalations chart — has a threshold line -->
+        <div class="chart-card warn">
+          <div class="head">
+            <span class="name">Escalated</span>
+            <span class="head-right">
+              <span class="total" style="color:var(--ochre);">Σ 142 · 11.1%</span>
+            </span>
+          </div>
+          <div class="axis">
+            <svg viewBox="0 0 220 140" preserveAspectRatio="none">
+              <line class="grid-line" x1="0" y1="20" x2="220" y2="20" />
+              <line class="grid-line" x1="0" y1="60" x2="220" y2="60" />
+              <line class="grid-line" x1="0" y1="100" x2="220" y2="100" />
+              <text class="y-labels" x="0" y="14">30</text>
+              <text class="y-labels" x="0" y="54">20</text>
+              <text class="y-labels" x="0" y="94">10</text>
+              <text class="y-labels" x="0" y="134">0</text>
+              <!-- threshold line: 25/day → red -->
+              <line class="threshold" x1="0" y1="50" x2="220" y2="50" />
+              <text class="threshold-label" x="216" y="46" text-anchor="end">threshold 25/day</text>
+              <path class="area" d="M0,115 L35,108 L70,100 L105,90 L140,75 L175,62 L210,48 L210,140 L0,140 Z" fill="#A8331F" />
+              <path class="series" d="M0,115 L35,108 L70,100 L105,90 L140,75 L175,62 L210,48" stroke="#A8331F" stroke-width="2" />
+              <circle class="point" cx="0"   cy="115" fill="#A8331F" />
+              <circle class="point" cx="35"  cy="108" fill="#A8331F" />
+              <circle class="point" cx="70"  cy="100" fill="#A8331F" />
+              <circle class="point" cx="105" cy="90"  fill="#A8331F" />
+              <circle class="point" cx="140" cy="75"  fill="#A8331F" />
+              <circle class="point" cx="175" cy="62"  fill="#A8331F" />
+              <circle class="point halo" cx="210" cy="48" fill="none" stroke="#A8331F" stroke-width="6" />
+              <circle class="point" cx="210" cy="48"  fill="#A8331F" />
+              <text class="y-labels" x="206" y="40" text-anchor="end" style="fill:var(--ink); font-size:10px;">28</text>
+            </svg>
+          </div>
+          <div class="x-row">
+            <span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <div class="annotation">
+    <strong>Shared x-axis is non-negotiable</strong>
+    All three charts render Jun 02 → Jun 08 left-to-right at the same width. When the escalations line crosses the threshold on Sunday but volume is still steady, the lead sees a slope, not three unrelated pictures. The end-of-week point gets a halo so the eye lands on "today".
+  </div>
+</div>
+
+<!-- ================================================================== -->
+<!--  FRAME 4 — Drilldown tables                                         -->
+<!-- ================================================================== -->
+<div class="frame" id="frame-4">
+  <div class="frame-head">
+    <div class="frame-num">Frame 04 · drilldowns</div>
+    <h2 class="frame-title">Three sortable top-10s, plus a channel split</h2>
+    <p class="frame-sub">The lead glances at the trends, then drills in: what are people asking about, who is asking, where are they coming from. Every table sorts; every row has a CSV export. The top row is always pinned with a teal left-border.</p>
+  </div>
+
+  <div class="canvas">
+    <div class="section">
+      <div class="drilldown">
+
+        <!-- Top-10 escalation keywords -->
+        <div class="table-card">
+          <div class="table-head">
+            <span class="name">Top escalation keywords <span class="count">10</span></span>
+            <button class="export" type="button">
+              <svg class="icon" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M5 1 V8 M2 5 L5 8 L8 5 M1 9 H9" />
+              </svg>
+              CSV
+            </button>
+          </div>
+          <table class="t">
+            <thead>
+              <tr>
+                <th class="active">Keyword <span class="sort-arrow"></span></th>
+                <th style="text-align:right;">Count <span class="sort-arrow"></span></th>
+                <th style="text-align:right;">Δ <span class="sort-arrow"></span></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><span class="keyword"><span class="hash">1</span> refund</span></td>
+                <td class="num">38</td>
+                <td class="num delta">+12</td>
+              </tr>
+              <tr>
+                <td><span class="keyword"><span class="hash">2</span> chargeback</span></td>
+                <td class="num">27</td>
+                <td class="num delta">+9</td>
+              </tr>
+              <tr>
+                <td><span class="keyword"><span class="hash">3</span> cancel</span></td>
+                <td class="num">24</td>
+                <td class="num delta">+3</td>
+              </tr>
+              <tr>
+                <td><span class="keyword"><span class="hash">4</span> subscription</span></td>
+                <td class="num">19</td>
+                <td class="num delta">+1</td>
+              </tr>
+              <tr>
+                <td><span class="keyword"><span class="hash">5</span> double-charged</span></td>
+                <td class="num">14</td>
+                <td class="num delta">+14</td>
+              </tr>
+              <tr>
+                <td><span class="keyword"><span class="hash">6</span> not received</span></td>
+                <td class="num">11</td>
+                <td class="num delta">−2</td>
+              </tr>
+              <tr>
+                <td><span class="keyword"><span class="hash">7</span> wrong item</span></td>
+                <td class="num">9</td>
+                <td class="num delta">0</td>
+              </tr>
+              <tr>
+                <td><span class="keyword"><span class="hash">8</span> discount code</span></td>
+                <td class="num">7</td>
+                <td class="num delta">+2</td>
+              </tr>
+              <tr>
+                <td><span class="keyword"><span class="hash">9</span> shipping</span></td>
+                <td class="num">6</td>
+                <td class="num delta">−1</td>
+              </tr>
+              <tr>
+                <td><span class="keyword"><span class="hash">10</span> receipt</span></td>
+                <td class="num">5</td>
+                <td class="num delta">+1</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Top-10 contacts -->
+        <div class="table-card">
+          <div class="table-head">
+            <span class="name">Top contacts <span class="count">10</span></span>
+            <button class="export" type="button">
+              <svg class="icon" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M5 1 V8 M2 5 L5 8 L8 5 M1 9 H9" />
+              </svg>
+              CSV
+            </button>
+          </div>
+          <table class="t">
+            <thead>
+              <tr>
+                <th class="active">Contact <span class="sort-arrow"></span></th>
+                <th style="text-align:right;">Convos <span class="sort-arrow"></span></th>
+                <th style="text-align:right;">Channel <span class="sort-arrow"></span></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>
+                  <span class="contact">
+                    <span class="av" style="background:#0E5E5E;">JA</span>
+                    <span>
+                      <span class="name">Jamal Aryan</span>
+                      <span class="id">+1 415 555 0142</span>
+                    </span>
+                  </span>
+                </td>
+                <td class="num">11</td>
+                <td><span class="chip sms">SMS</span></td>
+              </tr>
+              <tr>
+                <td>
+                  <span class="contact">
+                    <span class="av" style="background:#4A7C3F;">MO</span>
+                    <span>
+                      <span class="name">Maya Okonkwo</span>
+                      <span class="id">maya@acmeco.com</span>
+                    </span>
+                  </span>
+                </td>
+                <td class="num">9</td>
+                <td><span class="chip email">EMAIL</span></td>
+              </tr>
+              <tr>
+                <td>
+                  <span class="contact">
+                    <span class="av" style="background:#B8761E;">DL</span>
+                    <span>
+                      <span class="name">Daniel Liang</span>
+                      <span class="id">+1 510 555 0188</span>
+                    </span>
+                  </span>
+                </td>
+                <td class="num">8</td>
+                <td><span class="chip sms">SMS</span></td>
+              </tr>
+              <tr>
+                <td>
+                  <span class="contact">
+                    <span class="av" style="background:#5C4475;">RP</span>
+                    <span>
+                      <span class="name">Riya Patel</span>
+                      <span class="id">riya@blueorigin.io</span>
+                    </span>
+                  </span>
+                </td>
+                <td class="num">7</td>
+                <td><span class="chip email">EMAIL</span></td>
+              </tr>
+              <tr>
+                <td>
+                  <span class="contact">
+                    <span class="av" style="background:#A8331F;">TC</span>
+                    <span>
+                      <span class="name">Tomás Cárdenas</span>
+                      <span class="id">+1 718 555 0211</span>
+                    </span>
+                  </span>
+                </td>
+                <td class="num">6</td>
+                <td><span class="chip sms">SMS</span></td>
+              </tr>
+              <tr>
+                <td>
+                  <span class="contact">
+                    <span class="av" style="background:#6B655C;">EW</span>
+                    <span>
+                      <span class="name">Eun-ji Wang</span>
+                      <span class="id">eun-ji@northstar.co</span>
+                    </span>
+                  </span>
+                </td>
+                <td class="num">5</td>
+                <td><span class="chip email">EMAIL</span></td>
+              </tr>
+              <tr>
+                <td>
+                  <span class="contact">
+                    <span class="av" style="background:#0E5E5E;">KS</span>
+                    <span>
+                      <span class="name">Kira Sten</span>
+                      <span class="id">+1 312 555 0094</span>
+                    </span>
+                  </span>
+                </td>
+                <td class="num">5</td>
+                <td><span class="chip sms">SMS</span></td>
+              </tr>
+              <tr>
+                <td>
+                  <span class="contact">
+                    <span class="av" style="background:#4A7C3F;">PV</span>
+                    <span>
+                      <span class="name">Priya Vasquez</span>
+                      <span class="id">priya@harbor.run</span>
+                    </span>
+                  </span>
+                </td>
+                <td class="num">4</td>
+                <td><span class="chip web">WEB</span></td>
+              </tr>
+              <tr>
+                <td>
+                  <span class="contact">
+                    <span class="av" style="background:#B8761E;">JH</span>
+                    <span>
+                      <span class="name">Jonas Hagen</span>
+                      <span class="id">+1 503 555 0107</span>
+                    </span>
+                  </span>
+                </td>
+                <td class="num">4</td>
+                <td><span class="chip sms">SMS</span></td>
+              </tr>
+              <tr>
+                <td>
+                  <span class="contact">
+                    <span class="av" style="background:#5C4475;">NF</span>
+                    <span>
+                      <span class="name">Naima Frey</span>
+                      <span class="id">naima@quietfox.dev</span>
+                    </span>
+                  </span>
+                </td>
+                <td class="num">3</td>
+                <td><span class="chip email">EMAIL</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Channel split -->
+        <div class="table-card">
+          <div class="table-head">
+            <span class="name">Channel split <span class="count">7d</span></span>
+            <button class="export" type="button">
+              <svg class="icon" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M5 1 V8 M2 5 L5 8 L8 5 M1 9 H9" />
+              </svg>
+              CSV
+            </button>
+          </div>
+          <div style="padding: 16px;">
+            <div class="chart-bars">
+              <div class="bar-row">
+                <span class="name">Email</span>
+                <div class="track"><div class="fill" style="width:48%; background:var(--teal);"></div></div>
+                <span class="pct">48.0%</span>
+              </div>
+              <div class="bar-row">
+                <span class="name">SMS</span>
+                <div class="track"><div class="fill" style="width:36%; background:var(--ochre);"></div></div>
+                <span class="pct">36.0%</span>
+              </div>
+              <div class="bar-row">
+                <span class="name">Web chat</span>
+                <div class="track"><div class="fill" style="width:12%; background:var(--ink-2);"></div></div>
+                <span class="pct">12.0%</span>
+              </div>
+              <div class="bar-row">
+                <span class="name">Voice</span>
+                <div class="track"><div class="fill" style="width:4%; background:#5C4475;"></div></div>
+                <span class="pct">4.0%</span>
+              </div>
+            </div>
+
+            <!-- secondary breakdown -->
+            <div style="margin-top: 20px; border-top: 1px solid var(--line); padding-top: 14px;">
+              <div class="frame-num" style="margin-bottom:8px;">By intent</div>
+              <div class="chart-bars">
+                <div class="bar-row">
+                  <span class="name">Question</span>
+                  <div class="track"><div class="fill" style="width:62%; background:var(--teal-soft);"></div></div>
+                  <span class="pct">62%</span>
+                </div>
+                <div class="bar-row">
+                  <span class="name">Issue</span>
+                  <div class="track"><div class="fill" style="width:22%; background:var(--ochre-bg);"></div></div>
+                  <span class="pct">22%</span>
+                </div>
+                <div class="bar-row">
+                  <span class="name">Refund / cancel</span>
+                  <div class="track"><div class="fill" style="width:11%; background:var(--terra-bg);"></div></div>
+                  <span class="pct">11%</span>
+                </div>
+                <div class="bar-row">
+                  <span class="name">Praise</span>
+                  <div class="track"><div class="fill" style="width:5%; background:var(--forest-bg);"></div></div>
+                  <span class="pct">5%</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <div class="annotation">
+    <strong>Sortable, not editable</strong>
+    Click a column header to sort by it. The active column gets a teal arrow. CSV export covers the table's current sort, not the full dataset — top-10 by definition. Eng should not paginate these; "top-10" is a deliberate number, not a stub.
+  </div>
+</div>
+
+<!-- ================================================================== -->
+<!--  FRAME 5 — Threshold mapping (design system panel)                  -->
+<!-- ================================================================== -->
+<div class="frame" id="frame-5">
+  <div class="frame-head">
+    <div class="frame-num">Frame 05 · color thresholds (design system)</div>
+    <h2 class="frame-title">What "ok", "watch", and "action" mean, per metric</h2>
+    <p class="frame-sub">The status pill, the KPI tile border, and the chart threshold line all read from one table. These numbers are the contract between design and eng — change them and the whole page re-skins.</p>
+  </div>
+
+  <div class="canvas">
+    <div class="section">
+      <div class="section-head">
+        <div>
+          <h2>KPI threshold table</h2>
+          <div class="sub">Defaults — per-tenant overrides live in <code>tenant_settings.thresholds</code></div>
+        </div>
+      </div>
+      <table class="threshold-table">
+        <thead>
+          <tr>
+            <th>Metric</th>
+            <th>Healthy</th>
+            <th>Watch</th>
+            <th>Action</th>
+            <th>Polarity</th>
+            <th>Source</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Volume</strong></td>
+            <td class="tier green"><span class="swatch"></span>Within ±20% of prior 7d</td>
+            <td class="tier yellow"><span class="swatch"></span>±20–50% of prior 7d</td>
+            <td class="tier red"><span class="swatch"></span>±50% or more</td>
+            <td class="num">neutral</td>
+            <td><code>conversations.created_at</code></td>
+          </tr>
+          <tr>
+            <td><strong>AI-resolved</strong></td>
+            <td class="tier green"><span class="swatch"></span>≥ 60% of processed</td>
+            <td class="tier yellow"><span class="swatch"></span>40–59%</td>
+            <td class="tier red"><span class="swatch"></span>&lt; 40%</td>
+            <td class="num">higher is better</td>
+            <td><code>conversations.ai_state</code></td>
+          </tr>
+          <tr>
+            <td><strong>Escalated</strong></td>
+            <td class="tier green"><span class="swatch"></span>&lt; 5% of volume, &lt; 8/day</td>
+            <td class="tier yellow"><span class="swatch"></span>5–10% or 8–25/day</td>
+            <td class="tier red"><span class="swatch"></span>&gt; 10% or &gt; 25/day</td>
+            <td class="num">lower is better</td>
+            <td><code>conversations.status = 'escalated'</code></td>
+          </tr>
+          <tr>
+            <td><strong>First response</strong></td>
+            <td class="tier green"><span class="swatch"></span>≤ 5 min median</td>
+            <td class="tier yellow"><span class="swatch"></span>5–15 min</td>
+            <td class="tier red"><span class="swatch"></span>&gt; 15 min</td>
+            <td class="num">lower is better</td>
+            <td><code>messages</code> first outbound</td>
+          </tr>
+          <tr>
+            <td><strong>Open backlog</strong></td>
+            <td class="tier green"><span class="swatch"></span>≤ 30 conversations</td>
+            <td class="tier yellow"><span class="swatch"></span>31–75</td>
+            <td class="tier red"><span class="swatch"></span>&gt; 75</td>
+            <td class="num">lower is better</td>
+            <td><code>conversations.status = 'open'</code></td>
+          </tr>
+          <tr>
+            <td><strong>CSAT</strong></td>
+            <td class="tier green"><span class="swatch"></span>≥ 4.0 / 5, ≥ 80% positive</td>
+            <td class="tier yellow"><span class="swatch"></span>3.5–3.9 or 70–79%</td>
+            <td class="tier red"><span class="swatch"></span>&lt; 3.5 or &lt; 70%</td>
+            <td class="num">higher is better</td>
+            <td><code>csat_responses</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="section">
+      <div class="section-head">
+        <div>
+          <h2>Page-level status pill rule</h2>
+          <div class="sub">The pill is the worst of all six tiles — never averages, never rounds up.</div>
+        </div>
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px;">
+        <div style="padding: 16px; border: 1px solid var(--line); border-radius: 10px;">
+          <span class="status-pill green"><span class="dot"></span>Healthy</span>
+          <div style="margin-top: 10px; font-size: 12.5px; color: var(--ink-2);">
+            All 6 tiles green. Pill is forest.
+          </div>
+        </div>
+        <div style="padding: 16px; border: 1px solid var(--line); border-radius: 10px;">
+          <span class="status-pill yellow"><span class="dot"></span>Watch</span>
+          <div style="margin-top: 10px; font-size: 12.5px; color: var(--ink-2);">
+            At least one tile yellow, none red. Pill is ochre with a one-line reason.
+          </div>
+        </div>
+        <div style="padding: 16px; border: 1px solid var(--line); border-radius: 10px;">
+          <span class="status-pill red"><span class="dot"></span>Action</span>
+          <div style="margin-top: 10px; font-size: 12.5px; color: var(--ink-2);">
+            At least one tile red. Pill is terra, reason is the worst-offending metric.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-head">
+        <div>
+          <h2>Visual threshold — the "are we ok?" bar</h2>
+          <div class="sub">A support lead can show this to a stakeholder in 5 seconds. Green is left, red is right; the marker says where we are.</div>
+        </div>
+      </div>
+      <div style="padding: 0 4px 8px;">
+        <div style="font-size: 12.5px; color: var(--ink-2); margin-bottom: 14px;">
+          Escalation rate · <strong style="color:var(--ink);">11.1%</strong> · currently in <span class="status-pill yellow" style="font-size:10px; padding:2px 8px;"><span class="dot"></span>Watch</span>
+        </div>
+        <div class="threshold-bar">
+          <div class="marker" data-label="you · 11.1%" style="left:55.5%;"></div>
+        </div>
+        <div class="threshold-bar-labels">
+          <span>0%</span><span>5% · healthy max</span><span>10% · watch max</span><span>15%</span><span>100%</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================================================================== -->
+<!--  FRAME 6 — Mobile (1-column collapsed)                              -->
+<!-- ================================================================== -->
+<div class="frame" id="frame-6">
+  <div class="frame-head">
+    <div class="frame-num">Frame 06 · mobile · 390px</div>
+    <h2 class="frame-title">One column, full story, no scroll fatigue</h2>
+    <p class="frame-sub">On the go, the lead doesn't want a "page" — they want a stack of cards they can flick through. KPI tiles go single-column with the sparkline on the right; charts become mini-trendlines stacked under the pill; tables get pushed to a dedicated drilldown screen (out of scope here).</p>
+  </div>
+
+  <div class="mobile-wrap">
+    <div class="mobile">
+      <div class="screen">
+        <div class="notch"></div>
+        <div class="m-top">
+          <div class="m-brand"><span class="dot"></span> InboxPilot</div>
+          <div class="m-av">MR</div>
+        </div>
+
+        <div class="m-page-head">
+          <div class="m-eyebrow">Analytics</div>
+          <h1 class="m-title">This week</h1>
+          <div class="m-status-row">
+            <span class="status-pill yellow">
+              <span class="dot"></span>
+              Watch
+            </span>
+            <span class="m-range">Jun 02 → Jun 08</span>
+          </div>
+        </div>
+
+        <div class="m-kpi-list">
+
+          <div class="m-kpi inverse warn">
+            <div class="left">
+              <div class="label">Escalated</div>
+              <div class="value">142 / 1,284</div>
+              <div class="delta down">▲ 27.4% · 11.1% rate</div>
+            </div>
+            <div class="spark">
+              <svg viewBox="0 0 64 32" preserveAspectRatio="none">
+                <path d="M0,28 L10,25 L20,22 L30,18 L40,14 L50,8 L60,3 L60,32 L0,32 Z" fill="#F6ECDC" />
+                <path d="M0,28 L10,25 L20,22 L30,18 L40,14 L50,8 L60,3" fill="none" stroke="#B8761E" stroke-width="1.5" />
+                <line x1="48" y1="0" x2="48" y2="32" stroke="#A8331F" stroke-dasharray="2 2" stroke-width="0.75" />
+              </svg>
+            </div>
+          </div>
+
+          <div class="m-kpi">
+            <div class="left">
+              <div class="label">Volume</div>
+              <div class="value">1,284</div>
+              <div class="delta up">▲ 8.2% vs prior 7d</div>
+            </div>
+            <div class="spark">
+              <svg viewBox="0 0 64 32" preserveAspectRatio="none">
+                <path d="M0,26 L10,22 L20,23 L30,18 L40,14 L50,11 L60,5 L60,32 L0,32 Z" fill="#EEF3E8" />
+                <path d="M0,26 L10,22 L20,23 L30,18 L40,14 L50,11 L60,5" fill="none" stroke="#4A7C3F" stroke-width="1.5" />
+              </svg>
+            </div>
+          </div>
+
+          <div class="m-kpi">
+            <div class="left">
+              <div class="label">AI-resolved</div>
+              <div class="value">812 / 1,284</div>
+              <div class="delta up">▲ 3.1% · 63.2% rate</div>
+            </div>
+            <div class="spark">
+              <svg viewBox="0 0 64 32" preserveAspectRatio="none">
+                <path d="M0,18 L10,19 L20,16 L30,20 L40,15 L50,12 L60,9 L60,32 L0,32 Z" fill="#E4EEEE" />
+                <path d="M0,18 L10,19 L20,16 L30,20 L40,15 L50,12 L60,9" fill="none" stroke="#0E5E5E" stroke-width="1.5" />
+              </svg>
+            </div>
+          </div>
+
+          <div class="m-kpi">
+            <div class="left">
+              <div class="label">First response</div>
+              <div class="value">2m 14s</div>
+              <div class="delta up">▼ 12s</div>
+            </div>
+            <div class="spark">
+              <svg viewBox="0 0 64 32" preserveAspectRatio="none">
+                <path d="M0,12 L10,14 L20,11 L30,13 L40,10 L50,11 L60,6 L60,32 L0,32 Z" fill="#EEF3E8" />
+                <path d="M0,12 L10,14 L20,11 L30,13 L40,10 L50,11 L60,6" fill="none" stroke="#4A7C3F" stroke-width="1.5" />
+              </svg>
+            </div>
+          </div>
+
+          <div class="m-kpi">
+            <div class="left">
+              <div class="label">Open backlog</div>
+              <div class="value">38</div>
+              <div class="delta flat">— unchanged</div>
+            </div>
+            <div class="spark">
+              <svg viewBox="0 0 64 32" preserveAspectRatio="none">
+                <line x1="0" y1="18" x2="60" y2="18" stroke="#6B655C" stroke-width="1.25" />
+              </svg>
+            </div>
+          </div>
+
+          <div class="m-kpi">
+            <div class="left">
+              <div class="label">CSAT</div>
+              <div class="value">4.3 / 5</div>
+              <div class="delta up">▲ 0.2 · 86% positive</div>
+            </div>
+            <div class="spark">
+              <svg viewBox="0 0 64 32" preserveAspectRatio="none">
+                <path d="M0,22 L10,20 L20,21 L30,17 L40,18 L50,15 L60,11 L60,32 L0,32 Z" fill="#EEF3E8" />
+                <path d="M0,22 L10,20 L20,21 L30,17 L40,18 L50,15 L60,11" fill="none" stroke="#4A7C3F" stroke-width="1.5" />
+              </svg>
+            </div>
+          </div>
+
+        </div>
+
+        <div class="m-trend">
+          <h3>Trendlines <span class="tag">last 7d</span></h3>
+          <div class="axis">
+            <svg viewBox="0 0 350 60" preserveAspectRatio="none">
+              <line x1="0" y1="15" x2="350" y2="15" stroke="#E8E2D6" stroke-dasharray="2 3" />
+              <line x1="0" y1="30" x2="350" y2="30" stroke="#E8E2D6" stroke-dasharray="2 3" />
+              <line x1="0" y1="45" x2="350" y2="45" stroke="#E8E2D6" stroke-dasharray="2 3" />
+              <path class="series" d="M0,42 L58,38 L116,33 L175,25 L233,20 L291,15 L350,10" stroke="#6B655C" />
+              <path class="series" d="M0,40 L58,35 L116,30 L175,22 L233,15 L291,8 L350,4" stroke="#0E5E5E" />
+              <path class="series" d="M0,55 L58,52 L116,48 L175,40 L233,30 L291,18 L350,8" stroke="#A8331F" stroke-width="2" />
+              <line x1="290" y1="0" x2="290" y2="60" stroke="#A8331F" stroke-dasharray="2 2" stroke-width="0.75" />
+            </svg>
+          </div>
+        </div>
+
+        <div class="m-trend-list">
+          <div class="t-row">
+            <div class="head">
+              <span class="name">Volume</span>
+              <span class="total">Σ 1,284</span>
+            </div>
+            <div class="axis">
+              <svg viewBox="0 0 350 44" preserveAspectRatio="none">
+                <path class="series" d="M0,32 L58,28 L116,24 L175,20 L233,14 L291,12 L350,8" stroke="#6B655C" />
+                <circle cx="350" cy="8" r="2.5" fill="#6B655C" />
+              </svg>
+            </div>
+          </div>
+          <div class="t-row">
+            <div class="head">
+              <span class="name">AI-resolved · 63.2%</span>
+              <span class="total">Σ 812</span>
+            </div>
+            <div class="axis">
+              <svg viewBox="0 0 350 44" preserveAspectRatio="none">
+                <path class="series" d="M0,30 L58,26 L116,22 L175,16 L233,10 L291,6 L350,2" stroke="#0E5E5E" />
+                <circle cx="350" cy="2" r="2.5" fill="#0E5E5E" />
+              </svg>
+            </div>
+          </div>
+          <div class="t-row">
+            <div class="head">
+              <span class="name" style="color:var(--ochre);">Escalated · 11.1%</span>
+              <span class="total" style="color:var(--ochre);">Σ 142</span>
+            </div>
+            <div class="axis">
+              <svg viewBox="0 0 350 44" preserveAspectRatio="none">
+                <line x1="0" y1="10" x2="350" y2="10" stroke="#A8331F" stroke-dasharray="2 2" stroke-width="0.75" />
+                <path class="series" d="M0,38 L58,34 L116,30 L175,24 L233,16 L291,10 L350,4" stroke="#A8331F" stroke-width="2" />
+                <circle cx="350" cy="4" r="2.5" fill="#A8331F" />
+              </svg>
+            </div>
+          </div>
+        </div>
+
+        <div class="m-bottom-nav">
+          <a href="#">Inbox</a>
+          <a href="#">Knowledge</a>
+          <a href="#" class="active">Analytics</a>
+          <a href="#">Settings</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="annotation">
+    <strong>Mobile rules</strong>
+    Stack everything single-column. Sparkline goes to the right of the value (not below) so each card is one screen-line of thumb height. Status pill at the top, escalations card first when in watch/action, then everything else sorted by recency-of-decline. Drilldown tables (top-10 keywords, contacts, channel split) move to a dedicated screen behind a "Drill in" CTA — not shown here, see spec section 6.
+  </div>
+</div>
+
+</body>
+</html>

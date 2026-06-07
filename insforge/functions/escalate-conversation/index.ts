@@ -19,6 +19,8 @@ import { createDbClient } from '../_shared/create-db-client.js';
 import { createRealtimePublisher } from '../_shared/create-realtime-publisher.js';
 import { log, logError, newRequestContext, withRequest, withRequestIdHeader } from '../_shared/logger.js';
 import { requireOrgMembership } from '../_shared/require-org-membership.js';
+import { requirePermission } from '../_shared/require-permission.js';
+import { getRequiredPermission } from '../_shared/endpoint-permissions.js';
 import { verifyJwt } from '../_shared/verify-jwt.js';
 
 import { ConversationRepository } from '../../../packages/support-core/src/repositories/conversation-repository.js';
@@ -90,6 +92,26 @@ export default async function (req: Request): Promise<Response> {
       }
       const orgId = membership.organizationId;
       ctx.org_id = orgId;
+
+      // HIGH-1: enforce the per-endpoint RBAC permission. Escalation
+      // changes the conversation's status and routing, so it's an admin+
+      // operation (manage_conversations). Agents can reply but should
+      // not be able to flip the status of a conversation they don't own.
+      const permission = await requirePermission(
+        db,
+        userId,
+        orgId,
+        getRequiredPermission('escalate-conversation'),
+      );
+      if (permission.kind === 'role_not_found') {
+        return jsonResponse({ error: 'Forbidden: member has no role' }, 500);
+      }
+      if (permission.kind === 'forbidden') {
+        return jsonResponse(
+          { error: 'Forbidden', reason: permission.reason },
+          403,
+        );
+      }
 
       const conversationRepo = new ConversationRepository(db);
       const auditLogRepo = new AuditLogRepository(db);

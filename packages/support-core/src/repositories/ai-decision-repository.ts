@@ -90,4 +90,62 @@ export class AiDecisionRepository {
 
     return data ? toAiDecision(data as AiDecisionRow) : null;
   }
+
+  /**
+   * Find the most recent AI decisions for a conversation, ordered by created_at DESC.
+   * Used by AiAgentService to count consecutive failures (see `countConsecutiveFailures`).
+   */
+  async listRecentByConversation(
+    conversationId: string,
+    limit: number = 10,
+  ): Promise<AiDecision[]> {
+    const { data, error } = await this.db
+      .from('ai_decisions')
+      .select('*')
+      .eq('conversation_id', conversationId)
+      .order('created_at', { ascending: false })
+      .limit(limit);
+
+    if (error) {
+      throw new Error(`AiDecisionRepository.listRecentByConversation failed: ${error.message}`);
+    }
+
+    return (data as AiDecisionRow[] | null ?? []).map(toAiDecision);
+  }
+
+  /**
+   * Count consecutive AI failures for a conversation, most-recent first.
+   *
+   * "Failure" = `decision_type='respond'` with tags containing `'parse_error'` or `'error'`
+   * (the two tags used by AiAgentService when an LLM call or parse step fails — see
+   * `tags: ['parse_error']` on parse failures and `tags: ['error']` on thrown errors).
+   *
+   * Counting stops at the first non-failure row, so e.g. a sequence
+   * [respond-error, respond-error, respond-ok, respond-error] returns 2, not 3.
+   * Returns 0 if there are no decisions or the most-recent is not a failure.
+   *
+   * This is the data source that powers `RepeatedFailureRule` — a max-failures
+   * threshold of e.g. 3 now actually fires after three consecutive bad LLM
+   * calls instead of being a permanent no-op.
+   */
+  async countConsecutiveFailures(
+    conversationId: string,
+    window: number = 10,
+  ): Promise<number> {
+    const recent = await this.listRecentByConversation(conversationId, window);
+    const FAILURE_TAGS = new Set(['parse_error', 'error']);
+
+    let count = 0;
+    for (const decision of recent) {
+      const isFailure =
+        decision.decisionType === 'respond' &&
+        decision.tags.some((tag) => FAILURE_TAGS.has(tag));
+      if (isFailure) {
+        count += 1;
+      } else {
+        break;
+      }
+    }
+    return count;
+  }
 }

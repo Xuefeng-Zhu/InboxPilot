@@ -164,6 +164,10 @@ function createMockAiDecisionRepo(): AiDecisionRepository {
   return {
     create: vi.fn().mockResolvedValue(SAMPLE_AI_DECISION),
     findLatestByConversation: vi.fn(),
+    listRecentByConversation: vi.fn().mockResolvedValue([]),
+    // Default: no recent failures. Specific tests override this to drive
+    // RepeatedFailureRule behaviour (HIGH-2 regression).
+    countConsecutiveFailures: vi.fn().mockResolvedValue(0),
   } as unknown as AiDecisionRepository;
 }
 
@@ -391,6 +395,92 @@ describe('AiAgentService', () => {
         CONV_ID,
         expect.objectContaining({ aiState: 'failed' }),
       );
+    });
+  });
+
+  // ─── Regression: HIGH-2 — RepeatedFailureRule must be data-driven ───
+  //
+  // Prior to this fix, `countConsecutiveFailures` returned 0 or 1 based
+  // on `ai_state` alone, so `RepeatedFailureRule` (default
+  // `maxConsecutiveFailures = 3`) could never trigger in production.
+  // The fix delegates the count to `AiDecisionRepository`. This test
+  // wires that count up via a mock and asserts the conversation is
+  // escalated by `RepeatedFailureRule` exactly when the count meets
+  // the configured threshold.
+  describe('RepeatedFailureRule (HIGH-2 regression)', () => {
+    it('escalates when consecutive AI failures from the repo reach maxConsecutiveFailures', async () => {
+      const { RepeatedFailureRule } = await import('../../src/services/escalation-rules.js');
+      escalationEngine.register(new RepeatedFailureRule());
+
+      // Mock the new repo method to return 3 (the launch scenario).
+      vi.mocked(aiDecisionRepo.countConsecutiveFailures).mockResolvedValue(3);
+
+      const service = createService();
+      await service.processMessage(CONV_ID, ORG_ID);
+
+      // The repo must have been consulted
+      expect(aiDecisionRepo.countConsecutiveFailures).toHaveBeenCalledWith(CONV_ID, 10);
+
+      // Should escalate the conversation to a human, skipping the LLM
+      expect(aiClient.chatCompletion).not.toHaveBeenCalled();
+      expect(conversationRepo.update).toHaveBeenCalledWith(
+        CONV_ID,
+        expect.objectContaining({
+          status: 'escalated',
+          aiState: 'needs_human',
+        }),
+      );
+      // The escalation decision should be attributed to RepeatedFailureRule
+      expect(aiDecisionRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          decisionType: 'escalate',
+          requiresHuman: true,
+          tags: ['escalated'],
+        }),
+      );
+      const escalateCall = vi.mocked(aiDecisionRepo.create).mock.calls.find(
+        (call) => (call[0] as { decisionType: string }).decisionType === 'escalate',
+      );
+      expect(escalateCall).toBeDefined();
+      expect((escalateCall![0] as { reasoningSummary: string }).reasoningSummary)
+        .toContain('RepeatedFailureRule');
+    });
+
+    it('does NOT escalate when consecutive failures are below max', async () => {
+      const { RepeatedFailureRule } = await import('../../src/services/escalation-rules.js');
+      escalationEngine.register(new RepeatedFailureRule());
+
+      // 2 failures — below the default max of 3, so the rule must not fire.
+      vi.mocked(aiDecisionRepo.countConsecutiveFailures).mockResolvedValue(2);
+
+      const service = createService();
+      await service.processMessage(CONV_ID, ORG_ID);
+
+      // LLM is called because no rule fired
+      expect(aiClient.chatCompletion).toHaveBeenCalled();
+      // No escalation update
+      const updates = vi.mocked(conversationRepo.update).mock.calls;
+      const escalated = updates.some(
+        (call) => (call[1] as { status?: string })?.status === 'escalated',
+      );
+      expect(escalated).toBe(false);
+    });
+
+    it('does NOT escalate when there are zero recent failures (the prior behaviour)', async () => {
+      const { RepeatedFailureRule } = await import('../../src/services/escalation-rules.js');
+      escalationEngine.register(new RepeatedFailureRule());
+
+      vi.mocked(aiDecisionRepo.countConsecutiveFailures).mockResolvedValue(0);
+
+      const service = createService();
+      await service.processMessage(CONV_ID, ORG_ID);
+
+      expect(aiClient.chatCompletion).toHaveBeenCalled();
+      const updates = vi.mocked(conversationRepo.update).mock.calls;
+      const escalated = updates.some(
+        (call) => (call[1] as { status?: string })?.status === 'escalated',
+      );
+      expect(escalated).toBe(false);
     });
   });
 });

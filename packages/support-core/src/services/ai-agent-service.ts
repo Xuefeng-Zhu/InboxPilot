@@ -143,8 +143,13 @@ export class AiAgentService {
       updatedAt: new Date(),
     } as AiSettings;
 
-    // Count consecutive AI failures from recent decisions
-    const consecutiveAiFailures = this.countConsecutiveFailures(messages, conversation.aiState);
+    // Count consecutive AI failures from recent decisions.
+    // Delegates to AiDecisionRepository so the rule sees real data instead of
+    // a 0/1 stub on `ai_state` (see HIGH-2 in docs/QA_BUG_HUNT.md).
+    const consecutiveAiFailures = await this.aiDecisionRepo.countConsecutiveFailures(
+      conversationId,
+      10,
+    );
 
     // 4. Evaluate escalation engine BEFORE LLM call
     const escalationResult = this.escalationEngine.evaluate({
@@ -486,18 +491,6 @@ export class AiAgentService {
   }
 
   // ─── Private Helpers ────────────────────────────────────────────────
-
-  /**
-   * Count consecutive AI failures by looking at the conversation's current ai_state.
-   * A simple heuristic: if ai_state is "failed", count it as 1 failure.
-   * In a production system, this would query recent AI decisions.
-   */
-  private countConsecutiveFailures(messages: Message[], currentAiState: string): number {
-    if (currentAiState === 'failed') {
-      return 1;
-    }
-    return 0;
-  }
 
   /**
    * Build the LLM prompt from conversation history and knowledge chunks.

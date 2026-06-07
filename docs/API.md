@@ -15,7 +15,7 @@ All functions are located in `insforge/functions/` and share utilities from `ins
 |--------|-------------|---------|
 | **Webhook** | Provider-specific signature verification via adapter | Inbound/status webhooks |
 | **JWT** | Bearer token in `Authorization` header, verified via InsForge auth | Frontend-initiated actions |
-| **Internal** | No auth required — called by job queue or cron | Job processing functions |
+| **Internal** | Shared secret in `x-internal-token` header, compared against `INTERNAL_DISPATCH_TOKEN` env var (constant-time) | Job processing functions |
 
 ### Error Response Format
 
@@ -458,14 +458,30 @@ Content-Type: application/json
 
 ## Internal / Job Queue Functions
 
-These functions are triggered internally by the job queue or cron scheduler. They do not require JWT authentication.
+These functions are triggered internally by the job queue or cron scheduler. They do not require JWT authentication, but since the function URL is public, each one requires the `x-internal-token` shared secret (CRITICAL-4) to prevent unauthorized callers from amplifying AI costs (re-embedding documents, running AI analysis, claiming jobs).
+
+**Internal auth contract** (applies to all three functions in this section):
+
+- **Header**: `x-internal-token: <secret>`
+- **Server env var**: `INTERNAL_DISPATCH_TOKEN` (>= 32 random bytes / 64 hex chars; rotate periodically)
+- **Comparison**: constant-time, exact match
+- **Failure modes**:
+  - `401 Unauthorized` — header missing or wrong value
+  - `500 Internal Server Error` — server env var not configured (operator must rotate/fix)
+
+**Example call**:
+
+```
+POST /functions/v1/process-jobs
+x-internal-token: 4f8a...c3b1
+```
 
 ### process-jobs
 
 Claims and processes pending jobs from the queue. Designed to be called on a schedule (cron) or manually.
 
 - **File**: `insforge/functions/process-jobs/index.ts`
-- **Auth**: None (internal)
+- **Auth**: Internal token (`x-internal-token`)
 - **Trigger**: Cron/scheduler or manual HTTP call
 
 **Request**:
@@ -497,7 +513,7 @@ Claims up to 10 jobs per invocation. Routes each job to the appropriate handler 
 Processes an AI message analysis job. Called by `process-jobs` when a `process_ai_message` job is claimed.
 
 - **File**: `insforge/functions/process-ai-job/index.ts`
-- **Auth**: None (internal)
+- **Auth**: Internal token (`x-internal-token`)
 
 **Request**:
 ```json
@@ -532,7 +548,7 @@ Content-Type: application/json
 Chunks and embeds a knowledge document for RAG.
 
 - **File**: `insforge/functions/process-knowledge-document/index.ts`
-- **Auth**: None (internal)
+- **Auth**: Internal token (`x-internal-token`)
 
 **Request**:
 ```json
@@ -571,6 +587,6 @@ Content-Type: application/json
 | `resolve-conversation` | JWT | POST | `conversationId` |
 | `reopen-conversation` | JWT | POST | `conversationId` |
 | `test-channel-connection` | JWT | POST | `channelType`, `providerAccountId` |
-| `process-jobs` | None | POST | (none) |
-| `process-ai-job` | None | POST | `conversation_id`, `organization_id` |
-| `process-knowledge-document` | None | POST | `documentId` |
+| `process-jobs` | Internal token | POST | (none) |
+| `process-ai-job` | Internal token | POST | `conversation_id`, `organization_id` |
+| `process-knowledge-document` | Internal token | POST | `documentId` |

@@ -13,6 +13,7 @@
 
 import { createDbClient } from '../_shared/create-db-client.js';
 import { createRealtimePublisher } from '../_shared/create-realtime-publisher.js';
+import { requireInternalToken } from '../_shared/require-internal-token.js';
 import { PostgresJobQueue } from '../../../packages/support-core/src/services/postgres-job-queue.js';
 import { ConversationRepository } from '../../../packages/support-core/src/repositories/conversation-repository.js';
 import { MessageRepository } from '../../../packages/support-core/src/repositories/message-repository.js';
@@ -167,8 +168,30 @@ function buildJobHandlers(
 // Function entrypoint
 // ---------------------------------------------------------------------------
 
-export default async function (_req: Request): Promise<Response> {
+export default async function (req: Request): Promise<Response> {
   try {
+    // 0. Internal-dispatch auth (CRITICAL-4). The function URL is public,
+    //    so anyone who guesses it could claim up to 10 jobs and run them,
+    //    consuming AI tokens (cost amplification). Require the shared
+    //    secret in `x-internal-token`, compared against the server-side
+    //    `INTERNAL_DISPATCH_TOKEN` env var.
+    const envToken = (globalThis as Record<string, unknown>).Deno
+      ? (globalThis as Record<string, { get(key: string): string | undefined }>).Deno.env.get('INTERNAL_DISPATCH_TOKEN')
+      : process.env.INTERNAL_DISPATCH_TOKEN;
+    const authResult = requireInternalToken(req, envToken ?? undefined);
+    if (authResult.kind === 'misconfigured') {
+      return new Response(
+        JSON.stringify({ error: 'Internal dispatch token is not configured on the server' }),
+        { status: 500, headers: { 'Content-Type': 'application/json' } },
+      );
+    }
+    if (authResult.kind === 'unauthorized') {
+      return new Response(
+        JSON.stringify({ error: 'Unauthorized' }),
+        { status: 401, headers: { 'Content-Type': 'application/json' } },
+      );
+    }
+
     const baseUrl = (globalThis as Record<string, unknown>).Deno
       ? (globalThis as Record<string, { get(key: string): string | undefined }>).Deno.env.get('INSFORGE_BASE_URL')
       : process.env.INSFORGE_BASE_URL;

@@ -17,6 +17,7 @@
 
 import { createDbClient } from '../_shared/create-db-client.js';
 import { createRealtimePublisher } from '../_shared/create-realtime-publisher.js';
+import { requireInternalToken } from '../_shared/require-internal-token.js';
 
 import { KnowledgeRepository } from '../../../packages/support-core/src/repositories/knowledge-repository.js';
 import { AuditLogRepository } from '../../../packages/support-core/src/repositories/audit-log-repository.js';
@@ -112,6 +113,26 @@ function createAiClient(baseUrl: string, serviceRoleKey: string): AiClient {
 
 export default async function (req: Request): Promise<Response> {
   try {
+    // 0. Internal-dispatch auth (CRITICAL-4). The function URL is public,
+    //    so anyone who guesses it could trigger re-embedding of any
+    //    document (cost amplification + KB drift). Require the shared
+    //    secret in `x-internal-token`, compared against the server-side
+    //    `INTERNAL_DISPATCH_TOKEN` env var.
+    const envToken = (typeof Deno !== 'undefined' ? Deno.env.get('INTERNAL_DISPATCH_TOKEN') : undefined) ??
+      process.env.INTERNAL_DISPATCH_TOKEN;
+    const authResult = requireInternalToken(req, envToken);
+    if (authResult.kind === 'misconfigured') {
+      // Server-side misconfiguration: env var not set. 500 so an
+      // operator notices and rotates the secret.
+      return jsonResponse(
+        { error: 'Internal dispatch token is not configured on the server' },
+        500,
+      );
+    }
+    if (authResult.kind === 'unauthorized') {
+      return jsonResponse({ error: 'Unauthorized' }, 401);
+    }
+
     // 1. Parse request body
     let payload: { documentId?: string };
     try {

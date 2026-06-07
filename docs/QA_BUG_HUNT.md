@@ -186,6 +186,7 @@ The 6 integration suites are all `.skip()`-equivalent (file-level skip pattern),
 - **Suggested fix:** Either remove this rule from the default engine, or add an `ai_settings.knowledge_required` flag so orgs can opt out. Better: rely on the LLM to handle missing knowledge (which it already does via the system prompt's "if you don't know, escalate" instruction).
 - **Theme:** Reliability / Escalation engine
 - **Effort:** S
+- **Closed by:** `t_31e5e3dd` — `MissingKnowledgeRule` now requires `aiSettings.knowledgeRequired === true` to fire; default is `false`. New column `ai_settings.knowledge_required` added via migration `006_ai_settings_knowledge_required.sql` with safe default `false` and a `NOT NULL` defence-in-depth CHECK. The repo layer (`ai-settings-repository.ts`) defaults a missing column value to `false` so pre-migration rows behave correctly mid-rollout. The LLM's "if you don't know, escalate" system-prompt instruction now handles the day-1 case. Orgs that need strict KB coverage (legal, medical, finance) can opt in via the `ai_settings` UI. Coverage: 100 unit tests + 5 property tests pass (was 97 unit / 4 property; added opt-in + default-off regression cases). Commit: `88de90c`.
 
 ---
 

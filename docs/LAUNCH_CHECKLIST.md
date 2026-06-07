@@ -104,7 +104,7 @@ This is the **single source of truth** for "do we ship v1 today?". If a box is u
 | 6.1 | Credentials are stored in the `credentials_secret_id` column on provider-account tables, never as plaintext in code or env | ☐ | `git grep -i "sk_live\|api_key=\|secret=" -- '*.ts' ':!.env.example'` returns no hits. `insforge/migrations/001_initial_schema.sql` shows `credentials_secret_id text NOT NULL` for both `sms_provider_accounts` and `email_provider_accounts`. A rotation runbook exists at `docs/SECRET_ROTATION.md` and is exercised by `npm run test:rotation` (2 tests). | ENG-SEC |
 | 6.2 | `.env.example` contains no real keys — every value is a placeholder (`your-…-key` pattern) | ☐ | `cat .env.example` — visual inspection; an automated `grep -E "sk_live\|pk_live\|[A-Za-z0-9]{32,}" .env.example` returns 0 matches. | ENG-SEC |
 | 6.3 | `.env.local`, `.env.production`, and any other populated env files are in `.gitignore` and not committed | ☐ | `cat .gitignore` includes `.env*.local`, `.env.production`. `git log --all --full-history -- .env.local` returns no commits. | ENG-SEC |
-| 6.4 | A one-page security model exists: data classification, encryption at rest / in transit, RLS posture, secret lifecycle, vuln-reporting address | ☐ | `docs/SECURITY_MODEL.md` (child card `t_sec_security_model`). ≤ 800 words. | ENG-SEC |
+| 6.4 | A one-page security model exists: data classification, encryption at rest / in transit, RLS posture, secret lifecycle, vuln-reporting address | ☐ | `docs/SECURITY_MODEL.md` exists (child card `t_sec_security_model`). 10 sections (data classification table + 7 narrative sections + vuln-reporting + compliance). Word count under §6.4 budget. Every claim is anchored to a file:line reference (verified). **Awaiting ENG-LEAD review before tick.** | ENG-LEAD |
 | 6.5 | DPA + AUP templates are in `legal/` and cover the data classes actually stored (PII, message content, embeddings, KB, account, metadata, sessions) | ☐ | `legal/DPA.md`, `legal/AUP.md`, `legal/README.md` exist (shipped by `t_sec_dpa_aup`). Coverage table in `legal/README.md` lists every data class. | ENG-SEC + PM |
 | 6.6 | No high or critical CVE in `npm audit --production` | ☐ | `npm audit --production --audit-level=high` exits 0. Output saved to `docs/evidence/npm-audit.txt` with the commit SHA it was run against. | DEVOPS |
 
@@ -198,7 +198,7 @@ These are real, not "feels good". Each gap blocks a section above.
 
 1. `docs/METRICS.md` does not exist → blocks §4.2, §4.3, §5.4
 2. `docs/INCIDENT_RESPONSE.md` does not exist → blocks §3.3
-3. `docs/SECURITY_MODEL.md` does not exist → blocks §6.4
+3. ~~`docs/SECURITY_MODEL.md` does not exist → blocks §6.4~~ **RESOLVED 2026-06-07** by `t_sec_security_model` — file written, linked from §6.4 evidence column. **Pending ENG-LEAD review** (acceptance criteria 4th bullet) before §6.4 can be ticked.
 4. `docs/README_INDEX.md` does not exist → blocks §5.6
 5. `docs/USER_STORIES.md` does not exist as a standalone doc (lives inside requirements.md) → blocks §5.3
 6. ~~`scripts/rollback.sh` does not exist → blocks §8.3~~ **RESOLVED 2026-06-07** by `t_ops_runbook` (see §8.3 status note)

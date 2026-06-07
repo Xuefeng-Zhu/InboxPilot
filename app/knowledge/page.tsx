@@ -327,29 +327,6 @@ export default function KnowledgePage() {
           </Card>
         )}
 
-        {/* Upload drop zone */}
-        <div className="mt-6 border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-primary hover:bg-primary/5 transition-colors cursor-pointer">
-          <svg
-            className="mx-auto h-10 w-10 text-gray-400"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth={1.5}
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M12 16.5V9.75m0 0l3 3m-3-3l-3 3M6.75 19.5a4.5 4.5 0 01-1.41-8.775 5.25 5.25 0 0110.233-2.33 3 3 0 013.758 3.848A3.752 3.752 0 0118 19.5H6.75z"
-            />
-          </svg>
-          <p className="mt-2 text-body-md text-gray-600">
-            Drag and drop files here, or click to browse
-          </p>
-          <p className="mt-1 text-label-sm text-gray-400">
-            Supported formats: PDF, TXT, MD, DOCX
-          </p>
-        </div>
-
         {/* Documents List */}
         <div className="mt-6 space-y-element-gap">
           {documents.length === 0 ? (

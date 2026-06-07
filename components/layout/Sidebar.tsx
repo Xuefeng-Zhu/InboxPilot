@@ -1,6 +1,6 @@
 'use client';
 
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { NavItem } from './NavItem';
 import { useAuth } from '@/lib/auth-context';
 import { Logo } from '@/components/ui/Logo';
@@ -78,6 +78,12 @@ const navRoutes = [
 export function Sidebar() {
   const pathname = usePathname();
   const { user, signOut } = useAuth();
+  const router = useRouter();
+
+  const handleSignOut = async () => {
+    await signOut();
+    router.push('/login');
+  };
 
   return (
     <aside className="flex flex-col h-full w-sidebar-w border-r border-surface-border bg-white">
@@ -111,7 +117,7 @@ export function Sidebar() {
           </p>
         </div>
         <button
-          onClick={signOut}
+          onClick={handleSignOut}
           className="cursor-pointer text-gray-400 hover:text-gray-600 transition-colors duration-150"
           aria-label="Sign out"
           title="Sign out"

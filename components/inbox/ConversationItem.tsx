@@ -143,7 +143,7 @@ export function ConversationItem({
               <span className="inline-flex items-center rounded-full bg-gray-100 px-1.5 py-0.5 text-label-sm text-gray-600">
                 {channelLabel(conversation.channel)}
               </span>
-              <StatusBadge status={conversation.status === 'pending' ? 'open' : conversation.status} />
+              <StatusBadge status={conversation.status} />
               <AiStateIndicator aiState={conversation.ai_state} />
             </div>
           </div>

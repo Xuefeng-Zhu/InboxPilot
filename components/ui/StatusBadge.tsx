@@ -5,7 +5,7 @@ import { cn } from './cn';
 // StatusBadge — Design-system pill badge for status display
 // ---------------------------------------------------------------------------
 
-type Status = 'open' | 'escalated' | 'resolved' | 'ai_draft' | 'connected' | 'disconnected';
+type Status = 'open' | 'pending' | 'escalated' | 'resolved' | 'ai_draft' | 'connected' | 'disconnected';
 
 interface StatusBadgeProps {
   status: Status;
@@ -14,6 +14,7 @@ interface StatusBadgeProps {
 
 const colorMap: Record<Status, string> = {
   open: 'bg-orange-50 text-orange-700',
+  pending: 'bg-yellow-50 text-yellow-700',
   escalated: 'bg-red-50 text-red-700',
   resolved: 'bg-green-50 text-green-700',
   ai_draft: 'bg-purple-50 text-purple-700',

@@ -33,7 +33,7 @@ interface Metrics {
   escalatedConversations: number;
   averageResponseTimeMs: number | null;
   aiAutoReplyRate: number | null;
-  csatScore: number | null;
+  resolutionRate: number | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -58,7 +58,7 @@ function formatPercent(rate: number | null): string {
 
 function formatCsat(score: number | null): string {
   if (score === null) return '—';
-  return `${score.toFixed(1)}`;
+  return `${(score * 100).toFixed(1)}%`;
 }
 
 function getDefaultDateRange(): { start: string; end: string } {
@@ -121,10 +121,9 @@ export default function AnalyticsPage() {
       const aiAutoReplyRate =
         aiProcessed.length > 0 ? autoReplied.length / aiProcessed.length : null;
 
-      // CSAT score — derived from resolved conversations ratio as a proxy
-      // In a full implementation this would come from a feedback/ratings table
-      const csatScore = resolvedConversations > 0
-        ? Math.min(5, (resolvedConversations / Math.max(totalConversations, 1)) * 5)
+      // Resolution rate — ratio of resolved to total conversations
+      const resolutionRate = totalConversations > 0
+        ? resolvedConversations / totalConversations
         : null;
 
       // Compute average response time from messages
@@ -183,7 +182,7 @@ export default function AnalyticsPage() {
         escalatedConversations,
         averageResponseTimeMs,
         aiAutoReplyRate,
-        csatScore,
+        resolutionRate,
       });
     } catch {
       setError('Failed to compute analytics');
@@ -299,13 +298,13 @@ export default function AnalyticsPage() {
               accentColor="primary"
             />
             <MetricCard
-              label="CSAT Score"
-              value={formatCsat(metrics.csatScore)}
+              label="Resolution Rate"
+              value={formatCsat(metrics.resolutionRate)}
               trend={
-                metrics.csatScore !== null
-                  ? metrics.csatScore >= 3.5
-                    ? { direction: 'up', value: `${formatCsat(metrics.csatScore)}/5` }
-                    : { direction: 'down', value: `${formatCsat(metrics.csatScore)}/5` }
+                metrics.resolutionRate !== null
+                  ? metrics.resolutionRate >= 0.5
+                    ? { direction: 'up', value: formatCsat(metrics.resolutionRate) }
+                    : { direction: 'down', value: formatCsat(metrics.resolutionRate) }
                   : undefined
               }
               accentColor="status-resolved"

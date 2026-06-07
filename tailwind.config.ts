@@ -10,22 +10,22 @@ const config: Config = {
     extend: {
       colors: {
         primary: {
-          DEFAULT: '#6366F1',
+          DEFAULT: '#4F46E5',
           50: '#EEF2FF',
           100: '#E0E7FF',
           200: '#C7D2FE',
-          500: '#6366F1',
-          600: '#4F46E5',
-          700: '#4338CA',
+          500: '#4F46E5',
+          600: '#4338CA',
+          700: '#3730A3',
         },
         ai: {
-          DEFAULT: '#6366F1',
+          DEFAULT: '#8B5CF6',
           50: '#F5F3FF',
           100: '#EDE9FE',
           200: '#DDD6FE',
-          500: '#6366F1',
-          600: '#4F46E5',
-          700: '#4338CA',
+          500: '#8B5CF6',
+          600: '#7C3AED',
+          700: '#6D28D9',
         },
         status: {
           open: {
@@ -50,10 +50,10 @@ const config: Config = {
           },
         },
         surface: {
-          background: '#FAFAFA',
+          background: '#F9FAFB',
           DEFAULT: '#FFFFFF',
-          container: '#F5F3FF',
-          border: '#E0E7FF',
+          container: '#F0ECF9',
+          border: '#E5E7EB',
         },
       },
       fontFamily: {

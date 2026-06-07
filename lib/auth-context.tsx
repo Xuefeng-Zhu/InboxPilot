@@ -34,11 +34,61 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 // ---------------------------------------------------------------------------
 // Cookie helpers (for Next.js middleware auth detection)
+//
+// Cookie flags (HIGH-5, docs/QA_BUG_HUNT.md):
+//   * `SameSite=Strict` — strictest available; cookie is not sent on any
+//     cross-origin navigation, neutralizing most CSRF risk on this token.
+//   * `Secure` — added on HTTPS origins only. We cannot unconditionally set
+//     `Secure` because local dev runs on `http://localhost:3000` and a
+//     Secure cookie set over HTTP is silently dropped by the browser, which
+//     would break sign-in during development. In production, the origin is
+//     HTTPS and `Secure` is applied.
+//   * `HttpOnly` is INTENTIONALLY NOT SET. The client reads this cookie via
+//     `getAccessToken()` (lib/insforge.ts) to attach a bearer header when
+//     invoking serverless functions. HttpOnly would block that read and is
+//     a deferred launch item — the long-term fix is a server-side proxy
+//     (Next.js API routes) that reads the cookie server-side and forwards
+//     the bearer, letting us flip HttpOnly on. See HIGH-5 in QA_BUG_HUNT.md
+//     and the `insforge_access_token` entry in docs/DEVELOPMENT.md.
 // ---------------------------------------------------------------------------
+
+/**
+ * Build the attribute string for the `insforge_access_token` cookie.
+ *
+ * Pure function — no `document` / `window` access — so it is unit-testable
+ * under the default `node` test environment.
+ *
+ * @param isSecureOrigin  Pass `true` when the cookie is being set on an
+ *                        HTTPS origin (i.e. production). Pass `false` for
+ *                        local dev over plain HTTP, where a `Secure` flag
+ *                        would be ignored and would also prevent the cookie
+ *                        from being stored.
+ */
+export function buildCookieAttributes(isSecureOrigin: boolean): string {
+  // SameSite=Strict is always safe: the cookie is only ever read on the
+  // same origin that set it (the InsPilot app), and the strictest possible
+  // value is the most defensive against CSRF / cross-origin exfil.
+  return [
+    'path=/',
+    `SameSite=Strict`,
+    ...(isSecureOrigin ? ['Secure'] : []),
+  ].join('; ');
+}
+
+const COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 7;
+
+function isSecureContext(): boolean {
+  try {
+    return typeof window !== 'undefined' && window.location.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
 
 function setCookie(token: string): void {
   try {
-    document.cookie = `insforge_access_token=${token}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`;
+    const attrs = buildCookieAttributes(isSecureContext());
+    document.cookie = `insforge_access_token=${token}; ${attrs}; max-age=${COOKIE_MAX_AGE_SECONDS}`;
   } catch {
     // ignore
   }
@@ -46,7 +96,8 @@ function setCookie(token: string): void {
 
 function clearCookie(): void {
   try {
-    document.cookie = 'insforge_access_token=; path=/; max-age=0; SameSite=Lax';
+    const attrs = buildCookieAttributes(isSecureContext());
+    document.cookie = `insforge_access_token=; ${attrs}; max-age=0`;
   } catch {
     // ignore
   }

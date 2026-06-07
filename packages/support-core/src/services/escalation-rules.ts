@@ -255,10 +255,23 @@ export class RepeatedFailureRule implements EscalationRule {
   readonly name = 'RepeatedFailureRule';
 
   evaluate(context: EscalationContext): EscalationResult | null {
-    if (
-      context.consecutiveAiFailures >=
-      context.aiSettings.maxConsecutiveFailures
-    ) {
+    // Defensive: treat a non-positive `maxConsecutiveFailures` as "rule
+    // disabled" (return null). With the naive `failures >= max` check,
+    // a config of 0 (or any non-positive value) would cause the rule to
+    // fire on the *zero-th* failure, i.e. at the start of every
+    // conversation, before the AI has even been called. A negative
+    // value is similarly nonsensical for a "max" threshold and is
+    // treated the same way. The calling code (AiAgentService) applies
+    // the default (3) at the source, so by the time we get here a
+    // value <= 0 is either a misconfiguration or a sentinel that fell
+    // through; the safe behaviour is to leave the rule inactive and
+    // let the next-lower-priority rule (or the default escalation
+    // path) handle it.
+    const max = context.aiSettings.maxConsecutiveFailures;
+    if (!Number.isFinite(max) || max <= 0) {
+      return null;
+    }
+    if (context.consecutiveAiFailures >= max) {
       return {
         triggered: true,
         reason: 'repeated_failures',

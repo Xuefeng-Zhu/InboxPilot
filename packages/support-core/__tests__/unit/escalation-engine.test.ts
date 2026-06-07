@@ -746,20 +746,77 @@ describe('Escalation Rules — Individual Rule Tests', () => {
       expect(result).not.toBeNull();
     });
 
-    // Boundary: maxConsecutiveFailures = 0. The check is `>= 0`, so
-    // 0 failures already meets the threshold. FINDING: a config of
-    // 0 means "escalate immediately on first AI failure (actually
-    // on the zero-th, which is the start of the conversation)".
-    // This is likely a misconfiguration guard, not a real concern,
-    // but worth pinning in a test.
-    it('triggers when max = 0 and failures = 0 (>= 0 catches the start of conversation)', () => {
+    // Boundary: maxConsecutiveFailures = 0 is treated as "rule disabled"
+    // (returns null). With the naive `>= 0` check, 0 failures would meet
+    // the threshold and the rule would fire on the *zero-th* failure —
+    // i.e. at the start of every conversation, before the AI has even
+    // been called. The default (3) is applied at the source in
+    // AiAgentService, so a 0 reaching the rule is either a misconfig or
+    // a sentinel that fell through; leaving the rule inactive is the
+    // safe behaviour. See t_a57839e1.
+    it('does NOT trigger when max = 0 (rule disabled, sentinel fallback)', () => {
       const result = rule.evaluate(
         makeContext({
           consecutiveAiFailures: 0,
           aiSettings: { ...DEFAULT_SETTINGS, maxConsecutiveFailures: 0 },
         }),
       );
-      expect(result).not.toBeNull();
+      expect(result).toBeNull();
+    });
+
+    // Boundary: max = 0, failures = 5. Still disabled — the max value
+    // gates the rule, the failure count is irrelevant when the rule is
+    // off. Pinned so a future refactor that inverts the check (e.g.
+    // `if (failures > 0 && failures >= max)`) gets caught.
+    it('does NOT trigger when max = 0 even with high failure count', () => {
+      const result = rule.evaluate(
+        makeContext({
+          consecutiveAiFailures: 5,
+          aiSettings: { ...DEFAULT_SETTINGS, maxConsecutiveFailures: 0 },
+        }),
+      );
+      expect(result).toBeNull();
+    });
+
+    // Boundary: negative max is also nonsensical for a "max" threshold
+    // and is treated as "rule disabled" for the same reason.
+    it('does NOT trigger when max is negative', () => {
+      const result = rule.evaluate(
+        makeContext({
+          consecutiveAiFailures: 100,
+          aiSettings: { ...DEFAULT_SETTINGS, maxConsecutiveFailures: -3 },
+        }),
+      );
+      expect(result).toBeNull();
+    });
+
+    // Boundary: non-finite max (NaN/Infinity from a corrupt row or
+    // bad write) is treated as "rule disabled". The check is defensive
+    // against a future Zod-loosening change or a manual DB edit.
+    it('does NOT trigger when max is NaN', () => {
+      const result = rule.evaluate(
+        makeContext({
+          consecutiveAiFailures: 100,
+          aiSettings: {
+            ...DEFAULT_SETTINGS,
+            maxConsecutiveFailures: Number.NaN,
+          },
+        }),
+      );
+      expect(result).toBeNull();
+    });
+
+    it('does NOT trigger when max is Infinity', () => {
+      const result = rule.evaluate(
+        makeContext({
+          consecutiveAiFailures: 100,
+          aiSettings: {
+            ...DEFAULT_SETTINGS,
+            maxConsecutiveFailures: Number.POSITIVE_INFINITY,
+          },
+        }),
+      );
+      expect(result).toBeNull();
     });
 
     // Boundary: negative failures with positive max. -1 >= 3 is false,

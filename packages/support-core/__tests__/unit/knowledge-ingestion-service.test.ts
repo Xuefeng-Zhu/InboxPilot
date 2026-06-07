@@ -187,4 +187,121 @@ describe('KnowledgeIngestionService', () => {
       );
     });
   });
+
+  // ─── HIGH-3 cost-amplification guards ──────────────────────────────
+
+  describe('HIGH-3 cost-amplification guards', () => {
+    function oversizedDocument(byteLength: number): KnowledgeDocument {
+      return {
+        ...SAMPLE_DOCUMENT,
+        // ASCII so length-in-chars === byte-length.
+        body: 'a'.repeat(byteLength),
+      };
+    }
+
+    it('rejects documents over MAX_BODY_BYTES without doing embedding work', async () => {
+      const huge = oversizedDocument(1_000_001);
+      vi.mocked(knowledgeRepo.getDocument).mockResolvedValue(huge);
+
+      await expect(service.processDocument(DOC_ID)).rejects.toThrow(/exceeds 1000000 bytes/);
+
+      // Should NOT have called the embedding API at all — fail fast.
+      expect(aiClient.createEmbedding).not.toHaveBeenCalled();
+      // Should mark the document as failed.
+      expect(knowledgeRepo.updateDocument).toHaveBeenCalledWith(
+        DOC_ID,
+        expect.objectContaining({ status: 'failed' }),
+      );
+      // Should record a failure audit log.
+      expect(auditLog.create).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'knowledge_document_failed' }),
+      );
+    });
+
+    it('rejects documents whose chunks exceed the chunk-count cap', async () => {
+      // Build a body that produces > MAX_CHUNKS chunks. Each chunk is
+      // ~500 chars max; we need > 500 chunks → body of ~250 KB split on
+      // paragraph boundaries. With maxChunkSize 500 the chunking util
+      // produces one chunk per ~500-char paragraph, so 600 paragraphs of
+      // 500 chars each gives us 600 chunks.
+      const longParagraph = 'word '.repeat(99).trim(); // 495 chars
+      const body = Array.from({ length: 600 }, () => longParagraph).join('\n\n');
+      const doc: KnowledgeDocument = { ...SAMPLE_DOCUMENT, body };
+      vi.mocked(knowledgeRepo.getDocument).mockResolvedValue(doc);
+
+      await expect(service.processDocument(DOC_ID)).rejects.toThrow(/exceeding the 500-chunk cap/);
+
+      // Cap fires after we set status to "processing" but before we burn
+      // through the whole document. The point of the cap is to bound the
+      // *future* spend, not to refund what we'd already done; we accept
+      // that we may have made up to MAX_CONCURRENCY * BATCH_SIZE
+      // (256) embedding calls in the worst case before the worker
+      // notices. The doc fails cleanly either way.
+      expect(knowledgeRepo.updateDocument).toHaveBeenCalledWith(
+        DOC_ID,
+        expect.objectContaining({ status: 'failed' }),
+      );
+    });
+
+    it('inserts chunks incrementally per batch rather than all at once', async () => {
+      // Body long enough to produce multiple batches (BATCH_SIZE = 32,
+      // each paragraph = 1 chunk).
+      const longParagraph = 'word '.repeat(99).trim(); // ~495 chars
+      const body = Array.from({ length: 80 }, () => longParagraph).join('\n\n');
+      vi.mocked(knowledgeRepo.getDocument).mockResolvedValue({
+        ...SAMPLE_DOCUMENT,
+        body,
+      });
+
+      // Spy on the order of insertChunks vs createEmbedding calls.
+      const insertOrder: number[] = [];
+      vi.mocked(knowledgeRepo.insertChunks).mockImplementation(async (chunks) => {
+        insertOrder.push(chunks.length);
+        return [];
+      });
+
+      await service.processDocument(DOC_ID);
+
+      // 80 chunks / BATCH_SIZE 32 = 3 batches (32, 32, 16). Each
+      // insertChunks call gets a single batch's chunks, and is called
+      // at least 3 times (it could be more if MAX_CONCURRENCY splits
+      // batches across workers, but each call still receives ≤ BATCH_SIZE
+      // chunks).
+      expect(insertOrder.length).toBeGreaterThanOrEqual(3);
+      for (const size of insertOrder) {
+        expect(size).toBeLessThanOrEqual(32);
+        expect(size).toBeGreaterThan(0);
+      }
+    });
+
+    it('retries transient embedding failures up to MAX_RETRIES_PER_BATCH times', async () => {
+      // Two transient failures, then success.
+      const embeddingMock = vi
+        .fn()
+        .mockRejectedValueOnce(new Error('502 Bad Gateway'))
+        .mockRejectedValueOnce(new Error('503 Service Unavailable'))
+        .mockResolvedValueOnce(new Array(1536).fill(0));
+      aiClient.createEmbedding = embeddingMock;
+
+      await service.processDocument(DOC_ID);
+
+      // 1 chunk → 3 calls total (2 retries + 1 success).
+      expect(embeddingMock).toHaveBeenCalledTimes(3);
+    });
+
+    it('fails the document after exhausting embedding retries', async () => {
+      aiClient.createEmbedding = vi
+        .fn()
+        .mockRejectedValue(new Error('Persistent 500'));
+
+      await expect(service.processDocument(DOC_ID)).rejects.toThrow('Persistent 500');
+
+      // 1 chunk × MAX_RETRIES_PER_BATCH (3) = 3 calls.
+      expect(aiClient.createEmbedding).toHaveBeenCalledTimes(3);
+      expect(knowledgeRepo.updateDocument).toHaveBeenCalledWith(
+        DOC_ID,
+        expect.objectContaining({ status: 'failed', errorMessage: 'Persistent 500' }),
+      );
+    });
+  });
 });

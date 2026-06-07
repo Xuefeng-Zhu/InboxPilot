@@ -239,12 +239,11 @@ export default async function (req: Request): Promise<Response> {
 
     const db = createDbClient(baseUrl, serviceRoleKey);
 
-    // 7. Determine organization ID from header or by looking up the receiving email address
-    let orgId = req.headers.get('x-organization-id') ?? null;
-
-    if (!orgId) {
-      orgId = await lookupOrgByEmailAddress(db, normalized.to);
-    }
+    // 7. Determine organization ID from the receiving email address.
+    // The org is always derived from the server-verifiable receiving
+    // address (email_addresses table) — never from a caller-supplied
+    // header. See docs/QA_BUG_HUNT.md CRITICAL-3.
+    const orgId = await lookupOrgByEmailAddress(db, normalized.to);
 
     if (!orgId) {
       return jsonResponse(

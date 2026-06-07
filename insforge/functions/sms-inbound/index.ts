@@ -239,12 +239,11 @@ export default async function (req: Request): Promise<Response> {
 
     const db = createDbClient(baseUrl, serviceRoleKey);
 
-    // 7. Determine organization ID from the receiving phone number
-    let orgId = req.headers.get('x-organization-id') ?? null;
-
-    if (!orgId) {
-      orgId = await lookupOrgByPhoneNumber(db, normalized.to);
-    }
+    // 7. Determine organization ID from the receiving phone number.
+    // The org is always derived from the server-verifiable receiving
+    // address (sms_phone_numbers table) — never from a caller-supplied
+    // header. See docs/QA_BUG_HUNT.md CRITICAL-3.
+    const orgId = await lookupOrgByPhoneNumber(db, normalized.to);
 
     if (!orgId) {
       return jsonResponse(

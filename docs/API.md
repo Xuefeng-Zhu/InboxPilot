@@ -48,7 +48,8 @@ Processes inbound SMS messages from providers.
 
 - **File**: `insforge/functions/sms-inbound/index.ts`
 - **Auth**: Webhook signature verification
-- **Headers**: `x-provider` (provider name, default: `mock`), `x-signing-secret` (webhook secret), `x-organization-id` (optional org override)
+- **Headers**: `x-provider` (provider name, default: `mock`), `x-signing-secret` (webhook secret)
+- **Org attribution**: Always derived server-side from the receiving phone number (sms_phone_numbers table). Caller-supplied org headers are ignored.
 
 **Request**:
 ```json
@@ -126,7 +127,8 @@ Processes inbound email messages from providers.
 
 - **File**: `insforge/functions/email-inbound/index.ts`
 - **Auth**: Webhook signature verification
-- **Headers**: `x-provider` (default: `mock`), `x-signing-secret`, `x-organization-id` (optional)
+- **Headers**: `x-provider` (default: `mock`), `x-signing-secret`
+- **Org attribution**: Always derived server-side from the receiving email address (email_addresses table). Caller-supplied org headers are ignored.
 
 **Request**:
 ```json

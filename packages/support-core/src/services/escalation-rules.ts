@@ -193,11 +193,30 @@ export class SafetyConcernRule implements EscalationRule {
 
 // ─── Rule 5: MissingKnowledgeRule ────────────────────────────────────
 
+/**
+ * MissingKnowledgeRule — triggers when no knowledge chunks are available.
+ *
+ * **HIGH-9 fix (docs/QA_BUG_HUNT.md).** Previously this rule fired for any org
+ * whose KB was empty (i.e. every new tenant on day 1). It now requires the org
+ * to opt in via `aiSettings.knowledgeRequired = true`. The default is off
+ * because:
+ *
+ *   1. The LLM already handles "no knowledge" via the system prompt's
+ *      "if you don't know, escalate" instruction (see AiAgentService).
+ *   2. Escalating every greeting to a human agent is hostile UX.
+ *   3. The product still wants this rule available for high-risk orgs that
+ *      explicitly require KB coverage (legal, medical, finance).
+ *
+ * Org opt-in flips the safe default to strict gating without a code change.
+ */
 export class MissingKnowledgeRule implements EscalationRule {
   readonly name = 'MissingKnowledgeRule';
 
   evaluate(context: EscalationContext): EscalationResult | null {
-    if (context.knowledgeChunks.length === 0) {
+    if (
+      context.knowledgeChunks.length === 0 &&
+      context.aiSettings.knowledgeRequired === true
+    ) {
       return {
         triggered: true,
         reason: 'missing_knowledge',

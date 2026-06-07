@@ -31,6 +31,7 @@ function makeSettings(overrides: Partial<AiSettings> = {}): AiSettings {
     contextWindowSize: 20,
     maxConsecutiveFailures: 3,
     knowledgeSimilarityThreshold: 0.7,
+    knowledgeRequired: false,
     escalationKeywords: [],
     systemPrompt: null,
     model: 'openai/gpt-4o-mini',
@@ -203,7 +204,7 @@ describe('Escalation engine property tests', () => {
         ({ type, message }) => {
           const context = makeContext({
             latestMessage: message,
-            knowledgeChunks: [makeChunk()], // Has knowledge, so MissingKnowledgeRule won't fire
+            knowledgeChunks: [makeChunk()], // Has knowledge, so MissingKnowledgeRule won't fire (HIGH-9: even with opt-in, chunks present -> null)
             consecutiveAiFailures: 0, // Below threshold
           });
 
@@ -229,16 +230,21 @@ describe('Escalation engine property tests', () => {
    * Additional property: MissingKnowledgeRule triggers when no knowledge chunks.
    *
    * **Validates: Requirements 12.5**
+   *
+   * HIGH-9 fix: the rule now requires `aiSettings.knowledgeRequired = true`
+   * to fire. We test the default-engine path with the opt-in flag on, so
+   * the property still proves the rule triggers when both conditions hold.
    */
-  it('Property 6 (MissingKnowledge): triggers when knowledge chunks array is empty', () => {
+  it('Property 6 (MissingKnowledge): triggers when knowledge chunks array is empty AND knowledgeRequired is true', () => {
     const engine = createDefaultEscalationEngine();
 
     fc.assert(
       fc.property(cleanMessageArb, (message) => {
         const context = makeContext({
           latestMessage: message,
-          knowledgeChunks: [], // Empty — should trigger MissingKnowledgeRule
+          knowledgeChunks: [], // Empty — gating condition #1
           consecutiveAiFailures: 0,
+          aiSettings: makeSettings({ knowledgeRequired: true }), // HIGH-9: opt-in
         });
 
         const result = engine.evaluate(context);
@@ -247,6 +253,36 @@ describe('Escalation engine property tests', () => {
           expect(result.ruleName).toBe('MissingKnowledgeRule');
           expect(result.reason).toBe('missing_knowledge');
         }
+      }),
+      { numRuns: 100 },
+    );
+  });
+
+  /**
+   * HIGH-9 regression: with the default `knowledgeRequired = false` and
+   * no knowledge chunks, the default engine MUST NOT escalate on the
+   * "missing knowledge" rule. The LLM gets a chance to answer and the
+   * customer is not bounced to a human for a greeting.
+   *
+   * Documents the day-1 default: new tenants do not get every inbound
+   * message escalated.
+   */
+  it('Property 6 (MissingKnowledge, HIGH-9): does NOT trigger with default settings (knowledgeRequired=false) and empty chunks', () => {
+    const engine = createDefaultEscalationEngine();
+
+    fc.assert(
+      fc.property(cleanMessageArb, (message) => {
+        const context = makeContext({
+          latestMessage: message,
+          knowledgeChunks: [],
+          consecutiveAiFailures: 0,
+          // makeSettings() defaults knowledgeRequired to false — the
+          // org has not opted in to strict gating, so the rule must
+          // not fire even with empty chunks.
+        });
+
+        const result = engine.evaluate(context);
+        expect(result).toBeNull();
       }),
       { numRuns: 100 },
     );

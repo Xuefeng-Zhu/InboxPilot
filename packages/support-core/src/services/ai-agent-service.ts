@@ -37,6 +37,11 @@ const DEFAULT_AI_SETTINGS: Omit<AiSettings, 'id' | 'organizationId' | 'createdAt
   contextWindowSize: 20,
   maxConsecutiveFailures: 3,
   knowledgeSimilarityThreshold: 0.7,
+  // HIGH-9: default off — the LLM handles missing knowledge via the
+  // "if you don't know, escalate" system-prompt instruction. Orgs that
+  // require strict KB coverage (legal, medical, finance) can opt in
+  // via the ai_settings UI.
+  knowledgeRequired: false,
   escalationKeywords: [],
   systemPrompt: null,
   model: 'openai/gpt-4o-mini',

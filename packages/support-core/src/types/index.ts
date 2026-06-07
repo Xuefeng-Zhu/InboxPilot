@@ -185,6 +185,13 @@ export interface AiSettings {
   contextWindowSize: number;
   maxConsecutiveFailures: number;
   knowledgeSimilarityThreshold: number;
+  /**
+   * When true, MissingKnowledgeRule escalates before the LLM if no knowledge
+   * chunks match. Default false — the LLM handles missing knowledge via the
+   * system prompt's "if you don't know, escalate" instruction. See HIGH-9 in
+   * docs/QA_BUG_HUNT.md.
+   */
+  knowledgeRequired: boolean;
   escalationKeywords: string[];
   systemPrompt: string | null;
   model: string;
@@ -434,6 +441,7 @@ export interface CreateAiSettingsInput {
   contextWindowSize?: number;
   maxConsecutiveFailures?: number;
   knowledgeSimilarityThreshold?: number;
+  knowledgeRequired?: boolean;
   escalationKeywords?: string[];
   systemPrompt?: string | null;
   model?: string;

@@ -27,6 +27,7 @@ const DEFAULT_SETTINGS: AiSettings = {
   contextWindowSize: 20,
   maxConsecutiveFailures: 3,
   knowledgeSimilarityThreshold: 0.7,
+  knowledgeRequired: false,
   escalationKeywords: [],
   systemPrompt: null,
   model: 'openai/gpt-4o-mini',
@@ -157,14 +158,42 @@ describe('Escalation Rules — Individual Rule Tests', () => {
   describe('MissingKnowledgeRule', () => {
     const rule = new MissingKnowledgeRule();
 
-    it('triggers when no knowledge chunks are available', () => {
+    // HIGH-9 fix: the rule is now opt-in via aiSettings.knowledgeRequired.
+    // Default (false) must NOT escalate when chunks are empty — the LLM
+    // handles missing knowledge via the "if you don't know, escalate"
+    // system-prompt instruction (see AiAgentService).
+    it('does NOT trigger when knowledge chunks are empty and knowledgeRequired is false (default, HIGH-9 fix)', () => {
       const result = rule.evaluate(makeContext({ knowledgeChunks: [] }));
+      expect(result).toBeNull();
+    });
+
+    it('does NOT trigger when knowledge chunks exist (default behaviour preserved)', () => {
+      const result = rule.evaluate(makeContext());
+      expect(result).toBeNull();
+    });
+
+    // HIGH-9 opt-in: high-risk orgs (legal, medical, finance) can flip the
+    // flag on to make the rule strict. The rule's reason and ruleName
+    // remain stable for downstream consumers.
+    it('triggers when knowledge chunks are empty AND aiSettings.knowledgeRequired is true', () => {
+      const settings = { ...DEFAULT_SETTINGS, knowledgeRequired: true };
+      const result = rule.evaluate(
+        makeContext({ knowledgeChunks: [], aiSettings: settings }),
+      );
       expect(result).not.toBeNull();
+      expect(result!.ruleName).toBe('MissingKnowledgeRule');
       expect(result!.reason).toBe('missing_knowledge');
     });
 
-    it('does not trigger when knowledge chunks exist', () => {
-      const result = rule.evaluate(makeContext());
+    // When the org has a populated KB the rule never fires, regardless
+    // of the flag. (An org that opts in to strict gating is opting in
+    // to escalate when the KB is *missing* — not to bypass other rules
+    // when it has chunks.)
+    it('does NOT trigger when knowledge chunks exist even if knowledgeRequired is true', () => {
+      const settings = { ...DEFAULT_SETTINGS, knowledgeRequired: true };
+      const result = rule.evaluate(
+        makeContext({ aiSettings: settings }),
+      );
       expect(result).toBeNull();
     });
   });
@@ -630,22 +659,34 @@ describe('Escalation Rules — Individual Rule Tests', () => {
   describe('MissingKnowledgeRule — adversarial', () => {
     const rule = new MissingKnowledgeRule();
 
-    // Attack: an empty message with no knowledge chunks. The rule fires
-    // on knowledge-chunk emptiness, regardless of message content. A
-    // silent / empty customer message would escalate.
-    it('triggers on empty message + no knowledge (rule fires on chunk array, not message content)', () => {
+    // HIGH-9 fix: the rule no longer fires on chunk-emptiness alone. The
+    // empty-message + no-knowledge attack now requires the org to have
+    // explicitly opted in via knowledgeRequired. The default test fixture
+    // has knowledgeRequired=false, so the rule returns null even when both
+    // signals are present.
+    it('does NOT trigger on empty message + no knowledge under default settings (HIGH-9 fix)', () => {
       const result = rule.evaluate(makeContext({ latestMessage: '', knowledgeChunks: [] }));
-      expect(result).not.toBeNull();
-      expect(result!.reason).toBe('missing_knowledge');
+      expect(result).toBeNull();
     });
 
-    // Attack: a friendly greeting with no knowledge. The rule fires.
-    // FINDING: even a simple "hi" escalates when the org has no
-    // knowledge documents. The rule does not check if the message is
-    // a question worth answering — it just checks chunk count.
-    it('triggers on "hi" with no knowledge (escalates greetings when KB is empty)', () => {
+    // HIGH-9 fix: a friendly greeting with no knowledge no longer
+    // escalates by default. The LLM gets the empty chunks and uses
+    // the "if you don't know, escalate" system-prompt instruction.
+    it('does NOT trigger on "hi" with no knowledge under default settings (HIGH-9 fix)', () => {
       const result = rule.evaluate(makeContext({ latestMessage: 'hi', knowledgeChunks: [] }));
+      expect(result).toBeNull();
+    });
+
+    // HIGH-9 opt-in path: same greeting, but with knowledgeRequired=true,
+    // the rule fires. Documents that the org has a way to recover the
+    // strict-gating behaviour for high-risk tenants.
+    it('triggers on "hi" with no knowledge when knowledgeRequired is true (opt-in)', () => {
+      const settings = { ...DEFAULT_SETTINGS, knowledgeRequired: true };
+      const result = rule.evaluate(
+        makeContext({ latestMessage: 'hi', knowledgeChunks: [], aiSettings: settings }),
+      );
       expect(result).not.toBeNull();
+      expect(result!.reason).toBe('missing_knowledge');
     });
 
     // Attack: one knowledge chunk with empty content. The rule checks

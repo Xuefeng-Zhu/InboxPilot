@@ -8,7 +8,14 @@
 import type { DatabaseClient } from '../interfaces/database-client.js';
 import type { AiSettings, AiMode, CreateAiSettingsInput } from '../types/index.js';
 
-/** Raw row shape returned by the database (snake_case columns). */
+/**
+ * Raw row shape returned by the database (snake_case columns).
+ *
+ * `knowledge_required` is optional at the row layer because pre-migration
+ * rows (or rows that have not been re-read since the column was added) will
+ * not have it set. The repository always defaults to `false` so the
+ * HIGH-9 default-off behaviour holds even if a deployment is mid-rollout.
+ */
 interface AiSettingsRow {
   id: string;
   organization_id: string;
@@ -17,6 +24,7 @@ interface AiSettingsRow {
   context_window_size: number;
   max_consecutive_failures: number;
   knowledge_similarity_threshold: number;
+  knowledge_required?: boolean;
   escalation_keywords: string[];
   system_prompt: string | null;
   model: string;
@@ -34,6 +42,9 @@ function toAiSettings(row: AiSettingsRow): AiSettings {
     contextWindowSize: row.context_window_size,
     maxConsecutiveFailures: row.max_consecutive_failures,
     knowledgeSimilarityThreshold: Number(row.knowledge_similarity_threshold),
+    // HIGH-9: default false at the repo layer so a missing column (pre-migration
+    // rows) does not break callers. Matches the application default.
+    knowledgeRequired: row.knowledge_required ?? false,
     escalationKeywords: row.escalation_keywords,
     systemPrompt: row.system_prompt,
     model: row.model,
@@ -52,6 +63,7 @@ function toRow(fields: Partial<AiSettings>): Record<string, unknown> {
   if (fields.contextWindowSize !== undefined) row.context_window_size = fields.contextWindowSize;
   if (fields.maxConsecutiveFailures !== undefined) row.max_consecutive_failures = fields.maxConsecutiveFailures;
   if (fields.knowledgeSimilarityThreshold !== undefined) row.knowledge_similarity_threshold = fields.knowledgeSimilarityThreshold;
+  if (fields.knowledgeRequired !== undefined) row.knowledge_required = fields.knowledgeRequired;
   if (fields.escalationKeywords !== undefined) row.escalation_keywords = fields.escalationKeywords;
   if (fields.systemPrompt !== undefined) row.system_prompt = fields.systemPrompt;
   if (fields.model !== undefined) row.model = fields.model;
@@ -90,6 +102,7 @@ export class AiSettingsRepository {
     if (input.contextWindowSize !== undefined) row.context_window_size = input.contextWindowSize;
     if (input.maxConsecutiveFailures !== undefined) row.max_consecutive_failures = input.maxConsecutiveFailures;
     if (input.knowledgeSimilarityThreshold !== undefined) row.knowledge_similarity_threshold = input.knowledgeSimilarityThreshold;
+    if (input.knowledgeRequired !== undefined) row.knowledge_required = input.knowledgeRequired;
     if (input.escalationKeywords !== undefined) row.escalation_keywords = input.escalationKeywords;
     if (input.systemPrompt !== undefined) row.system_prompt = input.systemPrompt;
     if (input.model !== undefined) row.model = input.model;

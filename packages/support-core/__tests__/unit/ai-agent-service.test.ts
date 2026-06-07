@@ -71,6 +71,7 @@ const SAMPLE_AI_SETTINGS: AiSettings = {
   contextWindowSize: 20,
   maxConsecutiveFailures: 3,
   knowledgeSimilarityThreshold: 0.7,
+  knowledgeRequired: false,
   escalationKeywords: [],
   systemPrompt: 'You are a helpful support agent.',
   model: 'openai/gpt-4o-mini',

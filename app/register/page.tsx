@@ -3,28 +3,57 @@
 import { FormEvent, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { Logo } from '@/components/ui/Logo';
 import { useAuth } from '@/lib/auth-context';
+import { createOrganizationWithOwner } from '@/lib/onboarding';
+import { Card } from '@/components/ui/Card';
+import { Input } from '@/components/ui/Input';
+import { Button } from '@/components/ui/Button';
 
 export default function RegisterPage() {
   const router = useRouter();
   const { signUp } = useAuth();
+  const [workspaceName, setWorkspaceName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
+
+    const trimmedWorkspaceName = workspaceName.trim();
+
+    if (!trimmedWorkspaceName) {
+      setError('Workspace name is required.');
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      setError('Passwords do not match.');
+      return;
+    }
+
     setLoading(true);
 
     try {
       const { error: signUpError } = await signUp(email, password);
       if (signUpError) {
-        // Generic error message — never reveal whether the email exists (Req 1.3, 17.3)
+        // Generic error message — never reveal whether the email exists
         setError('Unable to create account. Please try again.');
         return;
       }
+
+      const { error: workspaceError } =
+        await createOrganizationWithOwner(trimmedWorkspaceName);
+
+      if (workspaceError) {
+        setError('Account created, but unable to create workspace. Please sign in and try again.');
+        return;
+      }
+
       router.push('/inbox');
     } catch {
       setError('Unable to create account. Please try again.');
@@ -34,91 +63,83 @@ export default function RegisterPage() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-gray-50 px-4">
-      <div className="w-full max-w-md space-y-8">
-        <div className="text-center">
-          <h1 className="text-3xl font-bold tracking-tight text-gray-900">
-            Create Account
-          </h1>
-          <p className="mt-2 text-sm text-gray-600">
-            Create your InboxPilot account.
-          </p>
-        </div>
-
-        <form
-          onSubmit={handleSubmit}
-          className="mt-8 space-y-6 rounded-lg bg-white p-8 shadow-sm"
-          noValidate
-        >
-          {error && (
-            <div
-              role="alert"
-              className="rounded-md bg-red-50 p-3 text-sm text-red-700"
-            >
-              {error}
-            </div>
-          )}
-
-          <div className="space-y-4">
-            <div>
-              <label
-                htmlFor="email"
-                className="block text-sm font-medium text-gray-700"
-              >
-                Email address
-              </label>
-              <input
-                id="email"
-                name="email"
-                type="email"
-                autoComplete="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-gray-900 placeholder-gray-400 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 sm:text-sm"
-                placeholder="you@example.com"
-              />
-            </div>
-
-            <div>
-              <label
-                htmlFor="password"
-                className="block text-sm font-medium text-gray-700"
-              >
-                Password
-              </label>
-              <input
-                id="password"
-                name="password"
-                type="password"
-                autoComplete="new-password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-gray-900 placeholder-gray-400 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 sm:text-sm"
-                placeholder="••••••••"
-              />
-            </div>
+    <main className="min-h-screen bg-surface-background flex items-center justify-center px-4">
+      <div className="w-full max-w-md">
+        <Card className="p-8">
+          <div className="text-center mb-6 flex flex-col items-center gap-2">
+            <Logo size="lg" />
+            <h1 className="text-display-sm text-gray-900">InboxPilot</h1>
+            <p className="mt-1 text-body-sm text-gray-500">
+              Create your account
+            </p>
           </div>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="flex w-full justify-center rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {loading ? 'Creating account…' : 'Create account'}
-          </button>
+          <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+            {error && (
+              <p role="alert" className="text-red-500 text-body-sm text-center">
+                {error}
+              </p>
+            )}
 
-          <p className="text-center text-sm text-gray-600">
+            <Input
+              label="Workspace Name"
+              value={workspaceName}
+              onChange={(e) => setWorkspaceName(e.target.value)}
+              placeholder="My Workspace"
+              required
+            />
+
+            <Input
+              label="Email"
+              type="email"
+              autoComplete="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@example.com"
+              required
+            />
+
+            <Input
+              label="Password"
+              type="password"
+              autoComplete="new-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="••••••••"
+              required
+            />
+
+            <Input
+              label="Confirm Password"
+              type="password"
+              autoComplete="new-password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              placeholder="••••••••"
+              required
+            />
+
+            <Button
+              type="submit"
+              variant="primary"
+              size="lg"
+              disabled={loading}
+              className="w-full"
+            >
+              {loading ? 'Signing up…' : 'Sign up'}
+            </Button>
+          </form>
+
+          <p className="text-center text-body-sm text-gray-500 mt-4">
             Already have an account?{' '}
             <Link
               href="/login"
-              className="font-medium text-blue-600 hover:text-blue-500"
+              className="font-medium text-primary hover:text-primary-600 cursor-pointer"
             >
               Sign in
             </Link>
           </p>
-        </form>
+        </Card>
       </div>
     </main>
   );

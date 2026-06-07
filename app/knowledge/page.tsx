@@ -4,6 +4,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { useRealtime } from '@/lib/use-realtime';
 import { insforge } from '@/lib/insforge';
+import { AppShell } from '@/components/layout';
+import { Button, Card, StatusBadge } from '@/components/ui';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -27,18 +29,18 @@ const SOURCE_TYPES = ['faq', 'article', 'policy', 'manual', 'other'];
 // Helpers
 // ---------------------------------------------------------------------------
 
-function statusBadgeClasses(status: KnowledgeDocument['status']): string {
+function mapStatusToBadge(status: KnowledgeDocument['status']): 'open' | 'resolved' | 'ai_draft' | 'escalated' {
   switch (status) {
     case 'ready':
-      return 'bg-green-100 text-green-700';
+      return 'resolved';
     case 'processing':
-      return 'bg-yellow-100 text-yellow-700';
+      return 'ai_draft';
     case 'pending':
-      return 'bg-gray-100 text-gray-700';
+      return 'open';
     case 'failed':
-      return 'bg-red-100 text-red-700';
+      return 'escalated';
     default:
-      return 'bg-gray-100 text-gray-700';
+      return 'open';
   }
 }
 
@@ -47,8 +49,6 @@ function formatDate(iso: string): string {
     year: 'numeric',
     month: 'short',
     day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
   });
 }
 
@@ -212,65 +212,65 @@ export default function KnowledgePage() {
   // Loading state
   if (authLoading || loading) {
     return (
-      <main className="min-h-screen p-8">
-        <div className="mx-auto max-w-4xl">
-          <h1 className="text-2xl font-bold text-gray-900">Knowledge Base</h1>
-          <p className="mt-4 text-sm text-gray-500">Loading documents…</p>
+      <AppShell>
+        <div className="p-container-margin">
+          <h1 className="text-headline-sm text-gray-900">Knowledge Base</h1>
+          <p className="mt-4 text-body-md text-gray-500">Loading documents…</p>
         </div>
-      </main>
+      </AppShell>
     );
   }
 
   if (!user) {
     return (
-      <main className="min-h-screen p-8">
-        <div className="mx-auto max-w-4xl">
-          <h1 className="text-2xl font-bold text-gray-900">Knowledge Base</h1>
-          <p className="mt-4 text-sm text-red-600">Please sign in to manage the knowledge base.</p>
+      <AppShell>
+        <div className="p-container-margin">
+          <h1 className="text-headline-sm text-gray-900">Knowledge Base</h1>
+          <p className="mt-4 text-body-md text-red-600">Please sign in to manage the knowledge base.</p>
         </div>
-      </main>
+      </AppShell>
     );
   }
 
   return (
-    <main className="min-h-screen p-8">
-      <div className="mx-auto max-w-4xl">
+    <AppShell>
+      <div className="p-container-margin max-w-5xl">
+        {/* Page header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Knowledge Base</h1>
-            <p className="mt-1 text-sm text-gray-600">
+            <h1 className="text-headline-sm text-gray-900">Knowledge Base</h1>
+            <p className="mt-1 text-body-md text-gray-600">
               Manage documents for AI-powered responses.
             </p>
           </div>
-          <button
-            type="button"
+          <Button
+            variant={showAddForm ? 'secondary' : 'primary'}
+            size="md"
             onClick={() => setShowAddForm(!showAddForm)}
-            className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
           >
             {showAddForm ? 'Cancel' : 'Add Document'}
-          </button>
+          </Button>
         </div>
 
         {/* Status messages */}
         {error && (
           <div className="mt-4 rounded-md bg-red-50 p-3" role="alert">
-            <p className="text-sm text-red-700">{error}</p>
+            <p className="text-body-md text-red-700">{error}</p>
           </div>
         )}
         {success && (
           <div className="mt-4 rounded-md bg-green-50 p-3" role="status">
-            <p className="text-sm text-green-700">{success}</p>
+            <p className="text-body-md text-green-700">{success}</p>
           </div>
         )}
 
         {/* Add Document Form */}
         {showAddForm && (
-          <div className="mt-6 rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
-            <h2 className="text-sm font-medium text-gray-900">Add New Document</h2>
-            <div className="mt-4 space-y-4">
+          <Card className="mt-6" header={<h2 className="text-body-md font-medium text-gray-900">Add New Document</h2>}>
+            <div className="space-y-4">
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>
-                  <label htmlFor="doc-title" className="block text-sm font-medium text-gray-700">
+                  <label htmlFor="doc-title" className="block text-label-md text-gray-700">
                     Title
                   </label>
                   <input
@@ -279,18 +279,18 @@ export default function KnowledgePage() {
                     value={newTitle}
                     onChange={(e) => setNewTitle(e.target.value)}
                     placeholder="e.g. Return Policy FAQ"
-                    className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    className="mt-1 block w-full rounded border border-gray-300 px-3 py-2 text-body-md placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
                   />
                 </div>
                 <div>
-                  <label htmlFor="doc-source-type" className="block text-sm font-medium text-gray-700">
+                  <label htmlFor="doc-source-type" className="block text-label-md text-gray-700">
                     Source Type
                   </label>
                   <select
                     id="doc-source-type"
                     value={newSourceType}
                     onChange={(e) => setNewSourceType(e.target.value)}
-                    className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    className="mt-1 block w-full rounded border border-gray-300 px-3 py-2 text-body-md focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
                   >
                     {SOURCE_TYPES.map((t) => (
                       <option key={t} value={t}>
@@ -301,7 +301,7 @@ export default function KnowledgePage() {
                 </div>
               </div>
               <div>
-                <label htmlFor="doc-body" className="block text-sm font-medium text-gray-700">
+                <label htmlFor="doc-body" className="block text-label-md text-gray-700">
                   Content
                 </label>
                 <textarea
@@ -310,122 +310,111 @@ export default function KnowledgePage() {
                   value={newBody}
                   onChange={(e) => setNewBody(e.target.value)}
                   placeholder="Enter the document content…"
-                  className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  className="mt-1 block w-full rounded border border-gray-300 px-3 py-2 text-body-md placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
                 />
               </div>
               <div className="flex justify-end">
-                <button
-                  type="button"
+                <Button
+                  variant="primary"
+                  size="md"
                   onClick={handleAddDocument}
                   disabled={adding || !newTitle.trim() || !newBody.trim()}
-                  className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {adding ? 'Adding…' : 'Add Document'}
-                </button>
+                </Button>
               </div>
             </div>
-          </div>
+          </Card>
         )}
 
         {/* Documents List */}
-        <div className="mt-6">
+        <div className="mt-6 space-y-element-gap">
           {documents.length === 0 ? (
             <div className="rounded-lg border border-dashed border-gray-300 p-8 text-center">
-              <p className="text-sm text-gray-500">No knowledge documents yet.</p>
-              <p className="mt-1 text-xs text-gray-400">
-                Click "Add Document" to upload content for AI-powered responses.
+              <p className="text-body-md text-gray-500">No knowledge documents yet.</p>
+              <p className="mt-1 text-label-sm text-gray-400">
+                Click &quot;Add Document&quot; to upload content for AI-powered responses.
               </p>
             </div>
           ) : (
-            <div className="overflow-hidden rounded-lg border border-gray-200 shadow-sm">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th scope="col" className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                      Title
-                    </th>
-                    <th scope="col" className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                      Source Type
-                    </th>
-                    <th scope="col" className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                      Status
-                    </th>
-                    <th scope="col" className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                      Created
-                    </th>
-                    <th scope="col" className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                      Updated
-                    </th>
-                    <th scope="col" className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500">
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200 bg-white">
-                  {documents.map((doc) => (
-                    <tr key={doc.id} className="hover:bg-gray-50">
-                      <td className="whitespace-nowrap px-4 py-3 text-sm font-medium text-gray-900">
+            documents.map((doc) => (
+              <Card key={doc.id}>
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-3">
+                      <h3 className="text-body-md font-medium text-gray-900 truncate">
                         {doc.title}
-                      </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-500">
-                        {doc.source_type}
-                      </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-sm">
-                        <span
-                          className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${statusBadgeClasses(doc.status)}`}
-                        >
-                          {doc.status}
-                        </span>
-                        {doc.status === 'failed' && doc.error_message && (
-                          <span className="ml-2 text-xs text-red-500" title={doc.error_message}>
-                            ⚠
-                          </span>
-                        )}
-                      </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-xs text-gray-500">
-                        {formatDate(doc.created_at)}
-                      </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-xs text-gray-500">
-                        {formatDate(doc.updated_at)}
-                      </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-right text-sm">
-                        {deletingId === doc.id ? (
-                          <span className="inline-flex items-center gap-2">
-                            <span className="text-xs text-gray-500">Delete?</span>
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteDocument(doc.id)}
-                              className="text-xs font-medium text-red-600 hover:text-red-800 focus:outline-none focus:underline"
-                            >
-                              Confirm
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setDeletingId(null)}
-                              className="text-xs text-gray-500 hover:text-gray-700 focus:outline-none focus:underline"
-                            >
-                              Cancel
-                            </button>
-                          </span>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => setDeletingId(doc.id)}
-                            className="text-xs font-medium text-red-600 hover:text-red-800 focus:outline-none focus:underline"
-                            aria-label={`Delete ${doc.title}`}
+                      </h3>
+                      {doc.status === 'processing' ? (
+                        <span className="inline-flex items-center gap-1.5">
+                          <svg
+                            className="h-3.5 w-3.5 animate-spin text-ai"
+                            viewBox="0 0 24 24"
+                            fill="none"
                           >
-                            Delete
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                            <circle
+                              className="opacity-25"
+                              cx="12"
+                              cy="12"
+                              r="10"
+                              stroke="currentColor"
+                              strokeWidth="4"
+                            />
+                            <path
+                              className="opacity-75"
+                              fill="currentColor"
+                              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                            />
+                          </svg>
+                          <span className="text-label-sm text-ai font-medium">Processing</span>
+                        </span>
+                      ) : (
+                        <StatusBadge status={mapStatusToBadge(doc.status)} />
+                      )}
+                    </div>
+                    <p className="mt-1 text-label-sm text-gray-500">
+                      Uploaded {formatDate(doc.created_at)} · {doc.source_type}
+                    </p>
+                    {doc.status === 'failed' && doc.error_message && (
+                      <p className="mt-1 text-label-sm text-red-500">{doc.error_message}</p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    {deletingId === doc.id ? (
+                      <>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setDeletingId(null)}
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => handleDeleteDocument(doc.id)}
+                          className="text-red-600 hover:text-red-800"
+                        >
+                          Confirm Delete
+                        </Button>
+                      </>
+                    ) : (
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => setDeletingId(doc.id)}
+                        aria-label={`Delete ${doc.title}`}
+                      >
+                        Delete
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </Card>
+            ))
           )}
         </div>
       </div>
-    </main>
+    </AppShell>
   );
 }

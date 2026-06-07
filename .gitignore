@@ -42,3 +42,6 @@ next-env.d.ts
 .roo
 .trae
 .windsurf
+
+# MCP settings (contains API keys)
+.kiro/settings/mcp.json

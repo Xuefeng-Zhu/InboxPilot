@@ -155,7 +155,7 @@ export function MessageThread({ conversationId }: MessageThreadProps) {
         {/* Messages */}
         <div
           ref={scrollRef}
-          className="flex-1 overflow-y-auto py-4"
+          className="flex-1 overflow-y-auto px-4 py-4"
           role="log"
           aria-label="Message history"
           aria-live="polite"
@@ -165,7 +165,9 @@ export function MessageThread({ conversationId }: MessageThreadProps) {
               <p className="text-sm text-gray-400">No messages yet.</p>
             </div>
           ) : (
-            messages.map((msg) => <MessageBubble key={msg.id} message={msg} />)
+            <div className="relative border-l-2 border-gray-200 ml-2">
+              {messages.map((msg) => <MessageBubble key={msg.id} message={msg} />)}
+            </div>
           )}
         </div>
 

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { insforge } from '@/lib/insforge';
 import { useAuth } from '@/lib/auth-context';
+import { createOrganizationWithOwner } from '@/lib/onboarding';
 import { useRealtime } from '@/lib/use-realtime';
 import { ConversationItem, type ConversationRow } from './ConversationItem';
 
@@ -20,13 +21,19 @@ interface ConversationListProps {
 // ---------------------------------------------------------------------------
 
 export function ConversationList({ selectedId, onSelect }: ConversationListProps) {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [conversations, setConversations] = useState<ConversationRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const fetchConversations = useCallback(async () => {
-    if (!user) return;
+    if (authLoading) return;
+
+    if (!user) {
+      setConversations([]);
+      setLoading(false);
+      return;
+    }
 
     setLoading(true);
     setError(null);
@@ -39,13 +46,45 @@ export function ConversationList({ selectedId, onSelect }: ConversationListProps
         .eq('user_id', user.id)
         .limit(1);
 
-      if (memberError || !members) {
+      if (memberError) {
+        console.warn('Organization membership lookup failed:', memberError.message);
         setError('No organization found. Please join an organization first.');
         setLoading(false);
         return;
       }
 
-      const memberArr = Array.isArray(members) ? members : [members];
+      let memberArr = !members ? [] : Array.isArray(members) ? members : [members];
+      if (memberArr.length === 0) {
+        const { error: onboardingError } =
+          await createOrganizationWithOwner('InboxPilot Workspace');
+
+        if (onboardingError) {
+          console.warn('Workspace onboarding failed:', onboardingError);
+          setError('No organization found. Please join an organization first.');
+          setLoading(false);
+          return;
+        }
+
+        const { data: refreshedMembers, error: refreshError } = await insforge.database
+          .from('organization_members')
+          .select('organization_id')
+          .eq('user_id', user.id)
+          .limit(1);
+
+        if (refreshError) {
+          console.warn('Organization membership refresh failed:', refreshError.message);
+          setError('No organization found. Please join an organization first.');
+          setLoading(false);
+          return;
+        }
+
+        memberArr = !refreshedMembers
+          ? []
+          : Array.isArray(refreshedMembers)
+            ? refreshedMembers
+            : [refreshedMembers];
+      }
+
       if (memberArr.length === 0) {
         setError('No organization found. Please join an organization first.');
         setLoading(false);
@@ -73,7 +112,7 @@ export function ConversationList({ selectedId, onSelect }: ConversationListProps
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [authLoading, user]);
 
   useEffect(() => {
     fetchConversations();

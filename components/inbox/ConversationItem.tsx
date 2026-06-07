@@ -1,6 +1,7 @@
 'use client';
 
-import { StatusBadge, AiStateIndicator } from './StatusBadge';
+import { StatusBadge, cn } from '@/components/ui';
+import { AiStateIndicator } from './StatusBadge';
 import type { ConversationStatus, AiState, Channel } from '@support-core/types';
 
 // ---------------------------------------------------------------------------
@@ -62,8 +63,8 @@ function formatTimestamp(dateStr: string | null): string {
   return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
-function channelIcon(channel: Channel): string {
-  return channel === 'sms' ? '💬' : '✉️';
+function channelLabel(channel: Channel): string {
+  return channel === 'sms' ? 'SMS' : 'Email';
 }
 
 // ---------------------------------------------------------------------------
@@ -73,10 +74,16 @@ function channelIcon(channel: Channel): string {
 interface ConversationItemProps {
   conversation: ConversationRow;
   isSelected: boolean;
+  isUnread?: boolean;
   onSelect: (id: string) => void;
 }
 
-export function ConversationItem({ conversation, isSelected, onSelect }: ConversationItemProps) {
+export function ConversationItem({
+  conversation,
+  isSelected,
+  isUnread = false,
+  onSelect,
+}: ConversationItemProps) {
   const displayName = getContactDisplayName(conversation.contacts, conversation.channel);
 
   return (
@@ -84,38 +91,63 @@ export function ConversationItem({ conversation, isSelected, onSelect }: Convers
       type="button"
       onClick={() => onSelect(conversation.id)}
       aria-current={isSelected ? 'true' : undefined}
-      className={`w-full text-left px-4 py-3 border-b border-gray-100 transition-colors focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500 ${
+      className={cn(
+        'w-full text-left px-4 py-3 border-b border-gray-100 transition-colors cursor-pointer',
+        'focus:outline-none focus:ring-2 focus:ring-inset focus:ring-primary',
         isSelected
-          ? 'bg-blue-50 border-l-2 border-l-blue-600'
+          ? 'bg-surface-container border-l-2 border-l-primary'
           : 'hover:bg-gray-50'
-      }`}
+      )}
     >
       <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <span className="text-sm" aria-label={`Channel: ${conversation.channel}`}>
-              {channelIcon(conversation.channel)}
-            </span>
-            <span className="truncate text-sm font-medium text-gray-900">
-              {displayName}
-            </span>
-          </div>
-
-          {conversation.subject && (
-            <p className="mt-0.5 truncate text-xs text-gray-600">
-              {conversation.subject}
-            </p>
+        {/* Unread indicator + content */}
+        <div className="flex items-start gap-2 min-w-0 flex-1">
+          {/* Unread dot */}
+          {isUnread && (
+            <span
+              className="mt-1.5 w-1.5 h-1.5 rounded-full bg-primary shrink-0"
+              aria-label="Unread"
+            />
           )}
+
+          <div className="min-w-0 flex-1">
+            {/* Top row: subject + timestamp */}
+            <div className="flex items-center justify-between gap-2">
+              <span
+                className={cn(
+                  'truncate text-body-md text-gray-900',
+                  isUnread && 'font-semibold'
+                )}
+              >
+                {conversation.subject ?? displayName}
+              </span>
+              <span className="shrink-0 text-label-sm text-gray-400">
+                {formatTimestamp(conversation.last_message_at)}
+              </span>
+            </div>
+
+            {/* Second row: 2-line message preview */}
+            {conversation.subject && (
+              <p className="mt-0.5 text-body-sm text-gray-500 line-clamp-2">
+                {displayName}
+              </p>
+            )}
+            {!conversation.subject && (
+              <p className="mt-0.5 text-body-sm text-gray-500 line-clamp-2">
+                No subject
+              </p>
+            )}
+
+            {/* Third row: channel badge + status badge + AI state */}
+            <div className="mt-1.5 flex items-center gap-2">
+              <span className="inline-flex items-center rounded-full bg-gray-100 px-1.5 py-0.5 text-label-sm text-gray-600">
+                {channelLabel(conversation.channel)}
+              </span>
+              <StatusBadge status={conversation.status} />
+              <AiStateIndicator aiState={conversation.ai_state} />
+            </div>
+          </div>
         </div>
-
-        <span className="shrink-0 text-xs text-gray-400">
-          {formatTimestamp(conversation.last_message_at)}
-        </span>
-      </div>
-
-      <div className="mt-1.5 flex items-center gap-2">
-        <StatusBadge status={conversation.status} />
-        <AiStateIndicator aiState={conversation.ai_state} />
       </div>
     </button>
   );

@@ -142,11 +142,11 @@ export function AiDraftPanel({ conversationId, aiState }: AiDraftPanelProps) {
   if (aiState === 'thinking') {
     return (
       <div
-        className="border-t border-b border-blue-200 bg-blue-50 px-4 py-3"
+        className="border-t border-b border-ai-200 bg-ai-50 px-4 py-3"
         role="status"
         aria-label="AI is processing"
       >
-        <div className="flex items-center gap-2 text-sm text-blue-700">
+        <div className="flex items-center gap-2 text-sm text-ai-700">
           <svg
             className="h-4 w-4 animate-spin"
             xmlns="http://www.w3.org/2000/svg"
@@ -222,11 +222,11 @@ export function AiDraftPanel({ conversationId, aiState }: AiDraftPanelProps) {
     if (loading) {
       return (
         <div
-          className="border-t border-b border-blue-200 bg-blue-50 px-4 py-3"
+          className="border-t border-b border-ai-200 bg-ai-50 px-4 py-3"
           role="status"
           aria-label="Loading AI draft"
         >
-          <div className="flex items-center gap-2 text-sm text-blue-700">
+          <div className="flex items-center gap-2 text-sm text-ai-700">
             <svg
               className="h-4 w-4 animate-spin"
               xmlns="http://www.w3.org/2000/svg"
@@ -260,14 +260,14 @@ export function AiDraftPanel({ conversationId, aiState }: AiDraftPanelProps) {
 
     return (
       <div
-        className="border-t border-b border-blue-200 bg-blue-50 px-4 py-3"
+        className="border-t border-b border-ai-200 bg-ai-50 px-4 py-3"
         role="region"
         aria-label="AI draft response"
       >
         {/* Header with confidence */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <span className="text-sm font-medium text-blue-800">AI Draft</span>
+            <span className="text-sm font-medium text-ai-700">AI Draft</span>
             <span
               className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
                 confidencePercent >= 75
@@ -285,14 +285,14 @@ export function AiDraftPanel({ conversationId, aiState }: AiDraftPanelProps) {
 
         {/* Reasoning summary */}
         {decision.reasoning_summary && (
-          <p className="mt-1 text-xs text-blue-600">
+          <p className="mt-1 text-xs text-ai-600">
             {decision.reasoning_summary}
           </p>
         )}
 
         {/* Draft response text */}
         {decision.response_text && (
-          <div className="mt-2 rounded-md border border-blue-200 bg-white p-3">
+          <div className="mt-2 rounded-md border border-ai-200 bg-white p-3">
             <p className="whitespace-pre-wrap text-sm text-gray-800">
               {decision.response_text}
             </p>
@@ -312,7 +312,7 @@ export function AiDraftPanel({ conversationId, aiState }: AiDraftPanelProps) {
             type="button"
             onClick={handleApprove}
             disabled={actionLoading !== null}
-            className="inline-flex items-center rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex items-center rounded-md bg-ai-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-ai-700 focus:outline-none focus:ring-2 focus:ring-ai-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
             aria-label="Approve and send AI draft"
           >
             {actionLoading === 'approve' ? (
@@ -349,7 +349,7 @@ export function AiDraftPanel({ conversationId, aiState }: AiDraftPanelProps) {
             type="button"
             onClick={handleRegenerate}
             disabled={actionLoading !== null}
-            className="inline-flex items-center rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex items-center rounded-md border border-surface-border bg-white px-3 py-1.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-ai-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
             aria-label="Regenerate AI draft"
           >
             {actionLoading === 'regenerate' ? (

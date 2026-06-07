@@ -12,3 +12,34 @@ body {
   color: rgb(var(--foreground-rgb));
   background: rgb(var(--background-start-rgb));
 }
+
+/* Respect reduced-motion preference (UX Pro Max §7) */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Ensure minimum 44x44px touch targets on mobile viewports (< 1024px) — Req 12.4 */
+@layer base {
+  @media (max-width: 1023px) {
+    button,
+    [role="button"],
+    input[type="submit"],
+    input[type="button"] {
+      min-height: 44px;
+      min-width: 44px;
+    }
+
+    nav a[href] {
+      min-height: 44px;
+      display: flex;
+      align-items: center;
+    }
+  }
+}

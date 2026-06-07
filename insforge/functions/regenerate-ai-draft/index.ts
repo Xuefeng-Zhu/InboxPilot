@@ -18,6 +18,7 @@
 
 import { createDbClient } from '../_shared/create-db-client.js';
 import { createRealtimePublisher } from '../_shared/create-realtime-publisher.js';
+import { requireOrgMembership } from '../_shared/require-org-membership.js';
 import { verifyJwt } from '../_shared/verify-jwt.js';
 
 import { ConversationRepository } from '../../../packages/support-core/src/repositories/conversation-repository.js';
@@ -75,21 +76,27 @@ export default async function (req: Request): Promise<Response> {
     // 3. Create database client, repositories, and job queue
     const db = createDbClient(baseUrl, serviceRoleKey);
 
+    // CRITICAL-2: enforce org membership before enqueuing work on a
+    // conversation. requireOrgMembership returns the conversation's
+    // organizationId on success.
+    const membership = await requireOrgMembership(db, userId, conversationId);
+    if (membership.kind === 'conversation_not_found') {
+      return jsonResponse({ error: 'Conversation not found' }, 404);
+    }
+    if (membership.kind === 'forbidden') {
+      return jsonResponse({ error: 'Forbidden: not a member of this conversation\'s organization' }, 403);
+    }
+    const orgId = membership.organizationId;
+
     const conversationRepo = new ConversationRepository(db);
     const auditLogRepo = new AuditLogRepository(db);
     const jobQueue = new PostgresJobQueue(db);
 
-    // Load conversation to get orgId and validate it exists
-    const conversation = await conversationRepo.findById(conversationId);
-    if (!conversation) {
-      return jsonResponse({ error: 'Conversation not found' }, 404);
-    }
-
     // 4. Enqueue a new process_ai_message job
     const job = await jobQueue.enqueue(
       'process_ai_message',
-      { conversationId, organizationId: conversation.organizationId },
-      conversation.organizationId,
+      { conversationId, organizationId: orgId },
+      orgId,
     );
 
     // 5. Set conversation ai_state to "thinking"
@@ -99,7 +106,7 @@ export default async function (req: Request): Promise<Response> {
 
     // 6. Record audit log entry
     await auditLogRepo.create({
-      organizationId: conversation.organizationId,
+      organizationId: orgId,
       actorId: userId,
       actorType: 'user',
       action: 'ai_draft_regenerated',
@@ -112,15 +119,11 @@ export default async function (req: Request): Promise<Response> {
 
     // 7. Publish conversation_updated realtime event
     const realtimePublisher = createRealtimePublisher(baseUrl, serviceRoleKey);
-    await realtimePublisher.publish(
-      `org:${conversation.organizationId}`,
-      'conversation_updated',
-      {
-        conversationId,
-        status: updatedConversation.status,
-        aiState: updatedConversation.aiState,
-      },
-    );
+    await realtimePublisher.publish(`org:${orgId}`, 'conversation_updated', {
+      conversationId,
+      status: updatedConversation.status,
+      aiState: updatedConversation.aiState,
+    });
 
     // 8. Return 200 OK
     return jsonResponse({

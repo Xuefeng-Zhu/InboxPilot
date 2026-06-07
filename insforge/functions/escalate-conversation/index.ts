@@ -17,6 +17,7 @@
 
 import { createDbClient } from '../_shared/create-db-client.js';
 import { createRealtimePublisher } from '../_shared/create-realtime-publisher.js';
+import { requireOrgMembership } from '../_shared/require-org-membership.js';
 import { verifyJwt } from '../_shared/verify-jwt.js';
 
 import { ConversationRepository } from '../../../packages/support-core/src/repositories/conversation-repository.js';
@@ -72,6 +73,19 @@ export default async function (req: Request): Promise<Response> {
 
     // 3. Create database client and repositories
     const db = createDbClient(baseUrl, serviceRoleKey);
+
+    // CRITICAL-2: enforce org membership before mutating the conversation.
+    // requireOrgMembership returns the conversation's organizationId on
+    // success.
+    const membership = await requireOrgMembership(db, userId, conversationId);
+    if (membership.kind === 'conversation_not_found') {
+      return jsonResponse({ error: 'Conversation not found' }, 404);
+    }
+    if (membership.kind === 'forbidden') {
+      return jsonResponse({ error: 'Forbidden: not a member of this conversation\'s organization' }, 403);
+    }
+    const orgId = membership.organizationId;
+
     const conversationRepo = new ConversationRepository(db);
     const auditLogRepo = new AuditLogRepository(db);
 
@@ -83,7 +97,7 @@ export default async function (req: Request): Promise<Response> {
 
     // 5. Record audit log entry
     await auditLogRepo.create({
-      organizationId: conversation.organizationId,
+      organizationId: orgId,
       actorId: userId,
       actorType: 'user',
       action: 'conversation_escalated',
@@ -93,7 +107,7 @@ export default async function (req: Request): Promise<Response> {
 
     // 6. Publish conversation_updated realtime event
     const realtimePublisher = createRealtimePublisher(baseUrl, serviceRoleKey);
-    await realtimePublisher.publish(`org:${conversation.organizationId}`, 'conversation_updated', {
+    await realtimePublisher.publish(`org:${orgId}`, 'conversation_updated', {
       conversationId,
       status: conversation.status,
       aiState: conversation.aiState,

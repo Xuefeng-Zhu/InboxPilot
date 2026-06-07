@@ -17,6 +17,7 @@
 
 import { createDbClient } from '../_shared/create-db-client.js';
 import { createRealtimePublisher } from '../_shared/create-realtime-publisher.js';
+import { requireOrgMembership } from '../_shared/require-org-membership.js';
 import { verifyJwt } from '../_shared/verify-jwt.js';
 
 import { ProviderRegistry } from '../../../packages/support-core/src/interfaces/provider-registry.js';
@@ -85,6 +86,21 @@ export default async function (req: Request): Promise<Response> {
     // 3. Create database client, repositories, provider registry, and service
     const db = createDbClient(baseUrl, serviceRoleKey);
 
+    // CRITICAL-2: enforce org membership before any mutation. JWT alone is
+    // not enough — any authenticated user in any tenant could otherwise
+    // pass another tenant's conversationId and trigger real outbound
+    // SMS/email. requireOrgMembership returns the conversation's
+    // organizationId on success, so we reuse it for the realtime publish
+    // (avoids a redundant findById).
+    const membership = await requireOrgMembership(db, userId, conversationId);
+    if (membership.kind === 'conversation_not_found') {
+      return jsonResponse({ error: 'Conversation not found' }, 404);
+    }
+    if (membership.kind === 'forbidden') {
+      return jsonResponse({ error: 'Forbidden: not a member of this conversation\'s organization' }, 403);
+    }
+    const orgId = membership.organizationId;
+
     const conversationRepo = new ConversationRepository(db);
     const contactRepo = new ContactRepository(db);
     const messageRepo = new MessageRepository(db);
@@ -111,13 +127,8 @@ export default async function (req: Request): Promise<Response> {
     // 4. Send the reply
     const message = await outboundService.sendReply(conversationId, body, userId);
 
-    // 5. Publish new_message realtime event
-    // We need the orgId from the conversation to publish on the correct channel.
-    // The OutboundMessageService already loaded the conversation internally,
-    // so we look it up once more (lightweight DB call) to get the orgId.
-    const conversation = await conversationRepo.findById(conversationId);
-    const orgId = conversation?.organizationId;
-
+    // 5. Publish new_message realtime event on the org channel we
+    // already validated the caller is a member of.
     if (orgId) {
       const realtimePublisher = createRealtimePublisher(baseUrl, serviceRoleKey);
       await realtimePublisher.publish(`org:${orgId}`, 'new_message', {

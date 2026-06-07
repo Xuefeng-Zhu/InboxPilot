@@ -19,6 +19,7 @@
 
 import { createDbClient } from '../_shared/create-db-client.js';
 import { createRealtimePublisher } from '../_shared/create-realtime-publisher.js';
+import { requireOrgMembership } from '../_shared/require-org-membership.js';
 import { verifyJwt } from '../_shared/verify-jwt.js';
 
 import { ProviderRegistry } from '../../../packages/support-core/src/interfaces/provider-registry.js';
@@ -88,6 +89,18 @@ export default async function (req: Request): Promise<Response> {
     // 3. Create database client, repositories, provider registry, and service
     const db = createDbClient(baseUrl, serviceRoleKey);
 
+    // CRITICAL-2: enforce org membership before any mutation or even
+    // reading the AI decision's response text. requireOrgMembership
+    // returns the conversation's organizationId on success.
+    const membership = await requireOrgMembership(db, userId, conversationId);
+    if (membership.kind === 'conversation_not_found') {
+      return jsonResponse({ error: 'Conversation not found' }, 404);
+    }
+    if (membership.kind === 'forbidden') {
+      return jsonResponse({ error: 'Forbidden: not a member of this conversation\'s organization' }, 403);
+    }
+    const orgId = membership.organizationId;
+
     const conversationRepo = new ConversationRepository(db);
     const contactRepo = new ContactRepository(db);
     const messageRepo = new MessageRepository(db);
@@ -125,16 +138,6 @@ export default async function (req: Request): Promise<Response> {
     //    with sender_type 'ai' to distinguish from human replies.
     //    OutboundMessageService.sendReply uses sender_type 'user', so we
     //    create the message directly with sender_type 'ai'.
-    const conversation = await conversationRepo.findById(conversationId);
-    if (!conversation) {
-      return jsonResponse({ error: 'Conversation not found' }, 404);
-    }
-
-    // Use OutboundMessageService to handle the channel-specific sending logic,
-    // then we'll update the message sender_type to 'ai' afterward.
-    // Actually, let's send via the outbound service (which handles provider selection)
-    // and the message will be attributed to the approving user. The audit log
-    // captures that it was an AI draft approval.
     const message = await outboundService.sendReply(
       conversationId,
       aiDecision.responseText,
@@ -148,7 +151,7 @@ export default async function (req: Request): Promise<Response> {
 
     // 7. Record audit log entry
     await auditLogRepo.create({
-      organizationId: conversation.organizationId,
+      organizationId: orgId,
       actorId: userId,
       actorType: 'user',
       action: 'ai_draft_approved',
@@ -163,20 +166,16 @@ export default async function (req: Request): Promise<Response> {
     // 8. Publish realtime events
     const realtimePublisher = createRealtimePublisher(baseUrl, serviceRoleKey);
 
-    await realtimePublisher.publish(`org:${conversation.organizationId}`, 'new_message', {
+    await realtimePublisher.publish(`org:${orgId}`, 'new_message', {
       message,
       conversationId,
     });
 
-    await realtimePublisher.publish(
-      `org:${conversation.organizationId}`,
-      'conversation_updated',
-      {
-        conversationId,
-        status: updatedConversation.status,
-        aiState: updatedConversation.aiState,
-      },
-    );
+    await realtimePublisher.publish(`org:${orgId}`, 'conversation_updated', {
+      conversationId,
+      status: updatedConversation.status,
+      aiState: updatedConversation.aiState,
+    });
 
     // 9. Return 200 OK
     return jsonResponse({ status: 'ok', data: { message, conversation: updatedConversation } });

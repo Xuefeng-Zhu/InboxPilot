@@ -1,5 +1,6 @@
 'use client';
 
+import React from 'react';
 import type { SenderType } from '@support-core/types';
 
 // ---------------------------------------------------------------------------
@@ -62,7 +63,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
       <div className="flex justify-center px-4 py-2">
         <div className="max-w-md text-center">
           <p className="text-xs italic text-gray-400">{body}</p>
-          <time className="mt-0.5 block text-[10px] text-gray-300" dateTime={created_at}>
+          <time className="mt-0.5 block text-label-sm text-gray-500" dateTime={created_at}>
             {formatMessageTime(created_at)}
           </time>
         </div>
@@ -70,36 +71,34 @@ export function MessageBubble({ message }: MessageBubbleProps) {
     );
   }
 
-  // Inbound (contact) — left-aligned, gray
-  const isInbound = sender_type === 'contact';
+  // Customer messages (contact): light gray background
+  // Agent/AI replies (user, ai): white background
+  const isContact = sender_type === 'contact';
 
   return (
-    <div
-      className={`flex px-4 py-1.5 ${isInbound ? 'justify-start' : 'justify-end'}`}
-    >
-      <div
-        className={`max-w-[70%] rounded-lg px-3 py-2 ${
-          isInbound
-            ? 'bg-gray-100 text-gray-900'
-            : 'bg-blue-600 text-white'
-        }`}
-      >
-        <p
-          className={`text-[11px] font-medium ${
-            isInbound ? 'text-gray-500' : 'text-blue-100'
+    <div className="relative flex px-4 py-1.5">
+      {/* Timeline dot */}
+      <div className="absolute left-6 top-1/2 h-2 w-2 -translate-y-1/2 rounded-full border-2 border-gray-200 bg-white" />
+
+      <div className="ml-6 w-full max-w-[85%] pl-4">
+        <div
+          className={`rounded-lg border p-3 ${
+            isContact
+              ? 'bg-gray-50 border-gray-200'
+              : 'bg-white border-surface-border'
           }`}
         >
-          {senderLabels[sender_type]}
-        </p>
-        <p className="mt-0.5 whitespace-pre-wrap text-sm">{body}</p>
-        <time
-          className={`mt-1 block text-right text-[10px] ${
-            isInbound ? 'text-gray-400' : 'text-blue-200'
-          }`}
-          dateTime={created_at}
-        >
-          {formatMessageTime(created_at)}
-        </time>
+          <p className="text-label-sm text-gray-500 font-medium">
+            {senderLabels[sender_type]}
+          </p>
+          <p className="mt-1 whitespace-pre-wrap text-body-md text-gray-900">{body}</p>
+          <time
+            className="mt-1.5 block text-right text-label-sm text-gray-500"
+            dateTime={created_at}
+          >
+            {formatMessageTime(created_at)}
+          </time>
+        </div>
       </div>
     </div>
   );

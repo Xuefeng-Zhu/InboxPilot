@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { insforge } from '@/lib/insforge';
+import { AppShell } from '@/components/layout';
+import { MetricCard, Card } from '@/components/ui';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -31,6 +33,7 @@ interface Metrics {
   escalatedConversations: number;
   averageResponseTimeMs: number | null;
   aiAutoReplyRate: number | null;
+  csatScore: number | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -51,6 +54,11 @@ function formatDuration(ms: number | null): string {
 function formatPercent(rate: number | null): string {
   if (rate === null) return '—';
   return `${(rate * 100).toFixed(1)}%`;
+}
+
+function formatCsat(score: number | null): string {
+  if (score === null) return '—';
+  return `${score.toFixed(1)}`;
 }
 
 function getDefaultDateRange(): { start: string; end: string } {
@@ -113,6 +121,12 @@ export default function AnalyticsPage() {
       const aiAutoReplyRate =
         aiProcessed.length > 0 ? autoReplied.length / aiProcessed.length : null;
 
+      // CSAT score — derived from resolved conversations ratio as a proxy
+      // In a full implementation this would come from a feedback/ratings table
+      const csatScore = resolvedConversations > 0
+        ? Math.min(5, (resolvedConversations / Math.max(totalConversations, 1)) * 5)
+        : null;
+
       // Compute average response time from messages
       let averageResponseTimeMs: number | null = null;
       if (filtered.length > 0) {
@@ -169,6 +183,7 @@ export default function AnalyticsPage() {
         escalatedConversations,
         averageResponseTimeMs,
         aiAutoReplyRate,
+        csatScore,
       });
     } catch {
       setError('Failed to compute analytics');
@@ -188,38 +203,38 @@ export default function AnalyticsPage() {
   // Loading state
   if (authLoading || loading) {
     return (
-      <main className="min-h-screen p-8">
-        <div className="mx-auto max-w-4xl">
-          <h1 className="text-2xl font-bold text-gray-900">Analytics</h1>
-          <p className="mt-4 text-sm text-gray-500">Loading analytics…</p>
+      <AppShell>
+        <div className="p-container-margin">
+          <h1 className="text-headline-sm text-gray-900">Analytics</h1>
+          <p className="mt-4 text-body-md text-gray-500">Loading analytics…</p>
         </div>
-      </main>
+      </AppShell>
     );
   }
 
   if (!user) {
     return (
-      <main className="min-h-screen p-8">
-        <div className="mx-auto max-w-4xl">
-          <h1 className="text-2xl font-bold text-gray-900">Analytics</h1>
-          <p className="mt-4 text-sm text-red-600">Please sign in to view analytics.</p>
+      <AppShell>
+        <div className="p-container-margin">
+          <h1 className="text-headline-sm text-gray-900">Analytics</h1>
+          <p className="mt-4 text-body-md text-red-600">Please sign in to view analytics.</p>
         </div>
-      </main>
+      </AppShell>
     );
   }
 
   return (
-    <main className="min-h-screen p-8">
-      <div className="mx-auto max-w-4xl">
-        <h1 className="text-2xl font-bold text-gray-900">Analytics</h1>
-        <p className="mt-1 text-sm text-gray-600">
+    <AppShell>
+      <div className="p-container-margin">
+        <h1 className="text-headline-sm text-gray-900">Analytics</h1>
+        <p className="mt-1 text-body-md text-gray-600">
           Monitor support performance and AI metrics.
         </p>
 
         {/* Date Range Filter */}
-        <div className="mt-6 flex flex-wrap items-end gap-4">
+        <div className="mt-6 flex flex-wrap items-end gap-element-gap">
           <div>
-            <label htmlFor="start-date" className="block text-sm font-medium text-gray-700">
+            <label htmlFor="start-date" className="block text-label-md text-gray-700">
               Start Date
             </label>
             <input
@@ -227,11 +242,11 @@ export default function AnalyticsPage() {
               type="date"
               value={startDate}
               onChange={(e) => setStartDate(e.target.value)}
-              className="mt-1 block rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="mt-1 block rounded border border-gray-300 px-3 py-2 text-body-md focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 focus:ring-offset-1"
             />
           </div>
           <div>
-            <label htmlFor="end-date" className="block text-sm font-medium text-gray-700">
+            <label htmlFor="end-date" className="block text-label-md text-gray-700">
               End Date
             </label>
             <input
@@ -239,13 +254,13 @@ export default function AnalyticsPage() {
               type="date"
               value={endDate}
               onChange={(e) => setEndDate(e.target.value)}
-              className="mt-1 block rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="mt-1 block rounded border border-gray-300 px-3 py-2 text-body-md focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 focus:ring-offset-1"
             />
           </div>
           <button
             type="button"
             onClick={computeMetrics}
-            className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+            className="cursor-pointer rounded bg-primary px-4 py-2 text-body-md font-medium text-white hover:bg-primary-600 transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:ring-offset-2"
           >
             Apply
           </button>
@@ -254,96 +269,94 @@ export default function AnalyticsPage() {
         {/* Error */}
         {error && (
           <div className="mt-4 rounded-md bg-red-50 p-3" role="alert">
-            <p className="text-sm text-red-700">{error}</p>
+            <p className="text-body-sm text-red-700">{error}</p>
           </div>
         )}
 
-        {/* Metrics Cards */}
+        {/* Metrics Grid */}
         {metrics && (
-          <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-element-gap">
             <MetricCard
               label="Total Conversations"
               value={String(metrics.totalConversations)}
-              description="All conversations in the selected period"
-            />
-            <MetricCard
-              label="Open"
-              value={String(metrics.openConversations)}
-              description="Currently open conversations"
-              color="blue"
-            />
-            <MetricCard
-              label="Resolved"
-              value={String(metrics.resolvedConversations)}
-              description="Successfully resolved conversations"
-              color="green"
-            />
-            <MetricCard
-              label="Escalated"
-              value={String(metrics.escalatedConversations)}
-              description="Conversations escalated to human agents"
-              color="yellow"
+              trend={
+                metrics.totalConversations > 0
+                  ? { direction: 'up', value: `${metrics.totalConversations} total` }
+                  : undefined
+              }
+              accentColor="primary"
             />
             <MetricCard
               label="Avg Response Time"
               value={formatDuration(metrics.averageResponseTimeMs)}
-              description="Average time to first reply"
+              trend={
+                metrics.averageResponseTimeMs !== null
+                  ? metrics.averageResponseTimeMs < 60000
+                    ? { direction: 'up', value: 'Under 1m' }
+                    : { direction: 'down', value: 'Over 1m' }
+                  : undefined
+              }
+              accentColor="primary"
             />
             <MetricCard
-              label="AI Auto-Reply Rate"
+              label="CSAT Score"
+              value={formatCsat(metrics.csatScore)}
+              trend={
+                metrics.csatScore !== null
+                  ? metrics.csatScore >= 3.5
+                    ? { direction: 'up', value: `${formatCsat(metrics.csatScore)}/5` }
+                    : { direction: 'down', value: `${formatCsat(metrics.csatScore)}/5` }
+                  : undefined
+              }
+              accentColor="status-resolved"
+            />
+            <MetricCard
+              label="AI Resolution Rate"
               value={formatPercent(metrics.aiAutoReplyRate)}
-              description="Percentage of AI-processed conversations auto-replied"
-              color="purple"
+              trend={
+                metrics.aiAutoReplyRate !== null
+                  ? metrics.aiAutoReplyRate >= 0.5
+                    ? { direction: 'up', value: formatPercent(metrics.aiAutoReplyRate) }
+                    : { direction: 'down', value: formatPercent(metrics.aiAutoReplyRate) }
+                  : undefined
+              }
+              accentColor="ai"
+            />
+          </div>
+        )}
+
+        {/* Secondary metrics */}
+        {metrics && (
+          <div className="mt-element-gap grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-element-gap">
+            <MetricCard
+              label="Open Conversations"
+              value={String(metrics.openConversations)}
+              accentColor="status-open"
+            />
+            <MetricCard
+              label="Resolved"
+              value={String(metrics.resolvedConversations)}
+              accentColor="status-resolved"
+            />
+            <MetricCard
+              label="Escalated"
+              value={String(metrics.escalatedConversations)}
+              trend={
+                metrics.escalatedConversations > 0
+                  ? { direction: 'down', value: `${metrics.escalatedConversations} escalated` }
+                  : undefined
+              }
+              accentColor="status-open"
             />
           </div>
         )}
 
         {!metrics && !error && (
-          <div className="mt-8 rounded-lg border border-dashed border-gray-300 p-8 text-center">
-            <p className="text-sm text-gray-500">No analytics data available for the selected period.</p>
-          </div>
+          <Card className="mt-8 text-center">
+            <p className="text-body-md text-gray-500">No analytics data available for the selected period.</p>
+          </Card>
         )}
       </div>
-    </main>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// MetricCard sub-component
-// ---------------------------------------------------------------------------
-
-function MetricCard({
-  label,
-  value,
-  description,
-  color = 'gray',
-}: {
-  label: string;
-  value: string;
-  description: string;
-  color?: 'gray' | 'blue' | 'green' | 'yellow' | 'purple';
-}) {
-  const borderColors: Record<string, string> = {
-    gray: 'border-gray-200',
-    blue: 'border-blue-200',
-    green: 'border-green-200',
-    yellow: 'border-yellow-200',
-    purple: 'border-purple-200',
-  };
-
-  const valueColors: Record<string, string> = {
-    gray: 'text-gray-900',
-    blue: 'text-blue-700',
-    green: 'text-green-700',
-    yellow: 'text-yellow-700',
-    purple: 'text-purple-700',
-  };
-
-  return (
-    <div className={`rounded-lg border ${borderColors[color]} bg-white p-4 shadow-sm`}>
-      <p className="text-xs font-medium uppercase tracking-wider text-gray-500">{label}</p>
-      <p className={`mt-2 text-3xl font-bold ${valueColors[color]}`}>{value}</p>
-      <p className="mt-1 text-xs text-gray-400">{description}</p>
-    </div>
+    </AppShell>
   );
 }

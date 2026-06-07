@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { insforge } from '@/lib/insforge';
+import { AppShell } from '@/components/layout';
+import { Card, Button } from '@/components/ui';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -172,246 +174,274 @@ export default function AiSettingsPage() {
   // Loading state
   if (authLoading || loading) {
     return (
-      <main className="min-h-screen p-8">
-        <div className="mx-auto max-w-2xl">
-          <h1 className="text-2xl font-bold text-gray-900">AI Settings</h1>
-          <p className="mt-4 text-sm text-gray-500">Loading settings…</p>
+      <AppShell>
+        <div className="p-container-margin">
+          <div className="mx-auto max-w-2xl">
+            <h1 className="text-headline-sm text-gray-900">AI Settings</h1>
+            <p className="mt-4 text-body-md text-gray-500">Loading settings…</p>
+          </div>
         </div>
-      </main>
+      </AppShell>
     );
   }
 
   // Not authenticated
   if (!user) {
     return (
-      <main className="min-h-screen p-8">
-        <div className="mx-auto max-w-2xl">
-          <h1 className="text-2xl font-bold text-gray-900">AI Settings</h1>
-          <p className="mt-4 text-sm text-red-600">Please sign in to manage AI settings.</p>
+      <AppShell>
+        <div className="p-container-margin">
+          <div className="mx-auto max-w-2xl">
+            <h1 className="text-headline-sm text-gray-900">AI Settings</h1>
+            <p className="mt-4 text-body-md text-red-600">Please sign in to manage AI settings.</p>
+          </div>
         </div>
-      </main>
+      </AppShell>
     );
   }
 
   // No settings found
   if (!settings) {
     return (
-      <main className="min-h-screen p-8">
-        <div className="mx-auto max-w-2xl">
-          <h1 className="text-2xl font-bold text-gray-900">AI Settings</h1>
-          <p className="mt-4 text-sm text-gray-500">
-            No AI settings found for your organization. Please create an organization first.
-          </p>
-          {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+      <AppShell>
+        <div className="p-container-margin">
+          <div className="mx-auto max-w-2xl">
+            <h1 className="text-headline-sm text-gray-900">AI Settings</h1>
+            <p className="mt-4 text-body-md text-gray-500">
+              No AI settings found for your organization. Please create an organization first.
+            </p>
+            {error && <p className="mt-2 text-body-md text-red-600">{error}</p>}
+          </div>
         </div>
-      </main>
+      </AppShell>
     );
   }
 
   return (
-    <main className="min-h-screen p-8">
-      <div className="mx-auto max-w-2xl">
-        <h1 className="text-2xl font-bold text-gray-900">AI Settings</h1>
-        <p className="mt-1 text-sm text-gray-600">
-          Configure AI mode, confidence threshold, and escalation rules.
-        </p>
+    <AppShell>
+      <div className="p-container-margin">
+        <div className="mx-auto max-w-2xl">
+          {/* Page header */}
+          <h1 className="text-headline-sm text-gray-900">AI Settings</h1>
+          <p className="mt-1 text-body-md text-gray-500">
+            Configure AI mode, confidence threshold, and escalation rules.
+          </p>
 
-        {/* Status messages */}
-        {error && (
-          <div className="mt-4 rounded-md bg-red-50 p-3" role="alert">
-            <p className="text-sm text-red-700">{error}</p>
-          </div>
-        )}
-        {success && (
-          <div className="mt-4 rounded-md bg-green-50 p-3" role="status">
-            <p className="text-sm text-green-700">{success}</p>
-          </div>
-        )}
-
-        <form
-          className="mt-6 space-y-6"
-          onSubmit={(e) => {
-            e.preventDefault();
-            handleSave();
-          }}
-        >
-          {/* AI Mode */}
-          <fieldset>
-            <legend className="text-sm font-medium text-gray-900">AI Mode</legend>
-            <p className="mt-1 text-xs text-gray-500">Choose how the AI handles inbound messages.</p>
-            <div className="mt-3 space-y-2">
-              {AI_MODE_OPTIONS.map((option) => (
-                <label
-                  key={option.value}
-                  className={`flex cursor-pointer items-start rounded-md border p-3 ${
-                    aiMode === option.value
-                      ? 'border-blue-500 bg-blue-50'
-                      : 'border-gray-200 hover:bg-gray-50'
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name="ai_mode"
-                    value={option.value}
-                    checked={aiMode === option.value}
-                    onChange={() => setAiMode(option.value)}
-                    className="mt-0.5 h-4 w-4 text-blue-600 focus:ring-blue-500"
-                  />
-                  <span className="ml-3">
-                    <span className="block text-sm font-medium text-gray-900">{option.label}</span>
-                    <span className="block text-xs text-gray-500">{option.description}</span>
-                  </span>
-                </label>
-              ))}
+          {/* Status messages */}
+          {error && (
+            <div className="mt-4 rounded-md bg-red-50 border border-red-200 p-3" role="alert">
+              <p className="text-body-md text-red-700">{error}</p>
             </div>
-          </fieldset>
-
-          {/* Confidence Threshold */}
-          <div>
-            <label htmlFor="confidence-threshold" className="block text-sm font-medium text-gray-900">
-              Confidence Threshold
-            </label>
-            <p className="mt-1 text-xs text-gray-500">
-              Minimum confidence score for auto-replies (0.0 – 1.0). Current: {confidenceThreshold.toFixed(2)}
-            </p>
-            <input
-              id="confidence-threshold"
-              type="range"
-              min="0"
-              max="1"
-              step="0.01"
-              value={confidenceThreshold}
-              onChange={(e) => setConfidenceThreshold(parseFloat(e.target.value))}
-              className="mt-2 w-full accent-blue-600"
-              aria-valuemin={0}
-              aria-valuemax={1}
-              aria-valuenow={confidenceThreshold}
-            />
-            <div className="mt-1 flex justify-between text-xs text-gray-400">
-              <span>0.00</span>
-              <span>0.50</span>
-              <span>1.00</span>
+          )}
+          {success && (
+            <div className="mt-4 rounded-md bg-green-50 border border-green-200 p-3" role="status">
+              <p className="text-body-md text-green-700">{success}</p>
             </div>
-          </div>
+          )}
 
-          {/* Context Window Size */}
-          <div>
-            <label htmlFor="context-window-size" className="block text-sm font-medium text-gray-900">
-              Context Window Size
-            </label>
-            <p className="mt-1 text-xs text-gray-500">
-              Number of recent messages to include in AI context.
-            </p>
-            <input
-              id="context-window-size"
-              type="number"
-              min="1"
-              max="100"
-              value={contextWindowSize}
-              onChange={(e) => setContextWindowSize(parseInt(e.target.value, 10) || 1)}
-              className="mt-2 block w-32 rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-            />
-          </div>
-
-          {/* Model Selection */}
-          <div>
-            <label htmlFor="model-select" className="block text-sm font-medium text-gray-900">
-              AI Model
-            </label>
-            <p className="mt-1 text-xs text-gray-500">Select the LLM model for AI responses.</p>
-            <select
-              id="model-select"
-              value={model}
-              onChange={(e) => setModel(e.target.value)}
-              className="mt-2 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+          <form
+            className="mt-6 space-y-element-gap"
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleSave();
+            }}
+          >
+            {/* AI Mode Card */}
+            <Card
+              header={
+                <div>
+                  <h2 className="text-headline-sm text-gray-900">AI Mode</h2>
+                  <p className="mt-1 text-body-md text-gray-500">Choose how the AI handles inbound messages.</p>
+                </div>
+              }
+              className="border-ai-200"
             >
-              {MODEL_OPTIONS.map((m) => (
-                <option key={m} value={m}>
-                  {m}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* System Prompt */}
-          <div>
-            <label htmlFor="system-prompt" className="block text-sm font-medium text-gray-900">
-              System Prompt
-            </label>
-            <p className="mt-1 text-xs text-gray-500">
-              Custom instructions for the AI agent. Leave blank for default behavior.
-            </p>
-            <textarea
-              id="system-prompt"
-              rows={4}
-              value={systemPrompt}
-              onChange={(e) => setSystemPrompt(e.target.value)}
-              placeholder="You are a helpful customer support agent…"
-              className="mt-2 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-            />
-          </div>
-
-          {/* Escalation Keywords */}
-          <div>
-            <label htmlFor="keyword-input" className="block text-sm font-medium text-gray-900">
-              Escalation Keywords
-            </label>
-            <p className="mt-1 text-xs text-gray-500">
-              Messages containing these keywords will be escalated to a human agent.
-            </p>
-            <div className="mt-2 flex gap-2">
-              <input
-                id="keyword-input"
-                type="text"
-                value={keywordInput}
-                onChange={(e) => setKeywordInput(e.target.value)}
-                onKeyDown={handleKeywordKeyDown}
-                placeholder="Type a keyword and press Enter"
-                className="block flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-              />
-              <button
-                type="button"
-                onClick={addKeyword}
-                className="rounded-md bg-gray-100 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1"
-              >
-                Add
-              </button>
-            </div>
-            {escalationKeywords.length > 0 && (
-              <div className="mt-2 flex flex-wrap gap-2" role="list" aria-label="Escalation keywords">
-                {escalationKeywords.map((kw) => (
-                  <span
-                    key={kw}
-                    role="listitem"
-                    className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-3 py-1 text-xs font-medium text-blue-800"
+              <div className="space-y-2">
+                {AI_MODE_OPTIONS.map((option) => (
+                  <label
+                    key={option.value}
+                    className={`flex cursor-pointer items-start rounded-md border p-3 transition-colors ${
+                      aiMode === option.value
+                        ? 'border-ai-200 bg-ai-50'
+                        : 'border-surface-border hover:bg-gray-50'
+                    }`}
                   >
-                    {kw}
-                    <button
-                      type="button"
-                      onClick={() => removeKeyword(kw)}
-                      className="ml-1 inline-flex h-4 w-4 items-center justify-center rounded-full text-blue-600 hover:bg-blue-200 hover:text-blue-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      aria-label={`Remove keyword ${kw}`}
-                    >
-                      ×
-                    </button>
-                  </span>
+                    <input
+                      type="radio"
+                      name="ai_mode"
+                      value={option.value}
+                      checked={aiMode === option.value}
+                      onChange={() => setAiMode(option.value)}
+                      className="mt-0.5 h-4 w-4 text-ai-700 focus:ring-ai-500"
+                    />
+                    <span className="ml-3">
+                      <span className="block text-body-md font-medium text-gray-900">{option.label}</span>
+                      <span className="block text-body-sm text-gray-500">{option.description}</span>
+                    </span>
+                  </label>
                 ))}
               </div>
-            )}
-          </div>
+            </Card>
 
-          {/* Save Button */}
-          <div className="flex items-center gap-3 border-t border-gray-200 pt-6">
-            <button
-              type="submit"
-              disabled={saving}
-              className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+            {/* Model Selection Card */}
+            <Card
+              header={
+                <div>
+                  <h2 className="text-headline-sm text-gray-900">Model Selection</h2>
+                  <p className="mt-1 text-body-md text-gray-500">Select the LLM model for AI responses.</p>
+                </div>
+              }
+              className="border-ai-200"
             >
-              {saving ? 'Saving…' : 'Save Changes'}
-            </button>
-          </div>
-        </form>
+              <select
+                id="model-select"
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+                className="block w-full rounded border border-ai-200 bg-ai-50 px-3 py-2 text-body-md text-ai-700 focus:border-ai-500 focus:outline-none focus:ring-2 focus:ring-ai-200 focus:ring-offset-1"
+              >
+                {MODEL_OPTIONS.map((m) => (
+                  <option key={m} value={m}>
+                    {m}
+                  </option>
+                ))}
+              </select>
+            </Card>
+
+            {/* Confidence Threshold Card */}
+            <Card
+              header={
+                <div>
+                  <h2 className="text-headline-sm text-gray-900">Confidence Threshold</h2>
+                  <p className="mt-1 text-body-md text-gray-500">
+                    Minimum confidence score for auto-replies (0.0 – 1.0). Current:{' '}
+                    <span className="font-medium text-ai-700">{confidenceThreshold.toFixed(2)}</span>
+                  </p>
+                </div>
+              }
+              className="border-ai-200"
+            >
+              <input
+                id="confidence-threshold"
+                type="range"
+                min="0"
+                max="1"
+                step="0.01"
+                value={confidenceThreshold}
+                onChange={(e) => setConfidenceThreshold(parseFloat(e.target.value))}
+                className="w-full accent-ai-500"
+                aria-valuemin={0}
+                aria-valuemax={1}
+                aria-valuenow={confidenceThreshold}
+                aria-label="Confidence threshold"
+              />
+              <div className="mt-1 flex justify-between text-label-sm text-gray-400">
+                <span>0.00</span>
+                <span>0.50</span>
+                <span>1.00</span>
+              </div>
+            </Card>
+
+            {/* Context Window Card */}
+            <Card
+              header={
+                <div>
+                  <h2 className="text-headline-sm text-gray-900">Context Window</h2>
+                  <p className="mt-1 text-body-md text-gray-500">
+                    Number of recent messages to include in AI context.
+                  </p>
+                </div>
+              }
+            >
+              <input
+                id="context-window-size"
+                type="number"
+                min="1"
+                max="100"
+                value={contextWindowSize}
+                onChange={(e) => setContextWindowSize(parseInt(e.target.value, 10) || 1)}
+                className="block w-32 rounded border border-gray-300 px-3 py-2 text-body-md focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 focus:ring-offset-1"
+                aria-label="Context window size"
+              />
+            </Card>
+
+            {/* System Prompt Card */}
+            <Card
+              header={
+                <div>
+                  <h2 className="text-headline-sm text-gray-900">System Prompt</h2>
+                  <p className="mt-1 text-body-md text-gray-500">
+                    Custom instructions for the AI agent. Leave blank for default behavior.
+                  </p>
+                </div>
+              }
+              className="border-ai-200"
+            >
+              <textarea
+                id="system-prompt"
+                rows={4}
+                value={systemPrompt}
+                onChange={(e) => setSystemPrompt(e.target.value)}
+                placeholder="You are a helpful customer support agent…"
+                className="block w-full rounded border border-ai-200 bg-ai-50 px-3 py-2 text-body-md text-ai-700 placeholder:text-ai-700/40 focus:border-ai-500 focus:outline-none focus:ring-2 focus:ring-ai-200 focus:ring-offset-1"
+              />
+            </Card>
+
+            {/* Escalation Keywords Card */}
+            <Card
+              header={
+                <div>
+                  <h2 className="text-headline-sm text-gray-900">Escalation Keywords</h2>
+                  <p className="mt-1 text-body-md text-gray-500">
+                    Messages containing these keywords will be escalated to a human agent.
+                  </p>
+                </div>
+              }
+            >
+              <div className="flex gap-2">
+                <input
+                  id="keyword-input"
+                  type="text"
+                  value={keywordInput}
+                  onChange={(e) => setKeywordInput(e.target.value)}
+                  onKeyDown={handleKeywordKeyDown}
+                  placeholder="Type a keyword and press Enter"
+                  className="block flex-1 rounded border border-gray-300 px-3 py-2 text-body-md placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 focus:ring-offset-1"
+                />
+                <Button type="button" variant="secondary" size="md" onClick={addKeyword}>
+                  Add
+                </Button>
+              </div>
+              {escalationKeywords.length > 0 && (
+                <div className="mt-3 flex flex-wrap gap-2" role="list" aria-label="Escalation keywords">
+                  {escalationKeywords.map((kw) => (
+                    <span
+                      key={kw}
+                      role="listitem"
+                      className="inline-flex items-center gap-1 rounded-full bg-ai-50 border border-ai-200 px-3 py-1 text-xs font-medium text-ai-700"
+                    >
+                      {kw}
+                      <button
+                        type="button"
+                        onClick={() => removeKeyword(kw)}
+                        className="ml-1 inline-flex h-4 w-4 items-center justify-center rounded-full text-ai-700 hover:bg-ai-200 hover:text-ai-900 focus:outline-none focus:ring-2 focus:ring-ai-500"
+                        aria-label={`Remove keyword ${kw}`}
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </Card>
+
+            {/* Save Button */}
+            <div className="flex items-center gap-3 border-t border-surface-border pt-6">
+              <Button type="submit" variant="primary" size="md" disabled={saving}>
+                {saving ? 'Saving…' : 'Save Changes'}
+              </Button>
+            </div>
+          </form>
+        </div>
       </div>
-    </main>
+    </AppShell>
   );
 }

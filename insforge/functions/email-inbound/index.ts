@@ -1,25 +1,35 @@
 /**
  * email-inbound — Handles inbound email webhooks from providers.
  *
- * Auth: Webhook signature verification via the provider adapter.
+ * Auth: Webhook signature verification via the provider adapter. The
+ * signing secret is resolved SERVER-SIDE from the receiving email
+ * address (email_addresses → email_provider_accounts.credentials_secret_id
+ * → InsForge secrets endpoint) — never from a caller-supplied header.
+ * See HIGH-6 in docs/QA_BUG_HUNT.md.
  * Delegates to: InboundMessageService.processInboundEmail
  *
  * Flow:
  * 1. Parse request body
- * 2. Determine email provider from x-provider header (default: 'mock')
- * 3. Verify webhook signature via adapter — return 401 if invalid
- * 4. Parse inbound payload via adapter
- * 5. Look up organization ID from the receiving email address (email_addresses table)
- * 6. Create repositories and InboundMessageService
- * 7. Delegate to processInboundEmail()
- * 8. Publish new_message realtime event on org:{orgId} channel
- * 9. Return 200 OK with message data
+ * 2. Determine email provider from x-provider header; refuse mock in production
+ * 3. Build the provider registry and pick the adapter for x-provider
+ * 4. Parse the inbound payload to learn the receiving email address
+ * 5. Construct the InsForge DB + secrets clients (service role)
+ * 6. Resolve the per-org signing secret by receiving email address
+ *    (refuses the request if the address is unknown, the provider
+ *    mismatches, the secret has been rotated out, etc.)
+ * 7. Verify the webhook signature with the server-resolved secret
+ * 8. Create repositories and InboundMessageService
+ * 9. Delegate to processInboundEmail()
+ * 10. Publish new_message realtime event on org:{orgId} channel
+ * 11. Return 200 OK with message data
  *
  * Requirements: 8.4, 16.1, 16.2, 16.3, 23.2, 23.3
  */
 
 import { createDbClient } from '../_shared/create-db-client.js';
 import { createRealtimePublisher } from '../_shared/create-realtime-publisher.js';
+import { InsforgeHttpSecretStore } from '../_shared/insforge-secret-store.js';
+import { resolveWebhookSigningSecret } from '../_shared/resolve-webhook-signing-secret.js';
 
 import { ProviderRegistry } from '../../../packages/support-core/src/interfaces/provider-registry.js';
 import { MockEmailAdapter } from '../../../packages/support-core/src/adapters/mock-email-adapter.js';
@@ -98,28 +108,6 @@ class PostgRestJobQueue implements JobQueue {
   async fail(_jobId: string, _error: string): Promise<void> {
     throw new Error('fail() not implemented in email-inbound context');
   }
-}
-
-// ---------------------------------------------------------------------------
-// Helper: look up organization ID from the receiving email address
-// ---------------------------------------------------------------------------
-
-async function lookupOrgByEmailAddress(
-  db: DatabaseClient,
-  emailAddress: string,
-): Promise<string | null> {
-  const { data, error } = await db
-    .from('email_addresses')
-    .select('organization_id')
-    .eq('email_address', emailAddress)
-    .limit(1)
-    .single();
-
-  if (error || !data) {
-    return null;
-  }
-
-  return (data as Record<string, unknown>).organization_id as string;
 }
 
 // ---------------------------------------------------------------------------
@@ -206,28 +194,21 @@ export default async function (req: Request): Promise<Response> {
       return jsonResponse({ error: `Unknown email provider: ${provider}` }, 400);
     }
 
-    // 4. Verify webhook signature
-    const signingSecret =
-      req.headers.get('x-signing-secret') ?? '';
-    const headers: Record<string, string> = {};
-    req.headers.forEach((value, key) => {
-      headers[key] = value;
-    });
-
-    const isValid = await adapter.verifyWebhook({
-      headers,
-      body: rawBody,
-      signingSecret,
-    });
-
-    if (!isValid) {
-      return jsonResponse({ error: 'Webhook signature verification failed' }, 401);
+    // 4. Parse the inbound payload FIRST (server-side, not caller-supplied)
+    //    so we know the `to` address. The body and the parsed `to` are
+    //    server-derived; the only caller-derived signal is the HTTP
+    //    envelope, which we treat as untrusted.
+    let normalized;
+    try {
+      normalized = adapter.parseInboundWebhook(body);
+    } catch (err) {
+      return jsonResponse(
+        { error: 'Invalid inbound payload', message: err instanceof Error ? err.message : 'parse failed' },
+        400,
+      );
     }
 
-    // 5. Parse and normalize inbound payload
-    const normalized = adapter.parseInboundWebhook(body);
-
-    // 6. Create InsForge database client
+    // 5. Construct the InsForge DB + secrets clients (service role).
     const baseUrl =
       (typeof Deno !== 'undefined' ? Deno.env.get('INSFORGE_BASE_URL') : undefined) ??
       process.env.NEXT_PUBLIC_INSFORGE_URL ??
@@ -238,19 +219,69 @@ export default async function (req: Request): Promise<Response> {
       '';
 
     const db = createDbClient(baseUrl, serviceRoleKey);
+    const secretStore = new InsforgeHttpSecretStore(baseUrl, serviceRoleKey);
 
-    // 7. Determine organization ID from the receiving email address.
-    // The org is always derived from the server-verifiable receiving
-    // address (email_addresses table) — never from a caller-supplied
-    // header. See docs/QA_BUG_HUNT.md CRITICAL-3.
-    const orgId = await lookupOrgByEmailAddress(db, normalized.to);
+    // 6. HIGH-6 fix: resolve the per-org webhook signing secret from
+    //    the receiving email address — never from a request header.
+    //    The x-signing-secret header is no longer consulted (it would
+    //    be caller-controlled, see QA_BUG_HUNT.md).
+    const resolution = await resolveWebhookSigningSecret({
+      db,
+      secretStore,
+      addressTable: 'email_addresses',
+      addressColumn: 'email_address',
+      providerAccountTable: 'email_provider_accounts',
+      address: normalized.to,
+      requestedProvider: provider,
+    });
 
-    if (!orgId) {
-      return jsonResponse(
-        { error: 'Could not determine organization for receiving email address' },
-        404,
-      );
+    if (resolution.kind === 'address_unknown') {
+      // No tenant has registered this receiving address. This is
+      // indistinguishable from a forged webhook targeting a non-existent
+      // address — refuse with 404 (and the same 401-shaped reason string
+      // so attackers cannot enumerate registered addresses).
+      return jsonResponse({ error: 'Webhook signature verification failed' }, 404);
     }
+    if (resolution.kind === 'provider_mismatch') {
+      // Defense in depth: x-provider claims a different provider than
+      // the row's `provider` column. Almost certainly a mismatch attack
+      // — refuse with 401.
+      return jsonResponse({ error: 'Webhook signature verification failed' }, 401);
+    }
+    if (resolution.kind === 'provider_account_missing') {
+      return jsonResponse({ error: 'Webhook signature verification failed' }, 500);
+    }
+    if (resolution.kind === 'provider_account_inactive') {
+      // The org's provider account has been disabled (e.g. rotation
+      // in progress). 401 — the webhook cannot be processed.
+      return jsonResponse({ error: 'Webhook signature verification failed' }, 401);
+    }
+    if (resolution.kind === 'secret_missing') {
+      // The credentials_secret_id in the DB no longer resolves in the
+      // secrets store. This is the post-rotation-cleanup state. Refuse
+      // with 401 and let an operator notice via the missing-secret
+      // log line emitted in the resolver.
+      return jsonResponse({ error: 'Webhook signature verification failed' }, 401);
+    }
+
+    // 7. Verify webhook signature with the SERVER-RESOLVED secret.
+    //    Build the headers map for the adapter.
+    const headers: Record<string, string> = {};
+    req.headers.forEach((value, key) => {
+      headers[key] = value;
+    });
+
+    const isValid = await adapter.verifyWebhook({
+      headers,
+      body: rawBody,
+      signingSecret: resolution.signingSecret,
+    });
+
+    if (!isValid) {
+      return jsonResponse({ error: 'Webhook signature verification failed' }, 401);
+    }
+
+    const orgId = resolution.orgId;
 
     // 8. Create repositories and service
     const contactRepo = new ContactRepository(db);

@@ -12,7 +12,7 @@
 | PII | contact name, phone, email | `contacts`, `conversations`, `messages` | TLS in transit; Postgres at-rest encryption managed by InsForge |
 | Message content | SMS / email bodies in/out | `messages`, `sms_delivery_events`, `email_delivery_events` | Same as PII |
 | Embeddings | KB chunk vectors | `knowledge_chunks` (pgvector) | Same as PII |
-| Provider credentials | Twilio auth token, Postmark server token, OpenRouter API key | InsForge secrets endpoint, referenced by opaque id | Provider-side at rest; never sent to client |
+| Provider credentials | Twilio auth token, Postmark server token, OpenRouter API key | InsForge secrets endpoint (`GET /secrets/v1/{id}`), referenced by opaque id (`credentials_secret_id`) on `*_provider_accounts` rows | Provider-side at rest; never sent to client |
 | Audit | action, actor, resource, timestamp | `audit_logs` (append-only) | Same as PII |
 | Metadata | org settings, AI settings | `organizations`, `ai_settings` | Same as PII |
 
@@ -28,7 +28,9 @@ Every tenant-scoped table has Row Level Security enabled. `insforge/migrations/0
 
 ## 3. Authentication
 
-The 7 user-action functions (`send-reply`, `approve-ai-draft`, `regenerate-ai-draft`, `escalate-conversation`, `resolve-conversation`, `reopen-conversation`, `test-channel-connection`) call `verifyJwt(req, baseUrl, serviceRoleKey)` from `insforge/functions/_shared/verify-jwt.ts:26-75`, extracting the `Authorization: Bearer ***` header and verifying it against the InsForge auth endpoint; missing / invalid tokens return `null` → caller maps to 401. The 4 inbound / status webhook functions (`sms-inbound`, `sms-status`, `email-inbound`, `email-status`) verify per-provider signatures via each adapter's `verifyWebhook(...)` (e.g. `insforge/functions/sms-inbound/index.ts:217`) and return 401 on failure.
+The 7 user-action functions (`send-reply`, `approve-ai-draft`, `regenerate-ai-draft`, `escalate-conversation`, `resolve-conversation`, `reopen-conversation`, `test-channel-connection`) call `verifyJwt(req, baseUrl, serviceRoleKey)` from `insforge/functions/_shared/verify-jwt.ts:26-75`, extracting the `Authorization: Bearer *** header and verifying it against the InsForge auth endpoint; missing / invalid tokens return `null` → caller maps to 401.
+
+The 4 inbound / status webhook functions (`sms-inbound`, `sms-status`, `email-inbound`, `email-status`) verify per-provider signatures via each adapter's `verifyWebhook(...)`. **The signing secret is no longer read from a caller-controlled header** — it is resolved server-side from the receiving address (`email_addresses` / `sms_phone_numbers` → `*_provider_accounts.credentials_secret_id` → InsForge secrets endpoint) by `resolveWebhookSigningSecret()` in `insforge/functions/_shared/resolve-webhook-signing-secret.ts:86`. Defense in depth: the resolver also cross-checks the `x-provider` header against the row's `provider` column and refuses on mismatch. Closed HIGH-6 (`t_1eec7266`).
 
 ## 4. Audit trail
 

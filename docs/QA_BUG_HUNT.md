@@ -164,6 +164,7 @@ The 6 integration suites are all `.skip()`-equivalent (file-level skip pattern),
 - **Suggested fix:** Look up `email_provider_accounts` and `email_addresses` first; fetch the secret from the org-scoped credential store by the row's `credentials_secret_id`; then call `verifyWebhook` with that secret.
 - **Theme:** Auth / Webhook signature source
 - **Effort:** M
+- **Closed by:** `t_1eec7266` — server resolves the secret via the new `resolveWebhookSigningSecret` helper (`insforge/functions/_shared/resolve-webhook-signing-secret.ts`) and `InsforgeHttpSecretStore` (`insforge/functions/_shared/insforge-secret-store.ts`). The `x-signing-secret` header is no longer consulted. Coverage: 16 new tests in `__tests__/webhook-signing-secret-resolver.test.ts` (helper) and `__tests__/webhook-signing-secret-source.test.ts` (entrypoint).
 
 ### HIGH-7 — `app/knowledge/page.tsx` is broken for any signed-in user; missing `organization_id` in insert
 - **File:line:** `app/knowledge/page.tsx:119-127`

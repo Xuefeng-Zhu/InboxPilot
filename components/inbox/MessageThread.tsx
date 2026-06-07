@@ -33,10 +33,13 @@ export function MessageThread({ conversationId }: MessageThreadProps) {
     }
   }, [messages]);
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (isBackground = false) => {
     if (!user) return;
 
-    setLoading(true);
+    // Only show loading spinner on initial load, not on background polls
+    if (!isBackground) {
+      setLoading(true);
+    }
     setError(null);
 
     try {
@@ -80,9 +83,10 @@ export function MessageThread({ conversationId }: MessageThreadProps) {
     fetchData();
   }, [fetchData]);
 
-  // Poll for new messages every 5 seconds
+  // Subscribe to realtime messages for this conversation (no more polling)
   useRealtime({
-    onNewMessage: fetchData,
+    onNewMessage: () => fetchData(true),
+    messageChannel: `inbox:messages:${conversationId}`,
     enabled: !!user,
   });
 

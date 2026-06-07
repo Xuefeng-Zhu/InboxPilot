@@ -25,8 +25,9 @@ export function ConversationList({ selectedId, onSelect }: ConversationListProps
   const [conversations, setConversations] = useState<ConversationRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [orgId, setOrgId] = useState<string | null>(null);
 
-  const fetchConversations = useCallback(async () => {
+  const fetchConversations = useCallback(async (isBackground = false) => {
     if (authLoading) return;
 
     if (!user) {
@@ -35,7 +36,10 @@ export function ConversationList({ selectedId, onSelect }: ConversationListProps
       return;
     }
 
-    setLoading(true);
+    // Only show loading spinner on initial load, not on background polls
+    if (!isBackground) {
+      setLoading(true);
+    }
     setError(null);
 
     try {
@@ -92,6 +96,7 @@ export function ConversationList({ selectedId, onSelect }: ConversationListProps
       }
 
       const orgId = (memberArr[0] as { organization_id: string }).organization_id;
+      setOrgId(orgId);
 
       // Fetch conversations with joined contact data, sorted by last_message_at desc
       const { data, error: fetchError } = await insforge.database
@@ -118,11 +123,12 @@ export function ConversationList({ selectedId, onSelect }: ConversationListProps
     fetchConversations();
   }, [fetchConversations]);
 
-  // Poll for new messages and conversation updates every 5 seconds
+  // Subscribe to realtime conversation updates for this org
   useRealtime({
-    onNewMessage: fetchConversations,
-    onConversationUpdated: fetchConversations,
-    enabled: !!user,
+    onNewMessage: () => fetchConversations(true),
+    onConversationUpdated: () => fetchConversations(true),
+    conversationChannel: orgId ? `inbox:conversations:${orgId}` : undefined,
+    enabled: !!user && !!orgId,
   });
 
   // ---- Render ------------------------------------------------------------

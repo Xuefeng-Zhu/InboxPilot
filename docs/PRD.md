@@ -127,7 +127,7 @@ These are the leading indicators that tell us, *before* the North Star moves, wh
 
 **Why this and not just M0.** Deflection counts *attempts*; M0 counts *successes*. A tenant with high deflection but low containment is one where the AI is sending a lot of replies but customers are still coming back to a human within 7 days. That is a different failure mode (the AI is *too* confident, or the knowledge base is *too* thin) and demands a different fix.
 
-**Measurement event.** Same as M0 but counts messages, not conversations. Computed in `docs/METRICS.md` (not yet written — see `LAUNCH_CHECKLIST.md` §5.4 and parent card `t_ops_runbook`).
+**Measurement event.** Same as M0 but counts messages, not conversations. Query is in `docs/METRICS.md` M1 (§"Input metrics"). Reviewed weekly per `LAUNCH_CHECKLIST.md` §4.3.
 
 #### M2 — First response time (FRT)
 
@@ -475,7 +475,7 @@ Every boundary in the table resolves to one of: a row in `organization_subscript
 
 ### 8.2 Documents this PRD is *not* a substitute for
 
-- `docs/METRICS.md` (not yet written; `t_ops_runbook` is the parent card). §3 commits to the *events*; the metric-tree card writes the SQL.
+- `docs/METRICS.md` (shipped by `t_pm_metric_tree`, commit 85b816d). §3 commits to the *events*; METRICS.md commits to the *SQL* that produces those counts. 6 input metrics + 2 watch metrics, each tied to a schema event.
 - `docs/INCIDENT_RESPONSE.md` (not yet written; `t_sec_incident_response` is the parent card). §6 R1 references the runbook but does not write it.
 - `docs/SECURITY_MODEL.md` (not yet written; `t_sec_security_model` is the parent card). §6 R3 references it.
 - `docs/USER_STORIES.md` (not yet written as a standalone doc; `t_pm_user_stories` is the parent card). The §4 features will be expanded into user stories with P0/P1/P2 tags.

@@ -56,3 +56,10 @@ insforge/functions/.last_good/
 eval-output/
 !eval-output/baseline.json
 !eval-output/.gitkeep
+
+# RLS probe suite runtime artifact — written by the rls-policies
+# integration test (packages/support-core/__tests__/integration/rls-policies.test.ts)
+# on every run. The CI workflow uploads it as a build artifact on
+# failure; the in-tree copy is just a developer convenience for
+# inspecting the last local run.
+rls-probe-report.json

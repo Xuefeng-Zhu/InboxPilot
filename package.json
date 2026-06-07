@@ -11,6 +11,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:core": "vitest run --project support-core",
+    "test:rls": "vitest run packages/support-core/__tests__/integration/rls-policies.test.ts",
+    "test:rls:auto": "RLS_TEST_AUTO_SETUP=1 RLS_TEST_DB=rls_test_ci npm run test:rls",
     "test:webhook-tunnel": "vitest run __tests__/twilio-webhook-tunnel.test.ts",
     "test:rotation": "vitest run packages/support-core/__tests__/unit/sms-provider-credential-rotation.test.ts",
     "perf:api": "bash scripts/api-perf.sh",

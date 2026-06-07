@@ -1,0 +1,178 @@
+# .github/workflows/rls.yml — RLS policy integration test gate.
+#
+# Runs the RLS probe suite against a freshly-migrated Postgres
+# database. The probe matrix covers all 17 tenant tables, the
+# audit_logs append-only invariant, and the two CRITICAL findings
+# from docs/RLS_AUDIT.md (organizations_insert policy + the
+# credentials_secret_id column grant). See the test file for the
+# full acceptance criteria.
+#
+# Background
+# ----------
+# The RLS probe was the only automated proof of multi-tenant
+# isolation in the project, and it was a stub (9 lines of `it.todo`)
+# until card t_bdab73ac. We now run the real probe on every PR
+# that touches a migration, a support-core test, or this workflow,
+# so a regression in any RLS policy surfaces as a failing PR check
+# rather than a customer incident.
+#
+# Pair with:
+#   scripts/rls/setup-test-db.sh
+#   scripts/rls/probe.ts
+#   packages/support-core/__tests__/integration/rls-policies.test.ts
+#   docs/RLS_AUDIT.md
+#
+# Why a dedicated workflow (not part of `npm test`):
+#   - The test needs `sudo -u postgres psql`, which isn't safe in
+#     the existing CI sandbox. We run as root in a service container
+#     and use a fresh, throwaway DB.
+#   - The probe takes ~5-10s on a warm DB and ~25-30s with a fresh
+#     migrate. A separate workflow keeps the regular test path
+#     snappy.
+#   - The setup script + the probe both need a writable
+#     /tmp/rls_test_stripped, so we avoid coupling it with the
+#     perf workflow that mounts its own artifacts.
+
+name: RLS policies
+
+on:
+  pull_request:
+    paths:
+      - 'insforge/migrations/**'
+      - 'packages/support-core/__tests__/integration/rls-policies.test.ts'
+      - 'scripts/rls/**'
+      - '.github/workflows/rls.yml'
+      - 'package.json'
+      - 'package-lock.json'
+  push:
+    branches: [main]
+    paths:
+      - 'insforge/migrations/**'
+      - 'packages/support-core/__tests__/integration/rls-policies.test.ts'
+      - 'scripts/rls/**'
+      - '.github/workflows/rls.yml'
+
+# Don't run on a fork PR's secrets. The RLS workflow doesn't need
+# any, but we lock it down for consistency with the rest of the
+# project's workflows.
+concurrency:
+  group: rls-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  rls:
+    name: RLS probe (17 tables × 4 probes + audit_logs + credentials)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    # We use a service container for Postgres so the test runs
+    # against a real, fresh database every time. The container is
+    # not the InboxPilot production DB — it's a throwaway sandbox
+    # that the InsForge migration runner (or, in this case, our
+    # setup script) provisions from scratch.
+    services:
+      postgres:
+        image: postgres:14
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        # healthcheck is implicit; ubuntu-latest image has the
+        # `postgres` client + a `postgres` user we can sudo to.
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+
+    env:
+      # Match the local dev script's name so the team can re-run
+      # locally against the same DB shape (e.g. `npm run test:rls`).
+      RLS_TEST_DB: rls_test_ci
+      RLS_TEST_AUTO_SETUP: '1'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install psql client + sudo
+        # The setup script runs migrations as the `postgres` user
+        # via `sudo -u postgres psql`. The GH Actions ubuntu
+        # runner has `sudo` but no `postgres` OS user, so we add
+        # one and grant passwordless sudo.
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -yqq postgresql-client
+          # The `postgres` container's PGUSER is `postgres`; the
+          # GH runner doesn't have a `postgres` OS user. Create
+          # one (no shell) so `sudo -u postgres` works.
+          if ! id postgres >/dev/null 2>&1; then
+            sudo useradd -r -s /usr/sbin/nologin postgres
+          fi
+          echo "$USER ALL=(postgres) NOPASSWD: ALL" | sudo tee /etc/sudoers.d/postgres
+          sudo chmod 440 /etc/sudoers.d/postgres
+
+      - name: Wait for Postgres to be ready
+        run: |
+          for i in $(seq 1 30); do
+            if pg_isready -h 127.0.0.1 -U postgres; then exit 0; fi
+            sleep 1
+          done
+          echo "Postgres never became ready" >&2
+          exit 1
+
+      - name: Run RLS probes
+        id: rls
+        # The test suite runs `sudo -u postgres psql` against the
+        # service container on localhost:5432. We need PGHOST to
+        # be set so psql talks to the right place, and we need
+        # PGPASSWORD so the passwordless-sudo flow can still
+        # authenticate (sudo handles the user; psql still needs
+        # the password for the connection).
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: '5432'
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: |
+          set -euo pipefail
+          npm run test:rls:auto
+
+      - name: Upload probe report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rls-probe-report
+          path: rls-probe-report.json
+          retention-days: 30
+
+      - name: Summarize
+        if: always()
+        run: |
+          if [ -f rls-probe-report.json ]; then
+            echo "## RLS probe report"
+            echo ""
+            echo '```json'
+            # Truncate to keep the log readable; the full report
+            # is available as an artifact on failure.
+            head -c 4000 rls-probe-report.json
+            echo ""
+            echo '```'
+          else
+            echo "_No probe report produced (suite may have been skipped)._"
+          fi

@@ -18,7 +18,7 @@
 
 import { createDbClient } from '../_shared/create-db-client.js';
 import { createRealtimePublisher } from '../_shared/create-realtime-publisher.js';
-import { requireOrgMembership } from '../_shared/require-org-membership.js';
+import { requirePermission } from '../_shared/require-permission.js';
 import { verifyJwt } from '../_shared/verify-jwt.js';
 
 import { ConversationRepository } from '../../../packages/support-core/src/repositories/conversation-repository.js';
@@ -76,17 +76,28 @@ export default async function (req: Request): Promise<Response> {
     // 3. Create database client, repositories, and job queue
     const db = createDbClient(baseUrl, serviceRoleKey);
 
-    // CRITICAL-2: enforce org membership before enqueuing work on a
-    // conversation. requireOrgMembership returns the conversation's
-    // organizationId on success.
-    const membership = await requireOrgMembership(db, userId, conversationId);
-    if (membership.kind === 'conversation_not_found') {
+    // HIGH-1: enforce org membership AND permission before enqueuing
+    // work on a conversation. requirePermission returns the
+    // conversation's organizationId on success. 'manage_settings' gates
+    // regenerating AI drafts because the regenerate action re-runs the
+    // AI pipeline (OpenAI cost + audit log entry).
+    const check = await requirePermission(db, userId, conversationId, 'manage_settings');
+    if (check.kind === 'conversation_not_found') {
       return jsonResponse({ error: 'Conversation not found' }, 404);
     }
-    if (membership.kind === 'forbidden') {
+    if (check.kind === 'forbidden') {
       return jsonResponse({ error: 'Forbidden: not a member of this conversation\'s organization' }, 403);
     }
-    const orgId = membership.organizationId;
+    if (check.kind === 'insufficient_permissions') {
+      return jsonResponse(
+        {
+          error: 'Forbidden: insufficient permissions',
+          message: `Your role "${check.role}" does not have "${check.permission}" permission`,
+        },
+        403,
+      );
+    }
+    const orgId = check.organizationId;
 
     const conversationRepo = new ConversationRepository(db);
     const auditLogRepo = new AuditLogRepository(db);

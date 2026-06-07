@@ -289,10 +289,14 @@ describe('RBAC property tests', () => {
     );
   });
 
-  it('Property 14: RBAC — agent permissions are exactly {view_conversations, reply_conversations, view_knowledge, view_settings}', () => {
+  it('Property 14: RBAC — agent permissions are exactly {view_conversations, reply_conversations, manage_conversations, view_knowledge, view_settings}', () => {
+    // HIGH-1: agents now have manage_conversations (escalate/resolve/reopen)
+    // in addition to the read-only set. They do NOT have manage_settings
+    // or manage_knowledge — those are admin-level.
     const agentPermissions = new Set<Permission>([
       'view_conversations',
       'reply_conversations',
+      'manage_conversations',
       'view_knowledge',
       'view_settings',
     ]);

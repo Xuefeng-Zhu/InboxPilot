@@ -19,7 +19,7 @@
 
 import { createDbClient } from '../_shared/create-db-client.js';
 import { createRealtimePublisher } from '../_shared/create-realtime-publisher.js';
-import { requireOrgMembership } from '../_shared/require-org-membership.js';
+import { requirePermission } from '../_shared/require-permission.js';
 import { verifyJwt } from '../_shared/verify-jwt.js';
 
 import { ProviderRegistry } from '../../../packages/support-core/src/interfaces/provider-registry.js';
@@ -89,17 +89,29 @@ export default async function (req: Request): Promise<Response> {
     // 3. Create database client, repositories, provider registry, and service
     const db = createDbClient(baseUrl, serviceRoleKey);
 
-    // CRITICAL-2: enforce org membership before any mutation or even
-    // reading the AI decision's response text. requireOrgMembership
-    // returns the conversation's organizationId on success.
-    const membership = await requireOrgMembership(db, userId, conversationId);
-    if (membership.kind === 'conversation_not_found') {
+    // HIGH-1: enforce org membership AND permission before any mutation or
+    // even reading the AI decision's response text. requirePermission
+    // returns the conversation's organizationId on success. The
+    // permission 'manage_settings' gates approving AI drafts because
+    // approving an AI draft is an admin-level decision (it sends a real
+    // outbound message and writes to the audit log).
+    const check = await requirePermission(db, userId, conversationId, 'manage_settings');
+    if (check.kind === 'conversation_not_found') {
       return jsonResponse({ error: 'Conversation not found' }, 404);
     }
-    if (membership.kind === 'forbidden') {
+    if (check.kind === 'forbidden') {
       return jsonResponse({ error: 'Forbidden: not a member of this conversation\'s organization' }, 403);
     }
-    const orgId = membership.organizationId;
+    if (check.kind === 'insufficient_permissions') {
+      return jsonResponse(
+        {
+          error: 'Forbidden: insufficient permissions',
+          message: `Your role "${check.role}" does not have "${check.permission}" permission`,
+        },
+        403,
+      );
+    }
+    const orgId = check.organizationId;
 
     const conversationRepo = new ConversationRepository(db);
     const contactRepo = new ContactRepository(db);

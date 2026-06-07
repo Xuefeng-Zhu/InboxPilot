@@ -7,8 +7,14 @@
  * Permission matrix:
  * - owner:  full access (all permissions)
  * - admin:  all except 'delete_org' (no owner transfer or org deletion)
- * - agent:  view/reply conversations, view knowledge base, view settings
+ * - agent:  view/reply conversations, view knowledge base, view settings, and
+ *           manage conversation state (escalate/resolve/reopen) on assigned
+ *           conversations
  * - viewer: read-only conversations and knowledge base
+ *
+ * HIGH-1 from docs/QA_BUG_HUNT.md: this matrix is now actually enforced at the
+ * application layer (see insforge/functions/_shared/require-permission.ts),
+ * not just unit-tested.
  */
 
 import type { MemberRole } from '../types/index.js';
@@ -18,6 +24,7 @@ export type Permission =
   | 'manage_members'
   | 'manage_settings'
   | 'manage_knowledge'
+  | 'manage_conversations'
   | 'view_conversations'
   | 'reply_conversations'
   | 'view_knowledge'
@@ -31,6 +38,7 @@ export const ALL_PERMISSIONS: readonly Permission[] = [
   'manage_members',
   'manage_settings',
   'manage_knowledge',
+  'manage_conversations',
   'view_conversations',
   'reply_conversations',
   'view_knowledge',
@@ -44,8 +52,15 @@ export const ALL_PERMISSIONS: readonly Permission[] = [
  *
  * - owner:  all permissions
  * - admin:  all except delete_org
- * - agent:  view_conversations, reply_conversations, view_knowledge, view_settings
- * - viewer: view_conversations, view_knowledge
+ * - agent:  view/reply conversations, view KB, view settings, AND manage
+ *           conversation state (escalate/resolve/reopen) — agents are the
+ *           day-to-day operators who triage and resolve tickets
+ * - viewer: read-only conversations and knowledge base
+ *
+ * Note: agent intentionally does NOT include `manage_settings` (settings
+ * change affects org-wide behaviour) or `manage_knowledge` (KB edits are
+ * admin-level). They get `manage_conversations` so they can escalate /
+ * resolve / reopen without needing admin to babysit every state change.
  */
 export const ROLE_PERMISSIONS: Record<MemberRole, readonly Permission[]> = {
   owner: ALL_PERMISSIONS,
@@ -54,6 +69,7 @@ export const ROLE_PERMISSIONS: Record<MemberRole, readonly Permission[]> = {
     'manage_members',
     'manage_settings',
     'manage_knowledge',
+    'manage_conversations',
     'view_conversations',
     'reply_conversations',
     'view_knowledge',
@@ -63,6 +79,7 @@ export const ROLE_PERMISSIONS: Record<MemberRole, readonly Permission[]> = {
   agent: [
     'view_conversations',
     'reply_conversations',
+    'manage_conversations',
     'view_knowledge',
     'view_settings',
   ],

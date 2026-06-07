@@ -40,7 +40,7 @@ The escalation engine runs **before** any LLM call. `packages/support-core/src/s
 
 ## 6. Threat model
 
-**Addressed:** cross-tenant access (RLS on 17 tables, property-tested); credential leak via DB query (column-level `REVOKE SELECT` on `credentials_secret_id`, secrets in a separate store); unauthenticated function invocation (JWT on 7 user functions, provider signatures on 4 webhooks — CRITICAL-1/2/3/4 from `QA_BUG_HUNT.md` shipped in `821b132`, `97d0dba`, `8407aa1`, `650cd06`); prompt injection / AI misuse (pre-LLM escalation rules); audit tampering (append-only at code and schema layers).
+**Addressed:** cross-tenant access (RLS on 17 tables, property-tested); credential leak via DB query (column-level `REVOKE SELECT` on `credentials_secret_id`, secrets in a separate store); unauthenticated function invocation (JWT on 7 user functions, provider signatures on 4 webhooks — CRITICAL-1/2/3/4 from `QA_BUG_HUNT.md` shipped in `821b132`, `97d0dba`, `8407aa1`, `650cd06`); application-layer RBAC enforcement (HIGH-1 — the `rbac` permission matrix is now actually enforced in every conversation-mutating function via `insforge/functions/_shared/require-permission.ts`; `rbac.ts` was previously 100% unit-tested but never imported by any entrypoint); prompt injection / AI misuse (pre-LLM escalation rules); audit tampering (append-only at code and schema layers).
 
 **Not addressed:** DDoS at the edge (we rely on InsForge platform protections; no app-layer rate limiting yet); customer-side key compromise — MFA / SSO are on the roadmap; external pen-test (separate card `t_sec_pentest_scope`); SOC 2 (separate workstream).
 

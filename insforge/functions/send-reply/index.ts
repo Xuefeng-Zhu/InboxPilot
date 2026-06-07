@@ -17,7 +17,7 @@
 
 import { createDbClient } from '../_shared/create-db-client.js';
 import { createRealtimePublisher } from '../_shared/create-realtime-publisher.js';
-import { requireOrgMembership } from '../_shared/require-org-membership.js';
+import { requirePermission } from '../_shared/require-permission.js';
 import { verifyJwt } from '../_shared/verify-jwt.js';
 
 import { ProviderRegistry } from '../../../packages/support-core/src/interfaces/provider-registry.js';
@@ -86,20 +86,31 @@ export default async function (req: Request): Promise<Response> {
     // 3. Create database client, repositories, provider registry, and service
     const db = createDbClient(baseUrl, serviceRoleKey);
 
-    // CRITICAL-2: enforce org membership before any mutation. JWT alone is
-    // not enough — any authenticated user in any tenant could otherwise
-    // pass another tenant's conversationId and trigger real outbound
-    // SMS/email. requireOrgMembership returns the conversation's
+    // HIGH-1: enforce org membership AND permission before any mutation.
+    // JWT alone is not enough — any authenticated user in any tenant could
+    // otherwise pass another tenant's conversationId and trigger real
+    // outbound SMS/email. requirePermission returns the conversation's
     // organizationId on success, so we reuse it for the realtime publish
-    // (avoids a redundant findById).
-    const membership = await requireOrgMembership(db, userId, conversationId);
-    if (membership.kind === 'conversation_not_found') {
+    // (avoids a redundant findById). The permission argument pins the
+    // RBAC contract: 'reply_conversations' is granted to owner / admin /
+    // agent, NOT to viewer.
+    const check = await requirePermission(db, userId, conversationId, 'reply_conversations');
+    if (check.kind === 'conversation_not_found') {
       return jsonResponse({ error: 'Conversation not found' }, 404);
     }
-    if (membership.kind === 'forbidden') {
+    if (check.kind === 'forbidden') {
       return jsonResponse({ error: 'Forbidden: not a member of this conversation\'s organization' }, 403);
     }
-    const orgId = membership.organizationId;
+    if (check.kind === 'insufficient_permissions') {
+      return jsonResponse(
+        {
+          error: 'Forbidden: insufficient permissions',
+          message: `Your role "${check.role}" does not have "${check.permission}" permission`,
+        },
+        403,
+      );
+    }
+    const orgId = check.organizationId;
 
     const conversationRepo = new ConversationRepository(db);
     const contactRepo = new ContactRepository(db);

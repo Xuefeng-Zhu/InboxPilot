@@ -316,13 +316,32 @@ apply_one() {
 
   log "  → applying $version"
   if [[ $DRY_RUN -eq 1 ]]; then
-    log "    DRY-RUN: would '$INSFORGE_CLI_CMD db import $file' and record sha=$sha"
+    log "    DRY-RUN: would '$INSFORGE_CLI_CMD db import' the @up section of $version and record sha=$sha"
+    log "    Note: we import only the @up section, never the @down block. The @down block"
+    log "    is reserved for scripts/apply-migrations.down.sh. This is the closure for"
+    log "    RLS_AUDIT.md MEDIUM-1 — the @down block never runs in the up direction."
     return 0
   fi
 
-  if ! $INSFORGE_CLI_CMD db import "$file" 2>/dev/null; then
-    die "db import failed for $version. Inspect '$file' and the live DB state."
+  # Extract only the @up section to a temp file. We deliberately do NOT
+  # pass the whole .sql to `db import`: the QA-audit MEDIUM-1 finding
+  # showed that raw `psql -f` would run the @down block in the up
+  # direction and drop the schema. The InsForge CLI is *believed* to
+  # strip @down, but we don't rely on that — extracting the @up section
+  # at the runner level makes the safety property a runner invariant
+  # rather than a CLI contract, and is exactly one `awk` call.
+  local up_tmp
+  up_tmp="$(mktemp -t "migup-${version}-XXXXXX.sql")"
+  trap 'rm -f "$up_tmp"' EXIT
+  # shellcheck disable=SC1090
+  source "$SCRIPT_DIR/lib/migration-test-helpers.sh"
+  extract_up_block "$file" > "$up_tmp"
+
+  if ! $INSFORGE_CLI_CMD db import "$up_tmp" 2>/dev/null; then
+    rm -f "$up_tmp"
+    die "db import failed for $version (up section). Inspect '$file' and the live DB state."
   fi
+  rm -f "$up_tmp"
 
   # UPSERT: update sha256 if the row exists, insert otherwise. Single
   # statement per call (see sql_query note above).

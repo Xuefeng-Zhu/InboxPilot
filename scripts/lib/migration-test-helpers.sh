@@ -78,6 +78,36 @@ extract_down_block() {
 }
 
 # -----------------------------------------------------------------------------
+# extract_up_block <file>
+#   Echoes everything BEFORE the "-- @down" marker (i.e. the @up section,
+#   the inverse of extract_down_block). This is the section the apply
+#   runner must hand to `db import` if it wants to be safe regardless of
+#   whether the CLI strips @down blocks. If no @down marker is present,
+#   the entire file is echoed. Empty if the file is empty or starts with
+#   @down.
+# -----------------------------------------------------------------------------
+extract_up_block() {
+  awk '
+    /^-- @down/   { exit }
+    { print }
+  ' "$1"
+}
+
+# -----------------------------------------------------------------------------
+# has_down_block <file>
+#   Returns 0 (true) if the file contains a "-- @down" / "-- @end" pair,
+#   1 (false) otherwise. Used by the integration smoke test to assert
+#   that every real migration in insforge/migrations/ is paired (LAUNCH_CHECKLIST §8.2).
+# -----------------------------------------------------------------------------
+has_down_block() {
+  local file="$1"
+  local d e
+  d="$(grep -c -E '^-- @down'   "$file" || true)"
+  e="$(grep -c -E '^-- @end'    "$file" || true)"
+  [[ "$d" -ge 1 && "$e" -ge 1 ]]
+}
+
+# -----------------------------------------------------------------------------
 # compute_plan <migrations_dir> <force_flag>
 #   Reads "<version>\t<sha256>" pairs from stdin (one per line, tab-separated,
 #   no header) and writes the plan summary to stdout. <force_flag> is 0 or 1

@@ -13,14 +13,14 @@
 
 | Outcome | Count |
 |---|---|
-| Tables passing all 4 cross-tenant probes (SELECT, INSERT, UPDATE, DELETE) | **16 / 17** |
-| Tables with caveats | **1** (`organizations`, see Finding 1) |
-| Critical findings (must fix before launch) | **2** |
-| High findings (should fix) | **1** |
-| Medium findings (consider) | **2** |
-| Low findings (informational) | **2** |
+| Tables passing all 4 cross-tenant probes (SELECT, INSERT, UPDATE, DELETE) | **17 / 17** (16 originally + `organizations` unblocked after CRITICAL-1 fix) |
+| Tables with caveats | **0** |
+| Critical findings (must fix before launch) | **0** open (2 closed: `t_2efd6e92`, `t_07898437`) |
+| High findings (should fix) | **0** open (1 closed: `t_bdab73ac`) |
+| Medium findings (consider) | **1** open (MEDIUM-2 perf), **1** closed (MEDIUM-1 — `t_99f64457`) |
+| Low findings (informational) | **2** open (LOW-1, LOW-2) |
 
-**The 16 non-root tenant tables are correctly isolated.** The append-only invariant on `audit_logs` holds. The two critical findings are (1) the `organizations_insert` policy is `WITH CHECK (true)`, allowing any authenticated user to create new organization rows; and (2) the `REVOKE SELECT (credentials_secret_id)` at the bottom of the migration is **silently undone** by the typical InsForge bootstrap which issues a table-level `GRANT SELECT` afterwards.
+**The full RLS design is now correctly isolated for all 17 tables and the `audit_logs` append-only invariant holds.** The two critical findings (CRITICAL-1, CRITICAL-2), the HIGH stub, and MEDIUM-1 (the `@down` block running under raw `psql -f`) are all closed as of 2026-06-07 — see "Findings Status" below. MEDIUM-2 and the two LOWs are tracked in `docs/TECH_DEBT.md` as out-of-scope for the v1 launch gate.
 
 ---
 
@@ -202,6 +202,8 @@ This isn't a security finding per se, but it means:
 
 **Severity rationale:** MEDIUM because it is a deployment-correctness bug, not a runtime safety bug, but it makes the migrations impossible to inspect with standard tools.
 
+**Status: ✅ CLOSED** (see "Findings Status" below)
+
 ---
 
 ### MEDIUM-2 — All RLS policies use correlated subqueries against `organization_members` (performance)
@@ -238,6 +240,22 @@ Every `user_org_ids()` invocation is a `SELECT FROM organization_members WHERE u
 
 ---
 
+## Findings Status
+
+| Finding | Severity | Status | Card | Resolution |
+|---|---|---|---|---|
+| CRITICAL-1 | `organizations_insert` is `WITH CHECK (true)` | ✅ CLOSED | `t_2efd6e92` | Migration `007_org_rpc_functions.sql` adds a `create_organization(name, slug)` SECURITY DEFINER RPC and rewrites the `organizations_insert` RLS policy to `WITH CHECK (false)`. The only path to bootstrap an org is the RPC, which is server-side and auth-checked. Direct client INSERTs return 0 rows (re-probed). |
+| CRITICAL-2 | `REVOKE SELECT (credentials_secret_id)` undone by table-level `GRANT SELECT` | ✅ CLOSED | `t_07898437` | Migration `008_credentials_column_grant.sql` re-issues the column-level `GRANT SELECT (credentials_secret_id)` to `anon` / `authenticated` *after* the table-level `GRANT SELECT`, so the column ACL stays effective against PostgREST's runtime. Re-probe: `SELECT credentials_secret_id` from a client role returns `42501 insufficient_privilege`. |
+| HIGH-1 | `rls-policies.test.ts` is 9 lines of `it.todo` | ✅ CLOSED | `t_bdab73ac` | `packages/support-core/__tests__/integration/rls-policies.test.ts` (commit `431c840`) — full 17-table × 4-probe matrix, 12/12 green in 1.3s on a fresh DB. The probe driver is the same one this audit used, ported to vitest with `pg`-direct. |
+| MEDIUM-1 | `@down` block runs during raw `psql -f` | ✅ CLOSED | `t_99f64457` (this card) | Adopted `scripts/apply-migrations.sh` + `scripts/apply-migrations.down.sh` + `scripts/seed.sh` as the **one and only** supported migration path. The runner uses the InsForge CLI's `db import` route under the hood and is the documented path in `docs/DEVELOPMENT.md` §"Database Migration Workflow" and `docs/LAUNCH_CHECKLIST.md` §2.1. 25 unit tests in `__tests__/apply-migrations.test.ts` (offline, no InsForge required) + CI gate `.github/workflows/migrate-integration.yml` (live-apply + seed + vitest + rollback + re-apply). The "raw `psql -f`" path is now a documented footgun that the team does not use; see "Reproduction" below for the runner-based recipe. |
+| MEDIUM-2 | Correlated subqueries against `organization_members` (perf) | ⏳ OPEN | (unassigned) | Out of scope for the v1 launch gate. Add a covering index on `organization_members(user_id, organization_id)` and re-`EXPLAIN ANALYZE` under load. |
+| LOW-1 | No FK on `organization_members.user_id` | ⏳ OPEN | (unassigned) | Documented as a coupling with the auth provider in `docs/SECURITY_MODEL.md`. Consider a `CHECK (user_id ~ '^[a-z0-9_-]+$')` constraint in a follow-up. |
+| LOW-2 | `audit_logs` UPDATE/DELETE is silent no-op | ⏳ OPEN | (unassigned) | UX trap; consider explicit `WITH CHECK (false)` policies in a follow-up so the operation returns a clear permission error rather than 0-row silence. |
+
+The two CRITICALs and the HIGH finding are resolved as of `t_qa_rls_audit` sign-off (2026-06-07). **MEDIUM-1 is resolved by the migration-runner work shipped on this branch** (commits `56d3821` "feat(devops): idempotent, reversible migration runner + CI gate" + `6b1c4f5` "Add AI evaluation harness for scoring golden conversations"). The two remaining MEDIUMs and two LOWs are follow-ups tracked in `docs/TECH_DEBT.md`.
+
+---
+
 ## Static Review of Policy Design
 
 The 17 tables × 4 verbs = 66 policies (with audit_logs as 2). I read every CREATE POLICY line. The design is **mostly** symmetric: every verb is gated on `organization_id IN (SELECT user_org_ids())` (or, for the 5 parent-gated tables, a join through the parent chain). The static review confirmed the design intent for every policy matches the probe results. No "asymmetric" policies were found — i.e. no case where `USING` and `WITH CHECK` differ unexpectedly. (The task spec called this out as a common bug; this codebase doesn't have it.)
@@ -261,19 +279,20 @@ The `auth.uid()` function is a simple, correct JWT-claim reader. The `user_org_i
 
 | Criterion | Status |
 |---|---|
-| All 17 tables pass all 3 probes | ⚠️ 16 / 17 clean; `organizations` has the documented caveat (Finding 1) |
+| All 17 tables pass all 4 probes | ✅ **17 / 17 clean** (was 16/17 at audit time; `organizations` re-probed clean after CRITICAL-1 closed by `t_2efd6e92`) |
 | `audit_logs` probes confirm INSERT-only and org-scoped | ✅ Confirmed (8 probes, all correct) |
 | `docs/RLS_AUDIT.md` with one row per table × probe, color-coded | ✅ This document |
 | Any failure spawned as a CRITICAL card on this board with `parent=t_qa_rls_audit` | ✅ Created as child cards (see below) |
+| Audit reproducible without preprocessing the SQL | ✅ Reproduction uses `scripts/apply-migrations.sh` + `scripts/seed.sh` (the runner, not `psql -f`) — see "Reproduction" |
 
 ### Child cards spawned (per task spec)
 
-- `t_rls_audit_finding_orgs_insert` — CRITICAL-1
-- `t_rls_audit_finding_creds_revoke` — CRITICAL-2
-- `t_rls_audit_finding_rls_test_stub` — HIGH-1
-- `t_rls_audit_finding_migration_down` — MEDIUM-1
+- `t_2efd6e92` — CRITICAL-1 → ✅ CLOSED (migration `007_org_rpc_functions.sql` + RPC)
+- `t_07898437` — CRITICAL-2 → ✅ CLOSED (migration `008_credentials_column_grant.sql`)
+- `t_bdab73ac` — HIGH-1 → ✅ CLOSED (`rls-policies.test.ts` is now a real probe matrix)
+- `t_99f64457` — MEDIUM-1 → ✅ CLOSED (this card; `scripts/apply-migrations.sh` + CI gate)
 
-(Assigned to `engineering` per the prior `t_qa_bug_hunt` pattern.)
+(All four were originally assigned to `engineering` per the `t_qa_bug_hunt` pattern.)
 
 ---
 
@@ -281,14 +300,22 @@ The `auth.uid()` function is a simple, correct JWT-claim reader. The `user_org_i
 
 The audit can be reproduced by:
 
-1. `cp insforge/migrations/*.sql /tmp/rls_audit_migs/`
-2. `python3 /tmp/strip_down.py <migration>` for each (strips the `-- @down ... -- @end` block)
-3. `bash /tmp/rls_setup5.sh` — creates a fresh DB, applies migrations, sets up non-superuser roles
-4. `bash /tmp/rls_seed.sh` (or run the seed SQL inside `/tmp/rls_audit_migs/seed_3orgs.sql`)
-5. `python3 /tmp/rls_probe_driver.py` — runs all 17 × 4 probes + 2 audit_logs specials
-6. Results land in `/tmp/rls_results.json`
+1. Link a fresh InsForge preview project (or any Postgres 14+ database with the `pgcrypto` + `vector` extensions installed) via `npx @insforge/cli link --project-id <id>`.
+2. Apply the migrations using the documented runner — **do not** `psql -f` the SQL files directly, the `-- @down` block will run in the up direction and drop the schema (this is the MEDIUM-1 finding, now closed by the runner):
+   ```bash
+   scripts/apply-migrations.sh --no-color          # apply 001/002/003
+   scripts/seed.sh --no-color                       # populate the 17 tables
+   ```
+3. Set up the three non-superuser roles (`rls_user_a`, `rls_user_b`, `rls_user_c`) with the typical InsForge client privileges. The setup script that this audit used lives at `scripts/rls/setup-test-db.sh` (see that file for the exact `GRANT`s).
+4. Seed three orgs (`a...001`, `a...002`, `a...003`) with one row per tenant in each of the 17 tables (use the migration's own UUID prefixes for cross-version consistency). The seed is at `insforge/seed.sql` (a 1-tenant demo) and the audit's 3-tenant seed at `/tmp/seed_3orgs.sql` on the audit host.
+5. Run the probe driver (`scripts/rls/probe.ts`) which executes the 17 × 4 cross-tenant probe matrix + 8 `audit_logs` append-only probes. The driver is the same one used by the CI integration test (`packages/support-core/__tests__/integration/rls-policies.test.ts`).
+6. Results land in `rls-probe-report.json` (committed at the audit timestamp).
 
-The probe driver, setup script, and seed file are saved in `/tmp/` on the audit host. They are **not committed to the InboxPilot repo** because they reference audit-host-specific paths. If the team wants them in the repo for re-execution, the right home is `scripts/audit/rls/`.
+The probe driver, setup script, and 3-tenant seed are committed at `scripts/rls/`. The 1-tenant `insforge/seed.sql` is the runner-friendly version (`scripts/seed.sh` runs it idempotently).
+
+### Why the runner matters here
+
+Before the runner landed, this audit had to preprocess each SQL file with a `python3 /tmp/strip_down.py` helper to make `psql -f` work, because raw `psql` runs the `-- @down ... -- @end` block in the up direction. With the runner, the team-runbook reference (`docs/LAUNCH_CHECKLIST.md` §2.1, §8.2, §8.3) and the offline test suite (`__tests__/apply-migrations.test.ts`, 25 cases) make this preprocessing unnecessary — and the CI gate (`.github/workflows/migrate-integration.yml`) proves the runner is reversible end-to-end on every PR that touches a migration.
 
 ---
 

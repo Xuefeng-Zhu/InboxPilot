@@ -6,7 +6,8 @@
 > (see §"Open questions" at the bottom). Pair with:
 > `.kiro/specs/ai-customer-support/requirements.md` (PRD) · `DATABASE.md` ·
 > `ARCHITECTURE.md` · `LAUNCH_CHECKLIST.md` §7 ·
-> `SUPPORT_PLAYBOOK.md` · `legal/DPA.md` · `legal/AUP.md`
+> `SUPPORT_PLAYBOOK.md` · `legal/DPA.md` · `legal/AUP.md` ·
+> **`COMPETITIVE.md`** (the Front / Intercom Fin / Ada / Forethought / DIY one-pagers — every tier boundary here is a "vs X" choice named there)
 > Kanban: `t_pm_pricing_packaging` (parent: `t_pm_launch_checklist`)
 
 ## 0. The one rule that governs this document
@@ -523,7 +524,7 @@ JSONL over a year.
 - **DPA / AUP / legal:** `legal/README.md`, `legal/DPA.md`, `legal/AUP.md` (every tier signs the same DPA; the AUP applies uniformly)
 - **Sibling pricing/GTM cards:**
   - `t_pm_beta_program` — design-partner cohort (this doc profiles 3 of the 5 we need to name)
-  - `t_pm_competitive` — competitive landscape (Front, Intercom, Ada, Gorgias — the names Profile 1, 2, 3 use as their "current spend")
+  - `t_pm_competitive` — competitive landscape (Front, Intercom, Ada, Gorgias — the names Profile 1, 2, 3 use as their "current spend"). See `docs/COMPETITIVE.md` for the 5 one-pagers, the 2-axis positioning map, and the "We will NOT compete on" anti-PRD.
   - `t_ops_support_handoff` — Tier-1 support playbook (Scale's 24h SLA is the only tier-specific support commitment)
 
 ---

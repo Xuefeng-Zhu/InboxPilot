@@ -4,6 +4,8 @@
 
 InboxPilot is an AI-powered customer support platform that handles inbound and outbound communication over SMS and email channels. The platform uses AI to draft responses, auto-reply to common inquiries, and escalate complex issues to human agents. It is built on InsForge as the backend-as-a-service layer but keeps all business logic portable behind provider-neutral interfaces and repository abstractions, enabling future migration away from InsForge. The MVP targets multi-tenant organizations with role-based access, a knowledge base for AI retrieval-augmented generation, a Postgres-backed job queue, and a Next.js frontend with realtime updates.
 
+> Related documents: `../../docs/COMPETITIVE.md` (competitive landscape, "why InboxPilot, not X" — the 8 escalation rules in Req 12 are "safer than Fin" specifically because of the Fin behaviors named there) · `../../docs/PRICING.md` (3-tier pricing hypothesis; Req 2, Req 11, Req 12 map to the code-checkable boundaries) · `../../docs/LAUNCH_CHECKLIST.md` (go/no-go gating document) · `docs/design.md` (full design doc) · `tasks.md` (implementation task list)
+
 ## Glossary
 
 - **Platform**: The InboxPilot customer support system as a whole

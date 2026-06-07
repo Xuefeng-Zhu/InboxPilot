@@ -1,7 +1,7 @@
 # InboxPilot v1 — Launch Checklist (go / no-go)
 
 > Last updated: 2026-06-07 · source of truth: this document
-> Pair with: `../.kiro/specs/ai-customer-support/requirements.md` (PRD) · `ARCHITECTURE.md` · `DATABASE.md` · `TESTING.md` · `API.md` · `SUPPORT_PLAYBOOK.md`
+> Pair with: `../.kiro/specs/ai-customer-support/requirements.md` (PRD) · `ARCHITECTURE.md` · `DATABASE.md` · `TESTING.md` · `API.md` · `SUPPORT_PLAYBOOK.md` · **`COMPETITIVE.md`** (the "why not X" positioning map; the §7 pitch and the per-tier design-partner profiles are explicitly "vs Front / Intercom Fin / Ada / Forethought / DIY")
 > Kanban parent: `t_pm_launch_checklist`
 
 ## How to read this
@@ -184,7 +184,7 @@ This is the **single source of truth** for "do we ship v1 today?". If a box is u
 - `t_ops_runbook` — `docs/METRICS.md` (feeds §4, §5)
 - `t_pm_beta_program` — design-partner cohort (feeds §7)
 - `t_pm_pricing_packaging` — pricing page + tiers (feeds §7) — see `docs/PRICING.md` for the 3-tier hypothesis, gating schema, and design-partner profiles
-- `t_pm_competitive` — competitive landscape (feeds §7 pitch)
+- `t_pm_competitive` — competitive landscape (feeds §7 pitch). See `docs/COMPETITIVE.md` for the 5 one-pagers (Front, Intercom Fin, Ada, Forethought, DIY), the 2-axis positioning map (AI autonomy × channel breadth), and the "We will NOT compete on" anti-PRD (8 items, each with a v2 milestone).
 
 ### Open gaps surfaced by this audit (so the next worker doesn't redo it)
 

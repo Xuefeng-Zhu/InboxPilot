@@ -70,6 +70,7 @@ This is the **single source of truth** for "do we ship v1 today?". If a box is u
 | 4.2 | `audit_logs` is queryable per org via a documented SQL query that returns under 1s for 30 days of data | ☐ | `docs/METRICS.md` §"Audit log query" (produced by child card `t_ops_runbook`). Query plan: `EXPLAIN ANALYZE` output pasted. | DEVOPS |
 | 4.3 | Cost-per-conversation metric is computable: a SQL query joins `ai_decisions` (tokens) × OpenRouter price table and divides by `conversations` count, per org per day | ☐ | Same `docs/METRICS.md` §"Cost per conversation". Query + a 1-week run against staging showing per-org cost. | DEVOPS + ENG-LEAD |
 | 4.4 | The 5xx alert fires within 5 minutes of a synthetic failure | ☐ | Test: kill `process-jobs` cron for 1 cycle. Pager (or PagerDuty webhook) receives alert. | DEVOPS |
+| 4.5 | Web-vitals and API p95 budgets are documented, instrumented, and gated in CI (>10% regression fails the PR) | ☐ | `docs/PERFORMANCE.md` exists with the budget rationale. `lighthouserc.cjs` + `scripts/api-perf.sh` + `.github/workflows/perf.yml` are wired (child card `t_devops_perf_budget`). Last 3 main-branch runs all green. | DEVOPS |
 
 **All criteria met?** ☐ · **Sign-off (verifier):** ______________ · **Date:** ______________
 
@@ -173,6 +174,7 @@ This is the **single source of truth** for "do we ship v1 today?". If a box is u
 - **Support playbook:** `docs/SUPPORT_PLAYBOOK.md`
 - **DPA / AUP / legal:** `legal/README.md`, `legal/DPA.md`, `legal/AUP.md`
 - **Design spec (KB UX):** `docs/design/spec.md`
+- **Performance budget (web vitals + API p95):** `docs/PERFORMANCE.md` — enforced by `lighthouserc.cjs` + `scripts/api-perf.sh` + `.github/workflows/perf.yml`
 
 ### Child Kanban cards (this doc is their parent)
 

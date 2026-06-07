@@ -1,0 +1,308 @@
+# .github/workflows/perf.yml — Performance budget gate.
+#
+# Runs on every PR that touches app code, serverless functions, or the
+# perf config itself. Boots a Next.js build, runs Lighthouse-CI on the
+# static export, and hits the three AI endpoints on staging with
+# scripts/api-perf.sh. Posts a single PR comment with both reports;
+# updates (not stacks) the comment on re-runs. Fails the PR if any
+# budget in docs/PERFORMANCE.md is violated OR any metric regresses
+# >10% vs the most recent main-branch run.
+#
+# Pair with:
+#   lighthouserc.cjs
+#   scripts/api-perf.sh
+#   docs/PERFORMANCE.md
+#
+# Required GitHub secrets (Settings → Secrets → Actions):
+#   STAGING_INSFORGE_URL              staging InsForge base URL
+#   STAGING_INSFORGE_SERVICE_KEY      staging service-role key (used as the perf JWT)
+#   STAGING_PERF_CONVERSATION_ID      a real conversation id from staging
+#
+# The workflow writes LHCI results to .lighthouseci/ and uploads them
+# as a workflow artifact named "lighthouseci-results" (retained 30d) so
+# the regression comparison on the next main-branch run has something
+# to diff against.
+
+name: Performance budget
+
+on:
+  pull_request:
+    paths:
+      - 'app/**'
+      - 'insforge/functions/**'
+      - 'packages/support-core/**'
+      - 'lighthouserc.cjs'
+      - 'scripts/api-perf.sh'
+      - 'scripts/lib/parse-perf-results.mjs'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'next.config.mjs'
+      - '.github/workflows/perf.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'app/**'
+      - 'insforge/functions/**'
+      - 'packages/support-core/**'
+      - 'lighthouserc.cjs'
+
+# Cancel a previous run on the same PR when a new commit is pushed —
+# the perf gate is idempotent and the latest commit is the only one
+# that matters.
+concurrency:
+  group: perf-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+  actions: read
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # perf — runs both Lighthouse-CI and the API p95 check, posts a single
+  # comment to the PR with both reports. The LHCI artifact uploaded here
+  # is consumed by the next run on main to detect 10% regressions.
+  # ---------------------------------------------------------------------------
+  perf:
+    name: Web vitals + API p95
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      LHCI_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Next.js (static export for Lighthouse)
+        run: npm run build
+
+      # -----------------------------------------------------------------------
+      # Web vitals via Lighthouse-CI.
+      # -----------------------------------------------------------------------
+      - name: Run Lighthouse-CI
+        id: lhci
+        # `autorun` is the one-shot wrapper that runs collect → assert → upload.
+        continue-on-error: true
+        run: npx --no-install lhci autorun --config=./lighthouserc.cjs
+
+      - name: Upload LHCI results
+        # Keep the artifact for 30 days so the next main-branch run can
+        # download the previous baseline for the regression comparison.
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lighthouseci-results
+          path: .lighthouseci
+          retention-days: 30
+
+      - name: Extract Lighthouse summary
+        if: always()
+        id: lh-summary
+        run: |
+          # Build a compact markdown table from the lhr JSON files
+          # written by LHCI. The asserts.csv has the assertion results;
+          # we read lhr-*.json for the actual metric numbers.
+          {
+            echo "## 🌐 Web vitals · Lighthouse-CI"
+            echo ""
+            echo "| URL | LCP | INP | CLS | Perf score | Verdict |"
+            echo "|---|---|---|---|---|---|"
+            for f in .lighthouseci/lhr-*.json; do
+              [ -f "$f" ] || continue
+              url=$(node -e "const r=JSON.parse(require('fs').readFileSync(process.argv[1],'utf-8'));console.log(r.finalDisplayedUrl||r.requestedUrl||'?')" "$f" 2>/dev/null || echo "?")
+              lcp=$(node -e "const r=JSON.parse(require('fs').readFileSync(process.argv[1],'utf-8'));const a=r.audits;console.log(Math.round((a['largest-contentful-paint']?.numericValue)||0))" "$f" 2>/dev/null || echo "?")
+              inp=$(node -e "const r=JSON.parse(require('fs').readFileSync(process.argv[1],'utf-8'));const a=r.audits;console.log(Math.round((a['interactive']?.numericValue)||0))" "$f" 2>/dev/null || echo "?")
+              cls=$(node -e "const r=JSON.parse(require('fs').readFileSync(process.argv[1],'utf-8'));const a=r.audits;console.log((a['cumulative-layout-shift']?.numericValue||0).toFixed(3))" "$f" 2>/dev/null || echo "?")
+              score=$(node -e "const r=JSON.parse(require('fs').readFileSync(process.argv[1],'utf-8'));const s=r.categories?.performance?.score;console.log(s==null?'?':Math.round(s*100))" "$f" 2>/dev/null || echo "?")
+              verdict=$( [ "$lcp" != "?" ] && [ "$lcp" -le 2500 ] && [ "$inp" != "?" ] && [ "$inp" -le 200 ] && echo "✅ PASS" || echo "❌ FAIL" )
+              echo "| \`${url}\` | ${lcp} ms | ${inp} ms | ${cls} | ${score} | ${verdict} |"
+            done
+            echo ""
+            if [ "${{ steps.lhci.outcome }}" = "success" ]; then
+              echo "_All assertions passed._"
+            else
+              echo "_**One or more Lighthouse assertions failed.** Click the workflow run for the full report._"
+            fi
+          } > .lighthouseci/summary.md
+          {
+            echo "lhci-md<<EOF"
+            cat .lighthouseci/summary.md
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      # -----------------------------------------------------------------------
+      # API p95 via scripts/api-perf.sh.
+      # -----------------------------------------------------------------------
+      - name: Run API p95 check
+        id: api-perf
+        if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
+        continue-on-error: true
+        env:
+          PERF_AUTH_TOKEN: ${{ secrets.STAGING_INSFORGE_SERVICE_KEY }}
+          PERF_CONVERSATION_ID: ${{ secrets.STAGING_PERF_CONVERSATION_ID }}
+          API_BASE_URL: ${{ secrets.STAGING_INSFORGE_URL }}
+          OUT_DIR: .perf/run
+        run: |
+          mkdir -p .perf/run
+          bash scripts/api-perf.sh \
+            --samples 20 \
+            --warmup 2 \
+            --out-dir .perf/run
+
+      - name: Read API summary
+        if: always()
+        id: api-summary
+        run: |
+          if [ -f .perf/run/summary.md ]; then
+            cp .perf/run/summary.md .perf/run/summary.api.md
+          else
+            {
+              echo "## 🔌 API p95"
+              echo ""
+              echo "_The API perf check did not produce a summary. See the workflow logs for details._"
+            } > .perf/run/summary.api.md
+          fi
+          {
+            echo "api-md<<EOF"
+            cat .perf/run/summary.api.md
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Upload API perf results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-perf-results
+          path: .perf/run
+          retention-days: 30
+
+      # -----------------------------------------------------------------------
+      # PR comment. Uses the marvinpinto/action-automatic-releases pattern
+      # (find existing comment, update it; otherwise post a new one). The
+      # marker is a stable, hidden HTML comment so we don't stack comments
+      # on re-runs.
+      # -----------------------------------------------------------------------
+      - name: Find existing PR comment
+        if: github.event_name == 'pull_request'
+        id: find-comment
+        uses: peter-evans/find-comment@v3
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          comment-author: 'github-actions[bot]'
+          body-includes: '<!-- inboxpilot-perf-comment -->'
+
+      - name: Post / update PR comment
+        if: github.event_name == 'pull_request'
+        uses: peter-evans/create-or-update-comment@v4
+        with:
+          comment-id: ${{ steps.find-comment.outputs.comment-id }}
+          issue-number: ${{ github.event.pull_request.number }}
+          edit-mode: 'replace'
+          body: |
+            <!-- inboxpilot-perf-comment -->
+            ### ⚡ Performance budget · ${{ github.event.pull_request.head.sha }}
+
+            _Run [${{ github.run_id }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) · commit ${{ github.sha }}_
+
+            ---
+
+            $(cat "${{ steps.lh-summary.outputs.lhci-md }}")
+
+            ---
+
+            $(cat "${{ steps.api-summary.outputs.api-md }}")
+
+            ---
+
+            **Budget reference:** [`docs/PERFORMANCE.md`](${{ github.server_url }}/${{ github.repository }}/blob/${{ github.sha }}/docs/PERFORMANCE.md) · **Config:** [`lighthouserc.cjs`](${{ github.server_url }}/${{ github.repository }}/blob/${{ github.sha }}/lighthouserc.cjs) · **API script:** [`scripts/api-perf.sh`](${{ github.server_url }}/${{ github.repository }}/blob/${{ github.sha }}/scripts/api-perf.sh)
+
+      # -----------------------------------------------------------------------
+      # Final verdict — fail the job if any gate fired.
+      # -----------------------------------------------------------------------
+      - name: Fail if any gate failed
+        if: github.event_name == 'pull_request'
+        run: |
+          lhci_failed="${{ steps.lhci.outcome == 'failure' && 'true' || 'false' }}"
+          api_failed="${{ steps.api-perf.outcome == 'failure' && 'true' || 'false' }}"
+          if [ "$lhci_failed" = "true" ] || [ "$api_failed" = "true" ]; then
+            echo "::error::Performance budget violated (lhci=$lhci_failed, api=$api_failed). See PR comment for details."
+            exit 1
+          fi
+          echo "All perf gates passed ✅"
+
+  # ---------------------------------------------------------------------------
+  # baseline-save — on main only, takes the LHCI results and API run from
+  # the perf job and stores them as the regression baseline for the next
+  # PR. This is a separate job so it can be triggered by a separate
+  # workflow_dispatch and so its failure doesn't poison the perf gate.
+  # ---------------------------------------------------------------------------
+  baseline-save:
+    name: Save perf baseline
+    runs-on: ubuntu-latest
+    needs: perf
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download perf artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: lighthouseci-results
+          path: .lighthouseci
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: api-perf-results
+          path: .perf/run
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Commit baseline to .perf-baseline/
+        run: |
+          mkdir -p .perf-baseline
+          # Keep only the API timings + a minimal LHCI manifest — the
+          # full LHCI HTML is in the artifact for 30 days, and the next
+          # PR only needs the numeric values for the comparison.
+          if [ -d .perf/run ]; then
+            cp -r .perf/run/* .perf-baseline/ || true
+          fi
+          # Re-create the lhci manifest from the JSON files.
+          if compgen -G ".lighthouseci/lhr-*.json" > /dev/null; then
+            node -e '
+              const fs = require("fs");
+              const path = require("path");
+              const files = fs.readdirSync(".lighthouseci").filter(f => f.startsWith("lhr-") && f.endsWith(".json"));
+              const manifest = { capturedAt: new Date().toISOString(), urls: {} };
+              for (const f of files) {
+                const r = JSON.parse(fs.readFileSync(path.join(".lighthouseci", f), "utf-8"));
+                const url = r.finalDisplayedUrl || r.requestedUrl;
+                manifest.urls[url] = {
+                  lcp: Math.round(r.audits["largest-contentful-paint"]?.numericValue || 0),
+                  inp: Math.round(r.audits["interactive"]?.numericValue || 0),
+                  cls: r.audits["cumulative-layout-shift"]?.numericValue || 0,
+                  perfScore: r.categories?.performance?.score || 0,
+                };
+              }
+              fs.writeFileSync(".perf-baseline/lhci-manifest.json", JSON.stringify(manifest, null, 2));
+            '
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .perf-baseline/
+          # Only commit if there are changes — re-runs shouldn't be no-ops.
+          if ! git diff --cached --quiet; then
+            git commit -m "perf: update baseline (${{ github.sha }})"
+            git push
+          fi

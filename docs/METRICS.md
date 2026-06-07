@@ -477,10 +477,12 @@ ORDER BY c.organization_id, week;
 -- A draft is "abandoned" when its `ai_decision_produced` audit row
 -- was emitted in `draft_only` mode AND no `ai_draft_approved` audit
 -- row exists for the same ai_decision.
+-- Note: audit_logs.resource_id is text, ai_decisions.id is uuid,
+-- so the join requires an explicit cast.
 WITH draft_audit AS (
   SELECT
     al.organization_id,
-    al.resource_id                              AS draft_id
+    al.resource_id                              AS draft_id_text
   FROM audit_logs al
   WHERE al.action        = 'ai_decision_produced'
     AND al.resource_type = 'ai_decision'
@@ -490,10 +492,10 @@ WITH draft_audit AS (
 drafts AS (
   SELECT
     da.organization_id,
-    da.draft_id
+    da.draft_id_text AS draft_id
   FROM draft_audit da
   -- join to ai_decisions to filter on decision_type and bound the date
-  JOIN ai_decisions ad ON ad.id = da.draft_id
+  JOIN ai_decisions ad ON ad.id = da.draft_id_text::uuid
   WHERE ad.decision_type = 'respond'
 )
 SELECT
@@ -581,7 +583,7 @@ For the queries in this file to return non-empty / non-zero results, the followi
 ## Verification (this card's acceptance criteria)
 
 - [x] A markdown table in `InboxPilot/docs/METRICS.md` listing each metric: name, definition, SQL sketch, source tables, owner, target. (See the §"Input metrics" section above — one table per metric.)
-- [x] Each SQL sketch has been hand-checked against `insforge/migrations/001_initial_schema.sql`. A schema-agnostic verification (every `tablename.colname` in the SQL blocks) reports **0 surprises** — every column used in the queries exists in the schema. The M4 column set (`ai_decisions.prompt_tokens`, `completion_tokens`, `total_tokens`, `openrouter_cost`) is flagged in M4 as a proposed migration, not assumed. The `messages.raw_payload->>'csat_score'` key is also flagged in M3 as a capture-path gap, not assumed.
+- [x] Each SQL sketch has been hand-checked against `insforge/migrations/001_initial_schema.sql` AND executed end-to-end against a live Postgres 14. A schema-agnostic verification (every `tablename.colname` in the SQL blocks) reports **0 surprises** — every column used in the queries exists in the schema. The M4 column set (`ai_decisions.prompt_tokens`, `completion_tokens`, `total_tokens`, `openrouter_cost`) is flagged in M4 as a proposed migration, not assumed; the M4 query was also re-run with those columns added via `ALTER TABLE` and parsed cleanly. The `messages.raw_payload->>'csat_score'` key is also flagged in M3 as a capture-path gap, not assumed. **Empirical parse-and-plan evidence:** M0/M1/M2/M3/M5/M6/W1/W2 all `EXPLAIN`-plan against the existing schema (pgvector bits stripped for sandbox only — none of the metric queries touch `knowledge_chunks`). M4 EXPLAIN-plans with the proposed `ai_decisions` columns applied. The W2 join between `audit_logs.resource_id text` and `ai_decisions.id uuid` requires an explicit `::uuid` cast, which is annotated in the query.
 - [x] One metric is flagged as needing a schema change (M4) with a backreference to the instrumentation card (`t_eng_instrumentation`).
 - [x] Two watch metrics called out (W1 raw message volume, W2 drafts-abandoned) — neither will be optimized for, but both will be plotted on the analytics page so the team can see the trend.
 - [x] `docs/PRD.md` §3 links to this file in the Success metrics section. (See the follow-up patch in the same commit.)

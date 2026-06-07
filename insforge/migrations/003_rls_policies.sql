@@ -8,19 +8,7 @@
 -- Helper Functions
 -- =============================================================================
 
--- auth.uid(): Extracts the authenticated user's ID from the JWT claims.
--- InsForge convention: the user ID is in the 'sub' claim of the JWT.
-CREATE SCHEMA IF NOT EXISTS auth;
-
-CREATE OR REPLACE FUNCTION auth.uid()
-RETURNS text
-LANGUAGE sql STABLE
-AS $$
-  SELECT coalesce(
-    current_setting('request.jwt.claims', true)::json->>'sub',
-    ''
-  );
-$$;
+-- auth.uid(): Provided by InsForge. Returns the authenticated user's ID.
 
 -- user_org_ids(): Returns the set of organization IDs the current user
 -- belongs to, based on their membership in organization_members.
@@ -30,7 +18,7 @@ LANGUAGE sql STABLE SECURITY DEFINER
 AS $$
   SELECT om.organization_id
   FROM organization_members om
-  WHERE om.user_id = auth.uid();
+  WHERE om.user_id = auth.uid()::text;
 $$;
 
 -- =============================================================================

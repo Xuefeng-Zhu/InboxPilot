@@ -13,7 +13,7 @@ export default function InboxPage() {
       <div className="flex flex-col lg:flex-row h-full">
         {/* Conversation List — 360px fixed width at lg+, full width stacked below lg */}
         <div className="w-full lg:w-inbox-list-w border-b lg:border-b-0 lg:border-r border-surface-border overflow-y-auto shrink-0">
-          <header className="flex items-center justify-between border-b border-surface-border px-4 py-3">
+          <header className="flex items-center justify-between border-b border-surface-border pl-16 pr-4 py-3 xl:px-4">
             <h1 className="text-lg font-semibold text-gray-900">Inbox</h1>
           </header>
           <ConversationList

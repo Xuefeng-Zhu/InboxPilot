@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Logo } from '@/components/ui/Logo';
 import { useAuth } from '@/lib/auth-context';
+import { createOrganizationWithOwner } from '@/lib/onboarding';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
@@ -23,6 +24,13 @@ export default function RegisterPage() {
     e.preventDefault();
     setError(null);
 
+    const trimmedWorkspaceName = workspaceName.trim();
+
+    if (!trimmedWorkspaceName) {
+      setError('Workspace name is required.');
+      return;
+    }
+
     if (password !== confirmPassword) {
       setError('Passwords do not match.');
       return;
@@ -37,6 +45,15 @@ export default function RegisterPage() {
         setError('Unable to create account. Please try again.');
         return;
       }
+
+      const { error: workspaceError } =
+        await createOrganizationWithOwner(trimmedWorkspaceName);
+
+      if (workspaceError) {
+        setError('Account created, but unable to create workspace. Please sign in and try again.');
+        return;
+      }
+
       router.push('/inbox');
     } catch {
       setError('Unable to create account. Please try again.');

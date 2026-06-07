@@ -105,7 +105,7 @@ The PRD names two. The primary persona is the user who *lives* in the inbox 8 ho
 
 ## 3. Success metrics
 
-The PRD ships with **one North Star** and **four input metrics**, each tied to a measurable event in the data model. These are the metrics the metric-tree card (`t_pm_metric_tree`) will refine into SQL queries in `docs/METRICS.md`. The PRD does not invent queries; it commits to the *events* those queries will count.
+The PRD ships with **one North Star** and **four input metrics**, each tied to a measurable event in the data model. The metric-tree card (`t_pm_metric_tree`) has refined these into runnable SQL in [`docs/METRICS.md`](METRICS.md) — six input metrics, two watch metrics, and a per-metric prerequisite table mapping every block to its owner card. The PRD does not invent queries; it commits to the *events* those queries will count. Read the PRD for *what to measure and why*; read METRICS.md for *how to measure it*.
 
 ### 3.1 North Star — M0: AI containment rate ≥ 60% by week 4 of a new tenant's life
 

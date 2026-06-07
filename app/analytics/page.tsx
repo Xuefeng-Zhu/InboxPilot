@@ -2,35 +2,22 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/lib/auth-context';
-import { insforge } from '@/lib/insforge';
+import { insforge, getAccessToken } from '@/lib/insforge';
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
-
-interface Conversation {
-  id: string;
-  status: string;
-  ai_state: string;
-  created_at: string;
-  last_message_at: string | null;
-}
-
-interface Message {
-  id: string;
-  conversation_id: string;
-  sender_type: string;
-  direction: string;
-  created_at: string;
-}
 
 interface Metrics {
   totalConversations: number;
   openConversations: number;
   resolvedConversations: number;
   escalatedConversations: number;
-  averageResponseTimeMs: number | null;
+  pendingConversations: number;
+  aiProcessedConversations: number;
+  aiAutoRepliedConversations: number;
   aiAutoReplyRate: number | null;
+  averageResponseTimeMs: number | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -63,6 +50,75 @@ function getDefaultDateRange(): { start: string; end: string } {
   };
 }
 
+/**
+ * Resolve the org the current user wants to view analytics for.
+ *
+ * The inbox sidebar already picks the first organization_members row
+ * (see `components/inbox/ConversationList.tsx:48-55` + MEDIUM-11), so
+ * we mirror that here — same query, same "first row wins" semantics.
+ * A future org-switcher should be the single source of truth for both
+ * the inbox and the analytics page; this is the smallest change that
+ * closes HIGH-8 without inventing a new UI surface.
+ */
+async function fetchUserOrganizationId(): Promise<string | null> {
+  const { data: { user } } = await insforge.auth.getCurrentUser();
+  const userId = user?.id;
+  if (!userId) return null;
+  const { data, error } = await insforge.database
+    .from('organization_members')
+    .select('organization_id')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: true })
+    .limit(1);
+  if (error) return null;
+  const row = Array.isArray(data) ? data[0] : null;
+  return row?.organization_id ?? null;
+}
+
+/**
+ * POST the analytics request to the server-side aggregation function.
+ *
+ * HIGH-8 fix: the page used to compute metrics by reading up to 10k
+ * conversations and 5k messages in the browser and filtering in JS.
+ * That was unbounded-then-truncated: with >10k conversations in the
+ * period, the totals were silently wrong, and the response-time
+ * average was computed over the first 100 conversations.
+ *
+ * The new path is a single round-trip to a serverless function that
+ * calls `analytics_overview(p_org, p_start, p_end)` (migration 005).
+ * All date filtering and the response-time LATERAL join run in SQL.
+ * The page no longer touches `conversations` or `messages` directly
+ * — see `insforge/migrations/005_analytics_aggregation.sql` for the
+ * full SQL.
+ */
+async function fetchAnalytics(
+  organizationId: string,
+  startDate: string,
+  endDate: string,
+): Promise<Metrics> {
+  const baseUrl = process.env.NEXT_PUBLIC_INSFORGE_URL ?? '';
+  const token = getAccessToken();
+  const res = await fetch(`${baseUrl}/functions/v1/analytics-overview`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({ organizationId, startDate, endDate }),
+  });
+
+  const payload = (await res.json().catch(() => ({}))) as {
+    status?: string;
+    data?: Metrics;
+    error?: string;
+  };
+
+  if (!res.ok || payload.status !== 'ok' || !payload.data) {
+    throw new Error(payload.error ?? `Analytics request failed (HTTP ${res.status})`);
+  }
+  return payload.data;
+}
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
@@ -81,97 +137,15 @@ export default function AnalyticsPage() {
     setLoading(true);
     setError(null);
     try {
-      // Fetch conversations within date range
-      const startIso = new Date(startDate).toISOString();
-      const endIso = new Date(endDate + 'T23:59:59.999Z').toISOString();
-
-      const { data: conversations, error: convError } = await insforge.database
-        .from('conversations')
-        .select('id,status,ai_state,created_at,last_message_at')
-        .gte('created_at', startIso)
-        .limit(10000);
-
-      if (convError) {
-        setError(convError.message);
+      const organizationId = await fetchUserOrganizationId();
+      if (!organizationId) {
+        setError('Could not resolve an organization for the current user');
         return;
       }
-
-      const convList = Array.isArray(conversations) ? (conversations as Conversation[]) : [];
-      // Filter by end date client-side
-      const filtered = convList.filter((c) => new Date(c.created_at) <= new Date(endIso));
-
-      const totalConversations = filtered.length;
-      const openConversations = filtered.filter((c) => c.status === 'open').length;
-      const resolvedConversations = filtered.filter((c) => c.status === 'resolved').length;
-      const escalatedConversations = filtered.filter((c) => c.status === 'escalated').length;
-
-      // Compute AI auto-reply rate
-      const aiProcessed = filtered.filter(
-        (c) => c.ai_state === 'auto_replied' || c.ai_state === 'drafted' || c.ai_state === 'needs_human',
-      );
-      const autoReplied = filtered.filter((c) => c.ai_state === 'auto_replied');
-      const aiAutoReplyRate =
-        aiProcessed.length > 0 ? autoReplied.length / aiProcessed.length : null;
-
-      // Compute average response time from messages
-      let averageResponseTimeMs: number | null = null;
-      if (filtered.length > 0) {
-        // Fetch messages for these conversations to compute response times
-        const convIds = filtered.slice(0, 100).map((c) => c.id); // Limit for performance
-        const { data: messages } = await insforge.database
-          .from('messages')
-          .select('id,conversation_id,sender_type,direction,created_at')
-          .in('conversation_id', convIds)
-          .order('created_at', { ascending: true })
-          .limit(5000);
-
-        if (messages && Array.isArray(messages)) {
-          // Group messages by conversation
-          const byConvo = new Map<string, Message[]>();
-          for (const msg of messages as Message[]) {
-            const list = byConvo.get(msg.conversation_id) ?? [];
-            list.push(msg);
-            byConvo.set(msg.conversation_id, list);
-          }
-
-          // Calculate response times: time between inbound and first outbound reply
-          const responseTimes: number[] = [];
-          for (const [, msgs] of byConvo) {
-            for (let i = 0; i < msgs.length; i++) {
-              if (msgs[i].direction === 'inbound') {
-                // Find next outbound message
-                for (let j = i + 1; j < msgs.length; j++) {
-                  if (msgs[j].direction === 'outbound') {
-                    const inTime = new Date(msgs[i].created_at).getTime();
-                    const outTime = new Date(msgs[j].created_at).getTime();
-                    const diff = outTime - inTime;
-                    if (diff > 0) {
-                      responseTimes.push(diff);
-                    }
-                    break;
-                  }
-                }
-              }
-            }
-          }
-
-          if (responseTimes.length > 0) {
-            averageResponseTimeMs =
-              responseTimes.reduce((sum, t) => sum + t, 0) / responseTimes.length;
-          }
-        }
-      }
-
-      setMetrics({
-        totalConversations,
-        openConversations,
-        resolvedConversations,
-        escalatedConversations,
-        averageResponseTimeMs,
-        aiAutoReplyRate,
-      });
-    } catch {
-      setError('Failed to compute analytics');
+      const data = await fetchAnalytics(organizationId, startDate, endDate);
+      setMetrics(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to compute analytics');
     } finally {
       setLoading(false);
     }

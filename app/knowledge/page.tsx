@@ -4,6 +4,10 @@ import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { useRealtime } from '@/lib/use-realtime';
 import { insforge } from '@/lib/insforge';
+import {
+  buildKnowledgeDocumentInsert,
+  buildKnowledgeDocumentAuditLog,
+} from './document-payload';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -116,14 +120,46 @@ export default function KnowledgePage() {
     setAdding(true);
     setError(null);
     try {
+      // HIGH-7: resolve the caller's organization_id from organization_members.
+      // The knowledge_documents_insert RLS policy requires
+      //   organization_id IN (SELECT user_org_ids())
+      // so an insert that omits organization_id fails for every signed-in
+      // user, leaving the page non-functional. We look up the orgId here
+      // (mirroring the pattern in components/inbox/ConversationList.tsx) and
+      // reuse the same resolved value for the audit log so it can never
+      // silently fall back to NULL.
+      if (!user) {
+        setError('You must be signed in to add a document.');
+        return;
+      }
+
+      const { data: members, error: memberError } = await insforge.database
+        .from('organization_members')
+        .select('organization_id')
+        .eq('user_id', user.id)
+        .limit(1);
+
+      if (memberError) {
+        setError(memberError.message);
+        return;
+      }
+      const memberArr = Array.isArray(members) ? members : members ? [members] : [];
+      if (memberArr.length === 0) {
+        setError('No organization found. Please join an organization first.');
+        return;
+      }
+      const orgId = (memberArr[0] as { organization_id: string }).organization_id;
+
       const { data: insertedData, error: insertError } = await insforge.database
         .from('knowledge_documents')
-        .insert({
-          title: newTitle.trim(),
-          source_type: newSourceType,
-          body: newBody.trim(),
-          status: 'pending',
-        })
+        .insert(
+          buildKnowledgeDocumentInsert(
+            orgId,
+            newTitle.trim(),
+            newSourceType,
+            newBody.trim(),
+          ),
+        )
         .select();
 
       if (insertError) {
@@ -131,21 +167,24 @@ export default function KnowledgePage() {
         return;
       }
 
-      // Record audit log entry for knowledge document creation
+      // Record audit log entry for knowledge document creation. Use the
+      // resolved orgId rather than `doc.organization_id ?? null` — the
+      // resolved value is the same orgId we just inserted against and
+      // cannot be null, so the audit log can never be recorded against
+      // no org (HIGH-7 audit-log followup).
       const inserted = Array.isArray(insertedData) ? insertedData[0] : insertedData;
       if (inserted) {
         const doc = inserted as Record<string, unknown>;
         await insforge.database
           .from('audit_logs')
-          .insert({
-            organization_id: doc.organization_id ?? null,
-            actor_id: user?.id ?? null,
-            actor_type: 'user',
-            action: 'knowledge_document_created',
-            resource_type: 'knowledge_document',
-            resource_id: doc.id ?? null,
-            metadata: { title: newTitle.trim() },
-          })
+          .insert(
+            buildKnowledgeDocumentAuditLog(
+              orgId,
+              user.id,
+              (doc.id as string | undefined) ?? null,
+              newTitle.trim(),
+            ),
+          )
           .select();
       }
 

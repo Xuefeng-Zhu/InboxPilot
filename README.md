@@ -228,6 +228,23 @@ packages/support-core/__tests__/
 └── .env.example                  # Environment variable template
 ```
 
+## Documentation
+
+The product source of truth lives in `docs/`. Start here:
+
+- **[`docs/PRD.md`](./docs/PRD.md)** — Product Requirements: who InboxPilot is for, what v1 ships, success metrics, what we explicitly are not building, and the risks (each grounded in a known limitation in the code).
+- **[`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md)** — System architecture, layered design, data flows.
+- **[`docs/DATABASE.md`](./docs/DATABASE.md)** — Schema reference for the 17 tables, RLS policies, migrations.
+- **[`docs/API.md`](./docs/API.md)** — All 14 serverless function entrypoints.
+- **[`docs/DEVELOPMENT.md`](./docs/DEVELOPMENT.md)** — Local setup, conventions, "Critical Rules" for this project.
+- **[`docs/TESTING.md`](./docs/TESTING.md)** — Testing strategy and correctness properties.
+- **[`docs/PRICING.md`](./docs/PRICING.md)** — 3-tier pricing & packaging hypothesis, gating schema, design-partner profiles.
+- **[`docs/LAUNCH_CHECKLIST.md`](./docs/LAUNCH_CHECKLIST.md)** — Go/no-go checklist for v1 ship.
+- **[`docs/SUPPORT_PLAYBOOK.md`](./docs/SUPPORT_PLAYBOOK.md)** — Tier-1 support FAQ and escalation path.
+- **[`docs/SECRET_ROTATION.md`](./docs/SECRET_ROTATION.md)** — Credential rotation runbook (Twilio, Postmark, OpenRouter).
+- **[`docs/QA_BUG_HUNT.md`](./docs/QA_BUG_HUNT.md)** — Static-analysis findings from the v1 deep QA pass (4 CRITICAL, 9 HIGH, 18 MEDIUM, 11 LOW).
+- **[`legal/DPA.md`](./legal/DPA.md)** · **[`legal/AUP.md`](./legal/AUP.md)** — Data Processing Agreement and Acceptable Use Policy templates.
+
 ## License
 
 Private — not for redistribution.

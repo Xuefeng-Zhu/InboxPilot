@@ -2,7 +2,7 @@
 
 > **Status:** v1, source of truth for "what we ship, who it's for, what success looks like, and what we say no to."
 > **Last updated:** 2026-06-07
-> **Pair with:** `ARCHITECTURE.md` · `DATABASE.md` · `API.md` · `TESTING.md` · `DEVELOPMENT.md` · `PRICING.md` · `LAUNCH_CHECKLIST.md` · `SUPPORT_PLAYBOOK.md` · `SECRET_ROTATION.md` · `QA_BUG_HUNT.md` · `deep-research-report.md` · `legal/DPA.md` · `legal/AUP.md`
+> **Pair with:** `ARCHITECTURE.md` · `DATABASE.md` · `API.md` · `TESTING.md` · `DEVELOPMENT.md` · `PRICING.md` · `LAUNCH_CHECKLIST.md` · `SUPPORT_PLAYBOOK.md` · `SECRET_ROTATION.md` · `QA_BUG_HUNT.md` · `deep-research-report.md` · `legal/DPA.md` · `legal/AUP.md` · **`COMPETITIVE.md`** (the "why not X" positioning map — the Escalation Engine requirements in §Req 12 of the legacy `requirements.md` are explicitly "safer than Fin" because of the Fin behaviors named in COMPETITIVE.md §2.2.2)
 > **Kanban:** `t_pm_prd` · parent of: `t_eng_auth`, `t_eng_inbox_ui`, `t_eng_knowledge_ingestion`, `t_eng_settings_ai`, `t_pm_metric_tree`, `t_pm_user_stories`.
 
 ## How to read this document

@@ -88,6 +88,7 @@ This is the **single source of truth** for "do we ship v1 today?". If a box is u
 | 5.5 | `docs/ARCHITECTURE.md` is updated to reflect the 14-function, 8-rule, 17-table reality (no "TBD" sections) | ☐ | File exists at 23k+ lines. No `TODO` or `TBD` markers in body. | ENG-LEAD |
 | 5.6 | `docs/README_INDEX.md` table of contents exists, lists every doc in `docs/` with a one-line purpose, and cross-links to PRD, METRICS, USER_STORIES, INCIDENT_RESPONSE, SECURITY_MODEL, LAUNCH_CHECKLIST | ☐ | File exists. All 6 cross-links resolve. | PM |
 | 5.7 | All public API endpoints in `insforge/functions/` are documented in `docs/API.md` with request, response, auth, and rate-limit columns | ☐ | Endpoint count in `API.md` matches `ls insforge/functions/ \| wc -l` (14). | ENG-LEAD |
+| 5.8 | A secret-rotation runbook exists covering Twilio, Postmark, and OpenRouter with pre-rotation, per-provider, and post-rotation phases | ☐ | `docs/SECRET_ROTATION.md` exists (shipped by `t_devops_secret_rotation`). The runbook is referenced from §6.1 above. | DEVOPS + ENG-SEC |
 
 **All criteria met?** ☐ · **Sign-off (verifier):** ______________ · **Date:** ______________
 
@@ -99,7 +100,7 @@ This is the **single source of truth** for "do we ship v1 today?". If a box is u
 
 | # | Criterion | State | Verifiable evidence | Owner |
 |---|---|---|---|---|
-| 6.1 | Credentials are stored in the `credentials_secret_id` column on provider-account tables, never as plaintext in code or env | ☐ | `git grep -i "sk_live\\|api_key=\\|secret=" -- '*.ts' ':!.env.example'` returns no hits. `insforge/migrations/001_initial_schema.sql` shows `credentials_secret_id text NOT NULL` for both `sms_provider_accounts` and `email_provider_accounts`. | ENG-SEC |
+| 6.1 | Credentials are stored in the `credentials_secret_id` column on provider-account tables, never as plaintext in code or env | ☐ | `git grep -i "sk_live\|api_key=\|secret=" -- '*.ts' ':!.env.example'` returns no hits. `insforge/migrations/001_initial_schema.sql` shows `credentials_secret_id text NOT NULL` for both `sms_provider_accounts` and `email_provider_accounts`. A rotation runbook exists at `docs/SECRET_ROTATION.md` and is exercised by `npm run test:rotation` (2 tests). | ENG-SEC |
 | 6.2 | `.env.example` contains no real keys — every value is a placeholder (`your-…-key` pattern) | ☐ | `cat .env.example` — visual inspection; an automated `grep -E "sk_live\|pk_live\|[A-Za-z0-9]{32,}" .env.example` returns 0 matches. | ENG-SEC |
 | 6.3 | `.env.local`, `.env.production`, and any other populated env files are in `.gitignore` and not committed | ☐ | `cat .gitignore` includes `.env*.local`, `.env.production`. `git log --all --full-history -- .env.local` returns no commits. | ENG-SEC |
 | 6.4 | A one-page security model exists: data classification, encryption at rest / in transit, RLS posture, secret lifecycle, vuln-reporting address | ☐ | `docs/SECURITY_MODEL.md` (child card `t_sec_security_model`). ≤ 800 words. | ENG-SEC |
@@ -182,7 +183,7 @@ This is the **single source of truth** for "do we ship v1 today?". If a box is u
 - `t_devops_perf_budget` — performance budget (feeds §4, §8)
 - `t_ops_runbook` — `docs/METRICS.md` (feeds §4, §5)
 - `t_pm_beta_program` — design-partner cohort (feeds §7)
-- `t_pm_pricing_packaging` — pricing page + tiers (feeds §7)
+- `t_pm_pricing_packaging` — pricing page + tiers (feeds §7) — see `docs/PRICING.md` for the 3-tier hypothesis, gating schema, and design-partner profiles
 - `t_pm_competitive` — competitive landscape (feeds §7 pitch)
 
 ### Open gaps surfaced by this audit (so the next worker doesn't redo it)

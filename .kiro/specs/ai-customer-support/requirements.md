@@ -456,3 +456,9 @@ InboxPilot is an AI-powered customer support platform that handles inbound and o
 1. THE Frontend SHALL comply with WCAG 2.1 Level AA guidelines for all interactive elements including forms, buttons, navigation, and conversation threads.
 2. THE Frontend SHALL provide keyboard navigation for all primary workflows: login, inbox browsing, message composition, and settings management.
 3. THE Frontend SHALL use semantic HTML elements and ARIA attributes to convey structure and state to screen readers.
+
+---
+
+## Cross-references
+
+- **Pricing & packaging hypothesis (3 tiers, gating schema, design-partner profiles):** `docs/PRICING.md` (sibling to this requirements doc; the tier boundaries it defines — Starter / Growth / Scale — are enforced via `organization_subscriptions`, `ai_settings.ai_mode`, `organization_members` count, and `knowledge_documents` count, all referenced from this document)

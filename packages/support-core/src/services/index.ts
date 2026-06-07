@@ -7,6 +7,12 @@ export { AiAgentService } from './ai-agent-service.js';
 export { parseAiDecision, AiDecisionSchema } from './ai-decision-parser.js';
 export type { ParsedAiDecision, ParseAiDecisionResult } from './ai-decision-parser.js';
 export {
+  EscalationKeywordsSchema,
+  validateEscalationKeywords,
+  sanitizeEscalationKeywords,
+} from './ai-settings-validator.js';
+export type { ValidateEscalationKeywordsResult } from './ai-settings-validator.js';
+export {
   HumanRequestRule,
   ProfanityAngerRule,
   SensitiveTopicRule,

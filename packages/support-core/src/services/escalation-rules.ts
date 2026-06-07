@@ -293,7 +293,24 @@ export class KeywordRule implements EscalationRule {
       return null;
     }
 
-    if (containsAny(context.latestMessage, keywords)) {
+    // Defensive: JavaScript's `"any string".includes("")` returns `true`,
+    // so an empty-string (or whitespace-only) keyword in the org settings
+    // would otherwise escalate EVERY message. The settings UI does
+    // trim-and-dedupe on entry, but the DB column is a free-form
+    // `text[]` (JSONB on the PostgREST side) that can be written to by
+    // a migration, a CSV import, or any other write path that doesn't
+    // run the UI sanitiser. Filter here so the rule is safe regardless
+    // of upstream shape. The same filter is also applied in
+    // `sanitizeEscalationKeywords` (used by the settings write path) so
+    // empty entries cannot be persisted in the first place — defence in
+    // depth, per the org settings Zod validation pattern in
+    // ai-decision-parser.ts.
+    const effectiveKeywords = keywords.filter((k) => k.trim().length > 0);
+    if (effectiveKeywords.length === 0) {
+      return null;
+    }
+
+    if (containsAny(context.latestMessage, effectiveKeywords)) {
       return {
         triggered: true,
         reason: 'Message contains an organization-configured escalation keyword',

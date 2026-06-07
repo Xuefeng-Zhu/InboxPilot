@@ -893,31 +893,58 @@ describe('Escalation Rules — Individual Rule Tests', () => {
     });
 
     // Attack: keyword is a single space " " — every message with a space
-    // in it would match. FINDING: this is a misconfiguration hazard, not
-    // a vulnerability in the rule itself. The rule does exactly what
-    // substring match does. Pins the behaviour so a future change to
-    // whitespace handling does not silently break this case.
-    it('matches when keyword is a single space (every message with a space matches)', () => {
+    // in it would match a raw substring. After the fix, KeywordRule
+    // filters out whitespace-only entries, so a single space is a
+    // no-op and does NOT trigger. Defence in depth: the repository
+    // sanitiser also drops whitespace-only entries on write, so an
+    // empty/whitespace keyword should not be persistable in the first
+    // place (see ai-settings-validator.ts).
+    it('does NOT trigger when keyword is a single space (whitespace-only filtered)', () => {
       const settings = { ...DEFAULT_SETTINGS, escalationKeywords: [' '] };
       const result = rule.evaluate(
         makeContext({ latestMessage: 'hi there', aiSettings: settings }),
       );
-      expect(result).not.toBeNull();
+      expect(result).toBeNull();
     });
 
     // Attack: empty-string keyword "". The rule lowercases the phrase
-    // (empty stays empty). The check is `lowerMessage.includes('')`,
-    // which is always true in JavaScript. FINDING: an empty-string
-    // keyword escalates EVERY message. The implementation should
-    // explicitly skip empty-string keywords, or treat them as no-ops.
-    it('matches every message when keyword is empty string ""', () => {
+    // (empty stays empty). The check would be `lowerMessage.includes('')`,
+    // which is always true in JavaScript. After the fix, KeywordRule
+    // filters out empty entries, so an empty string is a no-op and does
+    // NOT trigger. The repository sanitiser also drops empty entries on
+    // write, so this is a defence-in-depth fix: the rule is safe even if
+    // the DB somehow ends up with an empty entry (migration, CSV import,
+    // older version of the UI). See ai-settings-validator.ts and the
+    // t_cd438c93 task body.
+    it('does NOT trigger when keyword is empty string "" (filtered out by the rule)', () => {
       const settings = { ...DEFAULT_SETTINGS, escalationKeywords: [''] };
       const result = rule.evaluate(
         makeContext({ latestMessage: 'just a normal question', aiSettings: settings }),
       );
-      // Documents current (buggy) behaviour: empty string matches.
-      // 'normal question'.toLowerCase().includes('') === true in JS.
+      // After the fix: empty-string keywords are filtered out before
+      // matching, so this returns null instead of matching every message.
+      expect(result).toBeNull();
+    });
+
+    // Attack: mixed list — one valid keyword + one empty. The valid
+    // keyword still triggers when present in the message; the empty
+    // entry is filtered out and does not cause a blanket escalation.
+    it('triggers on valid keyword when list also contains empty string (empty entry ignored, valid keyword still matches)', () => {
+      const settings = { ...DEFAULT_SETTINGS, escalationKeywords: ['', 'urgent'] };
+      const result = rule.evaluate(
+        makeContext({ latestMessage: 'this is urgent please help', aiSettings: settings }),
+      );
       expect(result).not.toBeNull();
+      expect(result!.ruleName).toBe('KeywordRule');
+    });
+
+    // Attack: only empty / whitespace entries — should be a no-op.
+    it('does NOT trigger when all keywords are empty / whitespace', () => {
+      const settings = { ...DEFAULT_SETTINGS, escalationKeywords: ['', '   ', '\t\n'] };
+      const result = rule.evaluate(
+        makeContext({ latestMessage: 'this is urgent please help', aiSettings: settings }),
+      );
+      expect(result).toBeNull();
     });
   });
 

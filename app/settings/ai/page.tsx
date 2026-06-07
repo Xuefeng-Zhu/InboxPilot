@@ -3,6 +3,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { insforge } from '@/lib/insforge';
+import {
+  sanitizeEscalationKeywords,
+  validateEscalationKeywords,
+} from '@support-core/services/ai-settings-validator';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -106,6 +110,21 @@ export default function AiSettingsPage() {
     setSaving(true);
     setError(null);
     setSuccess(null);
+
+    // Defence in depth: validate + sanitise escalationKeywords before
+    // sending to the DB. The repository also runs the sanitiser
+    // (last-chance filter), but the UI is the right place to surface a
+    // clear validation error to the admin. An empty-string keyword
+    // escalates EVERY message via String.prototype.includes('') ===
+    // true, so this is a launch-blocker misconfiguration to prevent.
+    const validation = validateEscalationKeywords(escalationKeywords);
+    if (!validation.success) {
+      setError(`Escalation keywords: ${validation.error}`);
+      setSaving(false);
+      return;
+    }
+    const cleanKeywords = validation.data;
+
     try {
       const { error: updateError } = await insforge.database
         .from('ai_settings')
@@ -113,7 +132,7 @@ export default function AiSettingsPage() {
           ai_mode: aiMode,
           confidence_threshold: confidenceThreshold,
           context_window_size: contextWindowSize,
-          escalation_keywords: escalationKeywords,
+          escalation_keywords: cleanKeywords,
           system_prompt: systemPrompt || null,
           model,
           updated_at: new Date().toISOString(),

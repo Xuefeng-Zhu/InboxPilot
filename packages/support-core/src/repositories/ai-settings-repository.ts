@@ -7,6 +7,7 @@
 
 import type { DatabaseClient } from '../interfaces/database-client.js';
 import type { AiSettings, AiMode, CreateAiSettingsInput } from '../types/index.js';
+import { sanitizeEscalationKeywords } from '../services/ai-settings-validator.js';
 
 /** Raw row shape returned by the database (snake_case columns). */
 interface AiSettingsRow {
@@ -52,7 +53,15 @@ function toRow(fields: Partial<AiSettings>): Record<string, unknown> {
   if (fields.contextWindowSize !== undefined) row.context_window_size = fields.contextWindowSize;
   if (fields.maxConsecutiveFailures !== undefined) row.max_consecutive_failures = fields.maxConsecutiveFailures;
   if (fields.knowledgeSimilarityThreshold !== undefined) row.knowledge_similarity_threshold = fields.knowledgeSimilarityThreshold;
-  if (fields.escalationKeywords !== undefined) row.escalation_keywords = fields.escalationKeywords;
+  if (fields.escalationKeywords !== undefined) {
+    // Defence in depth: never write empty / whitespace-only keywords
+    // to the DB. The settings UI also runs this sanitiser on save, but
+    // the repository is the last-chance filter for any other write
+    // path (CSV import, migration, server-side job, etc.). See
+    // ai-settings-validator.ts and the KeywordRule comment in
+    // escalation-rules.ts for the bug this prevents.
+    row.escalation_keywords = sanitizeEscalationKeywords(fields.escalationKeywords);
+  }
   if (fields.systemPrompt !== undefined) row.system_prompt = fields.systemPrompt;
   if (fields.model !== undefined) row.model = fields.model;
   if (fields.createdAt !== undefined) row.created_at = fields.createdAt.toISOString();
@@ -90,7 +99,11 @@ export class AiSettingsRepository {
     if (input.contextWindowSize !== undefined) row.context_window_size = input.contextWindowSize;
     if (input.maxConsecutiveFailures !== undefined) row.max_consecutive_failures = input.maxConsecutiveFailures;
     if (input.knowledgeSimilarityThreshold !== undefined) row.knowledge_similarity_threshold = input.knowledgeSimilarityThreshold;
-    if (input.escalationKeywords !== undefined) row.escalation_keywords = input.escalationKeywords;
+    if (input.escalationKeywords !== undefined) {
+      // Defence in depth (see toRow above): strip empty / whitespace-only
+      // entries before they hit the DB.
+      row.escalation_keywords = sanitizeEscalationKeywords(input.escalationKeywords);
+    }
     if (input.systemPrompt !== undefined) row.system_prompt = input.systemPrompt;
     if (input.model !== undefined) row.model = input.model;
 

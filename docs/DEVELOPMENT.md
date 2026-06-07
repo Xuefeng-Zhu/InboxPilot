@@ -59,12 +59,6 @@
 | `NEXT_PUBLIC_INSFORGE_URL` | Yes | InsForge project base URL (e.g., `https://y39ezar3.us-east.insforge.app`) |
 | `NEXT_PUBLIC_INSFORGE_ANON_KEY` | Yes | InsForge anonymous/public API key (safe for browser) |
 | `INSFORGE_SERVICE_ROLE_KEY` | Yes | InsForge service role key (server-side only, never expose to browser) |
-| `OPENROUTER_API_KEY` | Yes | OpenRouter API key for AI features |
-| `OPENROUTER_MODEL` | No | LLM model identifier (default: `openai/gpt-4o-mini`) |
-| `TWILIO_ACCOUNT_SID` | No | Twilio account SID (for SMS) |
-| `TWILIO_AUTH_TOKEN` | No | Twilio auth token (for SMS) |
-| `TELNYX_API_KEY` | No | Telnyx API key (for SMS) |
-| `POSTMARK_SERVER_TOKEN` | No | Postmark server token (for email) |
 
 The `NEXT_PUBLIC_` prefix makes variables available in the browser bundle. Only the InsForge URL and anon key should use this prefix.
 

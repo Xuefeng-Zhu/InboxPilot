@@ -39,7 +39,7 @@ const DEFAULT_AI_SETTINGS: Omit<AiSettings, 'id' | 'organizationId' | 'createdAt
   knowledgeSimilarityThreshold: 0.7,
   escalationKeywords: [],
   systemPrompt: null,
-  model: 'openai/gpt-4o-mini',
+  model: 'openai/gpt-5.4-nano',
 };
 
 export class AiAgentService {

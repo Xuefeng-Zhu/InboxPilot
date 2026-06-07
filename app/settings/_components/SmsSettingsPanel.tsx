@@ -247,13 +247,11 @@ export default function SmsSettingsPanel() {
     setTestResult(null);
     try {
       const token = getAccessToken();
-      const baseUrl = process.env.NEXT_PUBLIC_INSFORGE_URL ?? '';
-      const res = await fetch(`${baseUrl}/functions/v1/test-channel-connection`, {
+      const res = await fetch('/api/functions/test-channel-connection', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          apikey: process.env.NEXT_PUBLIC_INSFORGE_ANON_KEY ?? '',
         },
         body: JSON.stringify({ channelType: 'sms', providerAccountId: accountId }),
       });

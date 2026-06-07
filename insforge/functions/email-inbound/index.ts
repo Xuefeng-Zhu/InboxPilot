@@ -190,8 +190,11 @@ export default async function (req: Request): Promise<Response> {
       process.env.NEXT_PUBLIC_INSFORGE_URL ??
       '';
     const serviceRoleKey =
-      (typeof Deno !== 'undefined' ? Deno.env.get('INSFORGE_SERVICE_ROLE_KEY') : undefined) ??
+      (typeof Deno !== 'undefined'
+        ? (Deno.env.get('INSFORGE_SERVICE_ROLE_KEY') ?? Deno.env.get('SERVICE_ROLE_KEY') ?? req.headers.get('apikey'))
+        : undefined) ??
       process.env.INSFORGE_SERVICE_ROLE_KEY ??
+      req.headers.get('apikey') ??
       '';
 
     const db = createDbClient(baseUrl, serviceRoleKey);
@@ -239,7 +242,19 @@ export default async function (req: Request): Promise<Response> {
       conversationId: message.conversationId,
     });
 
-    // 11. Return 200 OK with message data
+    // 11. Trigger process-jobs to immediately handle the AI message job
+    // Fire-and-forget — don't block the inbound response
+    fetch(`${baseUrl}/functions/v1/process-jobs`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: serviceRoleKey,
+        Authorization: `Bearer ${serviceRoleKey}`,
+      },
+      body: '{}',
+    }).catch(() => { /* non-critical — job will be picked up on next trigger */ });
+
+    // 12. Return 200 OK with message data
     return jsonResponse({ status: 'ok', data: message });
   } catch (err) {
     console.error('email-inbound error:', err);

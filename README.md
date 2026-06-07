@@ -62,12 +62,6 @@ cp .env.example .env.local
 | `NEXT_PUBLIC_INSFORGE_URL` | InsForge project base URL |
 | `NEXT_PUBLIC_INSFORGE_ANON_KEY` | InsForge anonymous/public API key |
 | `INSFORGE_SERVICE_ROLE_KEY` | InsForge service role key (server-side only) |
-| `OPENROUTER_API_KEY` | OpenRouter API key for AI features |
-| `OPENROUTER_MODEL` | LLM model identifier (default: `openai/gpt-4o-mini`) |
-| `TWILIO_ACCOUNT_SID` | Twilio account SID (optional) |
-| `TWILIO_AUTH_TOKEN` | Twilio auth token (optional) |
-| `TELNYX_API_KEY` | Telnyx API key (optional) |
-| `POSTMARK_SERVER_TOKEN` | Postmark server token (optional) |
 
 See `.env.example` for the full list with comments.
 

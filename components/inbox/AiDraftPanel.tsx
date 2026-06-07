@@ -81,10 +81,10 @@ export function AiDraftPanel({ conversationId, aiState }: AiDraftPanelProps) {
     setError(null);
 
     try {
+      
       const token = getAccessToken();
-      const baseUrl = process.env.NEXT_PUBLIC_INSFORGE_URL ?? '';
 
-      const res = await fetch(`${baseUrl}/functions/v1/approve-ai-draft`, {
+      const res = await fetch(`/api/functions/approve-ai-draft`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -114,10 +114,10 @@ export function AiDraftPanel({ conversationId, aiState }: AiDraftPanelProps) {
     setError(null);
 
     try {
+      
       const token = getAccessToken();
-      const baseUrl = process.env.NEXT_PUBLIC_INSFORGE_URL ?? '';
 
-      const res = await fetch(`${baseUrl}/functions/v1/regenerate-ai-draft`, {
+      const res = await fetch(`/api/functions/regenerate-ai-draft`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

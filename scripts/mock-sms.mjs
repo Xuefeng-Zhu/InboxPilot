@@ -362,6 +362,30 @@ async function cmdInbound(message = 'Hi, I need help with my order #12345') {
     console.log(c.yellow(`  ⚠ AI job enqueue failed: ${jobErr.message}`));
   } else {
     console.log(c.green('  ✓ AI job enqueued'));
+
+    // 6. Trigger process-jobs to run AI immediately
+    console.log(c.dim('→ Triggering AI processing...'));
+    try {
+      const processRes = await fetch(`${BASE_URL.replace('.us-east.insforge.app', '.functions.insforge.app')}/process-jobs`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: SERVICE_KEY,
+          Authorization: `Bearer ${SERVICE_KEY}`,
+        },
+        body: '{}',
+      });
+      const processResult = await processRes.json().catch(() => null);
+      if (processRes.ok && processResult?.claimed > 0) {
+        console.log(c.green(`  ✓ AI processed: ${JSON.stringify(processResult.results?.[0]?.status || 'done')}`));
+      } else if (processRes.ok) {
+        console.log(c.dim('  • No jobs claimed (may already be processed)'));
+      } else {
+        console.log(c.yellow(`  ⚠ AI trigger returned ${processRes.status}: ${processResult?.error || 'unknown'}`));
+      }
+    } catch (triggerErr) {
+      console.log(c.yellow(`  ⚠ Could not trigger process-jobs: ${triggerErr.message}`));
+    }
   }
 
   // Summary

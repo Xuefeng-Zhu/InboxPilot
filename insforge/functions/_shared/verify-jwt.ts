@@ -46,10 +46,9 @@ export async function verifyJwt(
 
   try {
     // 2. Call the InsForge auth endpoint to verify the token and get the user
-    const res = await fetch(`${baseUrl}/auth/v1/user`, {
+    const res = await fetch(`${baseUrl}/api/auth/sessions/current`, {
       method: 'GET',
       headers: {
-        apikey: serviceRoleKey,
         Authorization: `Bearer ${token}`,
       },
     });
@@ -58,10 +57,10 @@ export async function verifyJwt(
       return null;
     }
 
-    const user = (await res.json()) as Record<string, unknown>;
+    const data = (await res.json()) as Record<string, unknown>;
+    const user = (data.user as Record<string, unknown>) ?? data;
 
     // 3. Extract the user ID from the response
-    // InsForge auth returns the user object with an `id` field (equivalent to JWT `sub`)
     const userId = (user.id as string) ?? (user.sub as string);
     if (!userId || typeof userId !== 'string') {
       return null;

@@ -35,14 +35,29 @@ const MAX_JOBS_PER_RUN = 10;
 // ---------------------------------------------------------------------------
 
 function createAiClient(baseUrl: string, serviceRoleKey: string): AiClient {
+  // Fetch OpenRouter key lazily, cache for the lifetime of this invocation
+  let openRouterKey: string | null = null;
+  async function getOpenRouterKey(): Promise<string> {
+    if (openRouterKey) return openRouterKey;
+    const res = await fetch(`${baseUrl}/api/ai/openrouter/api-key`, {
+      headers: { Authorization: `Bearer ${serviceRoleKey}` },
+    });
+    if (!res.ok) {
+      throw new Error(`Failed to fetch OpenRouter key: HTTP ${res.status}`);
+    }
+    const data = (await res.json()) as { apiKey: string };
+    openRouterKey = data.apiKey;
+    return openRouterKey;
+  }
+
   return {
     async chatCompletion(params) {
-      const res = await fetch(`${baseUrl}/ai/v1/chat/completions`, {
+      const key = await getOpenRouterKey();
+      const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          apikey: serviceRoleKey,
-          Authorization: `Bearer ${serviceRoleKey}`,
+          Authorization: `Bearer ${key}`,
         },
         body: JSON.stringify({
           model: params.model,
@@ -63,12 +78,12 @@ function createAiClient(baseUrl: string, serviceRoleKey: string): AiClient {
       };
     },
     async createEmbedding(params) {
-      const res = await fetch(`${baseUrl}/ai/v1/embeddings`, {
+      const key = await getOpenRouterKey();
+      const res = await fetch('https://openrouter.ai/api/v1/embeddings', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          apikey: serviceRoleKey,
-          Authorization: `Bearer ${serviceRoleKey}`,
+          Authorization: `Bearer ${key}`,
         },
         body: JSON.stringify({ model: params.model, input: params.input }),
       });
@@ -172,13 +187,16 @@ export default async function (_req: Request): Promise<Response> {
     const baseUrl = (globalThis as Record<string, unknown>).Deno
       ? (globalThis as Record<string, { get(key: string): string | undefined }>).Deno.env.get('INSFORGE_BASE_URL')
       : process.env.INSFORGE_BASE_URL;
+    // Service role key: check env first, then fall back to request's apikey header
     const serviceRoleKey = (globalThis as Record<string, unknown>).Deno
-      ? (globalThis as Record<string, { get(key: string): string | undefined }>).Deno.env.get('INSFORGE_SERVICE_ROLE_KEY')
-      : process.env.INSFORGE_SERVICE_ROLE_KEY;
+      ? ((globalThis as Record<string, { get(key: string): string | undefined }>).Deno.env.get('INSFORGE_SERVICE_ROLE_KEY')
+        ?? (globalThis as Record<string, { get(key: string): string | undefined }>).Deno.env.get('SERVICE_ROLE_KEY')
+        ?? _req.headers.get('apikey'))
+      : (process.env.INSFORGE_SERVICE_ROLE_KEY ?? _req.headers.get('apikey'));
 
     if (!baseUrl || !serviceRoleKey) {
       return new Response(
-        JSON.stringify({ error: 'Missing environment configuration' }),
+        JSON.stringify({ error: 'Missing environment configuration', debug: { hasBaseUrl: !!baseUrl, hasKey: !!serviceRoleKey } }),
         { status: 500, headers: { 'Content-Type': 'application/json' } },
       );
     }

@@ -173,7 +173,7 @@ class PostgRestQueryBuilder implements QueryBuilder {
   }
 
   private async execute(): Promise<QueryResult> {
-    const url = new URL(`${this.baseUrl}/rest/v1/${this.state.table}`);
+    const url = new URL(`${this.baseUrl}/api/database/records/${this.state.table}`);
 
     // Add select columns
     if (this.state.selectColumns) {
@@ -281,7 +281,7 @@ export function createDbClient(baseUrl: string, serviceRoleKey: string): Databas
       args: Record<string, unknown> = {},
     ): Promise<QueryResult> {
       try {
-        const res = await fetch(`${baseUrl}/rest/v1/rpc/${functionName}`, {
+        const res = await fetch(`${baseUrl}/api/database/rpc/${functionName}`, {
           method: 'POST',
           headers: {
             ...headers,

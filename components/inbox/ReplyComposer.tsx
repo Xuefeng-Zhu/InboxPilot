@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useState } from 'react';
-import { getAccessToken } from '@/lib/insforge';
+import { insforge, getAccessToken } from '@/lib/insforge';
 
 // ---------------------------------------------------------------------------
 // Component
@@ -25,10 +25,10 @@ export function ReplyComposer({ conversationId }: ReplyComposerProps) {
       setSending(true);
       setError(null);
       try {
+        
         const token = getAccessToken();
-        const baseUrl = process.env.NEXT_PUBLIC_INSFORGE_URL ?? '';
 
-        const res = await fetch(`${baseUrl}/functions/v1/send-reply`, {
+        const res = await fetch(`/api/functions/send-reply`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

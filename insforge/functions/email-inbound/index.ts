@@ -20,6 +20,7 @@
 
 import { createDbClient } from '../_shared/create-db-client.js';
 import { createRealtimePublisher } from '../_shared/create-realtime-publisher.js';
+import { log, logError, newRequestContext, withRequest, withRequestIdHeader } from '../_shared/logger.js';
 
 import { ProviderRegistry } from '../../../packages/support-core/src/interfaces/provider-registry.js';
 import { MockEmailAdapter } from '../../../packages/support-core/src/adapters/mock-email-adapter.js';
@@ -171,120 +172,126 @@ function readEnv(key: string): string | undefined {
 // ---------------------------------------------------------------------------
 
 export default async function (req: Request): Promise<Response> {
+  const ctx = newRequestContext('email-inbound', req);
   try {
-    // 1. Parse request body
-    const rawBody = await req.text();
-    let body: unknown;
-    try {
-      body = JSON.parse(rawBody);
-    } catch {
-      return jsonResponse({ error: 'Invalid JSON body' }, 400);
-    }
+    const response = await withRequest(ctx, async () => {
+      // 1. Parse request body
+      const rawBody = await req.text();
+      let body: unknown;
+      try {
+        body = JSON.parse(rawBody);
+      } catch {
+        return jsonResponse({ error: 'Invalid JSON body' }, 400);
+      }
 
-    // 2. Determine email provider from header (default: 'mock')
-    const provider = req.headers.get('x-provider') ?? 'mock';
+      // 2. Determine email provider from header (default: 'mock')
+      const provider = req.headers.get('x-provider') ?? 'mock';
+      log({ ...ctx, level: 'debug', msg: 'email provider selected', provider });
 
-    // CRITICAL-1 mitigation: refuse the mock provider in production. The mock
-    // adapter is for local development and tests only — it must never be
-    // reachable on a deployed URL, even with a valid signing secret.
-    if (provider === 'mock' && readEnv('ENV') === 'production') {
-      return jsonResponse(
-        { error: 'Mock email provider is disabled in production' },
-        400,
+      // CRITICAL-1 mitigation: refuse the mock provider in production. The mock
+      // adapter is for local development and tests only — it must never be
+      // reachable on a deployed URL, even with a valid signing secret.
+      if (provider === 'mock' && readEnv('ENV') === 'production') {
+        return jsonResponse(
+          { error: 'Mock email provider is disabled in production' },
+          400,
+        );
+      }
+
+      // 3. Build provider registry and get adapter
+      const registry = new ProviderRegistry();
+      registry.registerEmailAdapter('mock', new MockEmailAdapter());
+      // Future: register Postmark, SendGrid, etc. adapters here
+
+      let adapter;
+      try {
+        adapter = registry.getEmailAdapter(provider);
+      } catch {
+        return jsonResponse({ error: `Unknown email provider: ${provider}` }, 400);
+      }
+
+      // 4. Verify webhook signature
+      const signingSecret =
+        req.headers.get('x-signing-secret') ?? '';
+      const headers: Record<string, string> = {};
+      req.headers.forEach((value, key) => {
+        headers[key] = value;
+      });
+
+      const isValid = await adapter.verifyWebhook({
+        headers,
+        body: rawBody,
+        signingSecret,
+      });
+
+      if (!isValid) {
+        return jsonResponse({ error: 'Webhook signature verification failed' }, 401);
+      }
+
+      // 5. Parse and normalize inbound payload
+      const normalized = adapter.parseInboundWebhook(body);
+
+      // 6. Create InsForge database client
+      const baseUrl =
+        (typeof Deno !== 'undefined' ? Deno.env.get('INSFORGE_BASE_URL') : undefined) ??
+        process.env.NEXT_PUBLIC_INSFORGE_URL ??
+        '';
+      const serviceRoleKey =
+        (typeof Deno !== 'undefined' ? Deno.env.get('INSFORGE_SERVICE_ROLE_KEY') : undefined) ??
+        process.env.INSFORGE_SERVICE_ROLE_KEY ??
+        '';
+
+      const db = createDbClient(baseUrl, serviceRoleKey);
+
+      // 7. Determine organization ID from the receiving email address.
+      // The org is always derived from the server-verifiable receiving
+      // address (email_addresses table) — never from a caller-supplied
+      // header. See docs/QA_BUG_HUNT.md CRITICAL-3.
+      const orgId = await lookupOrgByEmailAddress(db, normalized.to);
+      if (orgId) ctx.org_id = orgId;
+
+      if (!orgId) {
+        return jsonResponse(
+          { error: 'Could not determine organization for receiving email address' },
+          404,
+        );
+      }
+
+      // 8. Create repositories and service
+      const contactRepo = new ContactRepository(db);
+      const conversationRepo = new ConversationRepository(db);
+      const messageRepo = new MessageRepository(db);
+      const auditLogRepo = new AuditLogRepository(db);
+      const jobQueue = new PostgRestJobQueue(db);
+
+      const inboundService = new InboundMessageService(
+        contactRepo,
+        conversationRepo,
+        messageRepo,
+        jobQueue,
+        auditLogRepo,
       );
-    }
 
-    // 3. Build provider registry and get adapter
-    const registry = new ProviderRegistry();
-    registry.registerEmailAdapter('mock', new MockEmailAdapter());
-    // Future: register Postmark, SendGrid, etc. adapters here
-
-    let adapter;
-    try {
-      adapter = registry.getEmailAdapter(provider);
-    } catch {
-      return jsonResponse({ error: `Unknown email provider: ${provider}` }, 400);
-    }
-
-    // 4. Verify webhook signature
-    const signingSecret =
-      req.headers.get('x-signing-secret') ?? '';
-    const headers: Record<string, string> = {};
-    req.headers.forEach((value, key) => {
-      headers[key] = value;
-    });
-
-    const isValid = await adapter.verifyWebhook({
-      headers,
-      body: rawBody,
-      signingSecret,
-    });
-
-    if (!isValid) {
-      return jsonResponse({ error: 'Webhook signature verification failed' }, 401);
-    }
-
-    // 5. Parse and normalize inbound payload
-    const normalized = adapter.parseInboundWebhook(body);
-
-    // 6. Create InsForge database client
-    const baseUrl =
-      (typeof Deno !== 'undefined' ? Deno.env.get('INSFORGE_BASE_URL') : undefined) ??
-      process.env.NEXT_PUBLIC_INSFORGE_URL ??
-      '';
-    const serviceRoleKey =
-      (typeof Deno !== 'undefined' ? Deno.env.get('INSFORGE_SERVICE_ROLE_KEY') : undefined) ??
-      process.env.INSFORGE_SERVICE_ROLE_KEY ??
-      '';
-
-    const db = createDbClient(baseUrl, serviceRoleKey);
-
-    // 7. Determine organization ID from the receiving email address.
-    // The org is always derived from the server-verifiable receiving
-    // address (email_addresses table) — never from a caller-supplied
-    // header. See docs/QA_BUG_HUNT.md CRITICAL-3.
-    const orgId = await lookupOrgByEmailAddress(db, normalized.to);
-
-    if (!orgId) {
-      return jsonResponse(
-        { error: 'Could not determine organization for receiving email address' },
-        404,
+      // 9. Delegate to InboundMessageService
+      const message = await inboundService.processInboundEmail(
+        normalized,
+        orgId,
+        provider,
       );
-    }
+      log({ ...ctx, level: 'info', msg: 'email processed', message_id: message.id });
 
-    // 8. Create repositories and service
-    const contactRepo = new ContactRepository(db);
-    const conversationRepo = new ConversationRepository(db);
-    const messageRepo = new MessageRepository(db);
-    const auditLogRepo = new AuditLogRepository(db);
-    const jobQueue = new PostgRestJobQueue(db);
+      // 10. Publish new_message realtime event
+      const realtimePublisher = createRealtimePublisher(baseUrl, serviceRoleKey);
+      await realtimePublisher.publish(`org:${orgId}`, 'new_message', {
+        message,
+        conversationId: message.conversationId,
+      });
 
-    const inboundService = new InboundMessageService(
-      contactRepo,
-      conversationRepo,
-      messageRepo,
-      jobQueue,
-      auditLogRepo,
-    );
-
-    // 9. Delegate to InboundMessageService
-    const message = await inboundService.processInboundEmail(
-      normalized,
-      orgId,
-      provider,
-    );
-
-    // 10. Publish new_message realtime event
-    const realtimePublisher = createRealtimePublisher(baseUrl, serviceRoleKey);
-    await realtimePublisher.publish(`org:${orgId}`, 'new_message', {
-      message,
-      conversationId: message.conversationId,
+      // 11. Return 200 OK with message data
+      return jsonResponse({ status: 'ok', data: message });
     });
-
-    // 11. Return 200 OK with message data
-    return jsonResponse({ status: 'ok', data: message });
+    return withRequestIdHeader(ctx, response);
   } catch (err) {
-    console.error('email-inbound error:', err);
     return jsonResponse(
       { error: 'Internal server error', message: err instanceof Error ? err.message : 'Unknown error' },
       500,

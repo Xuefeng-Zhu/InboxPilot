@@ -19,6 +19,7 @@
 
 import { createDbClient } from '../_shared/create-db-client.js';
 import { createRealtimePublisher } from '../_shared/create-realtime-publisher.js';
+import { log, logError, newRequestContext, withRequest, withRequestIdHeader } from '../_shared/logger.js';
 import { requireOrgMembership } from '../_shared/require-org-membership.js';
 import { verifyJwt } from '../_shared/verify-jwt.js';
 
@@ -50,137 +51,143 @@ function jsonResponse(body: unknown, status = 200): Response {
 // ---------------------------------------------------------------------------
 
 export default async function (req: Request): Promise<Response> {
+  const ctx = newRequestContext('approve-ai-draft', req);
   try {
-    // 1. Parse request body as JSON
-    let payload: { conversationId?: string; aiDecisionId?: string };
-    try {
-      payload = await req.json();
-    } catch {
-      return jsonResponse({ error: 'Invalid JSON body' }, 400);
-    }
+    const response = await withRequest(ctx, async () => {
+      // 1. Parse request body as JSON
+      let payload: { conversationId?: string; aiDecisionId?: string };
+      try {
+        payload = await req.json();
+      } catch {
+        return jsonResponse({ error: 'Invalid JSON body' }, 400);
+      }
 
-    const { conversationId, aiDecisionId } = payload;
+      const { conversationId, aiDecisionId } = payload;
 
-    if (!conversationId || typeof conversationId !== 'string') {
-      return jsonResponse({ error: 'Missing or invalid conversationId' }, 400);
-    }
+      if (!conversationId || typeof conversationId !== 'string') {
+        return jsonResponse({ error: 'Missing or invalid conversationId' }, 400);
+      }
 
-    if (!aiDecisionId || typeof aiDecisionId !== 'string') {
-      return jsonResponse({ error: 'Missing or invalid aiDecisionId' }, 400);
-    }
+      if (!aiDecisionId || typeof aiDecisionId !== 'string') {
+        return jsonResponse({ error: 'Missing or invalid aiDecisionId' }, 400);
+      }
 
-    // 2. Verify JWT authentication
-    const baseUrl =
-      (typeof Deno !== 'undefined' ? Deno.env.get('INSFORGE_BASE_URL') : undefined) ??
-      process.env.NEXT_PUBLIC_INSFORGE_URL ??
-      '';
-    const serviceRoleKey =
-      (typeof Deno !== 'undefined' ? Deno.env.get('INSFORGE_SERVICE_ROLE_KEY') : undefined) ??
-      process.env.INSFORGE_SERVICE_ROLE_KEY ??
-      '';
+      // 2. Verify JWT authentication
+      const baseUrl =
+        (typeof Deno !== 'undefined' ? Deno.env.get('INSFORGE_BASE_URL') : undefined) ??
+        process.env.NEXT_PUBLIC_INSFORGE_URL ??
+        '';
+      const serviceRoleKey =
+        (typeof Deno !== 'undefined' ? Deno.env.get('INSFORGE_SERVICE_ROLE_KEY') : undefined) ??
+        process.env.INSFORGE_SERVICE_ROLE_KEY ??
+        '';
 
-    const verifiedUser = await verifyJwt(req, baseUrl, serviceRoleKey);
-    if (!verifiedUser) {
-      return jsonResponse({ error: 'Unauthorized' }, 401);
-    }
+      const verifiedUser = await verifyJwt(req, baseUrl, serviceRoleKey);
+      if (!verifiedUser) {
+        return jsonResponse({ error: 'Unauthorized' }, 401);
+      }
 
-    const { userId } = verifiedUser;
+      const { userId } = verifiedUser;
+      ctx.user_id = userId;
 
-    // 3. Create database client, repositories, provider registry, and service
-    const db = createDbClient(baseUrl, serviceRoleKey);
+      // 3. Create database client, repositories, provider registry, and service
+      const db = createDbClient(baseUrl, serviceRoleKey);
 
-    // CRITICAL-2: enforce org membership before any mutation or even
-    // reading the AI decision's response text. requireOrgMembership
-    // returns the conversation's organizationId on success.
-    const membership = await requireOrgMembership(db, userId, conversationId);
-    if (membership.kind === 'conversation_not_found') {
-      return jsonResponse({ error: 'Conversation not found' }, 404);
-    }
-    if (membership.kind === 'forbidden') {
-      return jsonResponse({ error: 'Forbidden: not a member of this conversation\'s organization' }, 403);
-    }
-    const orgId = membership.organizationId;
+      // CRITICAL-2: enforce org membership before any mutation or even
+      // reading the AI decision's response text. requireOrgMembership
+      // returns the conversation's organizationId on success.
+      const membership = await requireOrgMembership(db, userId, conversationId);
+      if (membership.kind === 'conversation_not_found') {
+        return jsonResponse({ error: 'Conversation not found' }, 404);
+      }
+      if (membership.kind === 'forbidden') {
+        return jsonResponse({ error: 'Forbidden: not a member of this conversation\'s organization' }, 403);
+      }
+      const orgId = membership.organizationId;
+      ctx.org_id = orgId;
 
-    const conversationRepo = new ConversationRepository(db);
-    const contactRepo = new ContactRepository(db);
-    const messageRepo = new MessageRepository(db);
-    const auditLogRepo = new AuditLogRepository(db);
-    const aiDecisionRepo = new AiDecisionRepository(db);
-    const smsAccountRepo = new SmsProviderAccountRepository(db);
-    const emailAccountRepo = new EmailProviderAccountRepository(db);
+      const conversationRepo = new ConversationRepository(db);
+      const contactRepo = new ContactRepository(db);
+      const messageRepo = new MessageRepository(db);
+      const auditLogRepo = new AuditLogRepository(db);
+      const aiDecisionRepo = new AiDecisionRepository(db);
+      const smsAccountRepo = new SmsProviderAccountRepository(db);
+      const emailAccountRepo = new EmailProviderAccountRepository(db);
 
-    const registry = new ProviderRegistry();
-    registry.registerSmsAdapter('mock', new MockSmsAdapter());
-    registry.registerEmailAdapter('mock', new MockEmailAdapter());
+      const registry = new ProviderRegistry();
+      registry.registerSmsAdapter('mock', new MockSmsAdapter());
+      registry.registerEmailAdapter('mock', new MockEmailAdapter());
 
-    const outboundService = new OutboundMessageService(
-      conversationRepo,
-      contactRepo,
-      messageRepo,
-      registry,
-      smsAccountRepo,
-      emailAccountRepo,
-      auditLogRepo,
-    );
+      const outboundService = new OutboundMessageService(
+        conversationRepo,
+        contactRepo,
+        messageRepo,
+        registry,
+        smsAccountRepo,
+        emailAccountRepo,
+        auditLogRepo,
+      );
 
-    // 4. Load the AI decision to get the response text
-    const aiDecision = await aiDecisionRepo.findLatestByConversation(conversationId);
-    if (!aiDecision || aiDecision.id !== aiDecisionId) {
-      return jsonResponse({ error: 'AI decision not found or does not match' }, 404);
-    }
+      // 4. Load the AI decision to get the response text
+      const aiDecision = await aiDecisionRepo.findLatestByConversation(conversationId);
+      if (!aiDecision || aiDecision.id !== aiDecisionId) {
+        return jsonResponse({ error: 'AI decision not found or does not match' }, 404);
+      }
 
-    if (!aiDecision.responseText) {
-      return jsonResponse({ error: 'AI decision has no response text to send' }, 400);
-    }
+      if (!aiDecision.responseText) {
+        return jsonResponse({ error: 'AI decision has no response text to send' }, 400);
+      }
 
-    // 5. Send the drafted response via OutboundMessageService
-    //    We use the userId as the sender but the message will be recorded
-    //    with sender_type 'ai' to distinguish from human replies.
-    //    OutboundMessageService.sendReply uses sender_type 'user', so we
-    //    create the message directly with sender_type 'ai'.
-    const message = await outboundService.sendReply(
-      conversationId,
-      aiDecision.responseText,
-      userId,
-    );
-
-    // 6. Update conversation ai_state to "idle"
-    const updatedConversation = await conversationRepo.update(conversationId, {
-      aiState: 'idle',
-    });
-
-    // 7. Record audit log entry
-    await auditLogRepo.create({
-      organizationId: orgId,
-      actorId: userId,
-      actorType: 'user',
-      action: 'ai_draft_approved',
-      resourceType: 'ai_decision',
-      resourceId: aiDecisionId,
-      metadata: {
+      // 5. Send the drafted response via OutboundMessageService
+      //    We use the userId as the sender but the message will be recorded
+      //    with sender_type 'ai' to distinguish from human replies.
+      //    OutboundMessageService.sendReply uses sender_type 'user', so we
+      //    create the message directly with sender_type 'ai'.
+      const message = await outboundService.sendReply(
         conversationId,
-        messageId: message.id,
-      },
+        aiDecision.responseText,
+        userId,
+      );
+      log({ ...ctx, level: 'info', msg: 'ai draft approved', message_id: message.id });
+
+      // 6. Update conversation ai_state to "idle"
+      const updatedConversation = await conversationRepo.update(conversationId, {
+        aiState: 'idle',
+      });
+
+      // 7. Record audit log entry
+      await auditLogRepo.create({
+        organizationId: orgId,
+        actorId: userId,
+        actorType: 'user',
+        action: 'ai_draft_approved',
+        resourceType: 'ai_decision',
+        resourceId: aiDecisionId,
+        metadata: {
+          conversationId,
+          messageId: message.id,
+        },
+      });
+
+      // 8. Publish realtime events
+      const realtimePublisher = createRealtimePublisher(baseUrl, serviceRoleKey);
+
+      await realtimePublisher.publish(`org:${orgId}`, 'new_message', {
+        message,
+        conversationId,
+      });
+
+      await realtimePublisher.publish(`org:${orgId}`, 'conversation_updated', {
+        conversationId,
+        status: updatedConversation.status,
+        aiState: updatedConversation.aiState,
+      });
+
+      // 9. Return 200 OK
+      return jsonResponse({ status: 'ok', data: { message, conversation: updatedConversation } });
     });
-
-    // 8. Publish realtime events
-    const realtimePublisher = createRealtimePublisher(baseUrl, serviceRoleKey);
-
-    await realtimePublisher.publish(`org:${orgId}`, 'new_message', {
-      message,
-      conversationId,
-    });
-
-    await realtimePublisher.publish(`org:${orgId}`, 'conversation_updated', {
-      conversationId,
-      status: updatedConversation.status,
-      aiState: updatedConversation.aiState,
-    });
-
-    // 9. Return 200 OK
-    return jsonResponse({ status: 'ok', data: { message, conversation: updatedConversation } });
+    return withRequestIdHeader(ctx, response);
   } catch (err) {
-    console.error('approve-ai-draft error:', err);
     return jsonResponse(
       {
         error: 'Internal server error',

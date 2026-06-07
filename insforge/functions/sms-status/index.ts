@@ -13,10 +13,11 @@
  *    update message delivery_status
  * 7. Return 200 OK
  *
- * Requirements: 7.6, 8.6, 16.1, 16.2, 16.3, 23.1, 23.2
+ * Requirements: 7.6, 16.1, 16.2, 16.3, 23.1, 23.3
  */
 
 import { createDbClient } from '../_shared/create-db-client.js';
+import { log, logError, newRequestContext, withRequest, withRequestIdHeader } from '../_shared/logger.js';
 
 import { ProviderRegistry } from '../../../packages/support-core/src/interfaces/provider-registry.js';
 import { MockSmsAdapter } from '../../../packages/support-core/src/adapters/mock-sms-adapter.js';
@@ -45,7 +46,6 @@ function jsonResponse(body: unknown, status = 200): Response {
  * Uses the `(globalThis as ...).Deno` cast pattern instead of `typeof Deno !==
  * 'undefined'` because Next.js's bundled TypeScript pass does not have Deno
  * ambient types, and the cast pattern avoids type-checker false positives.
- * Same pattern is used in `process-jobs/index.ts`.
  */
 function readEnv(key: string): string | undefined {
   const g = globalThis as Record<string, unknown>;
@@ -72,109 +72,110 @@ function readEnv(key: string): string | undefined {
 // ---------------------------------------------------------------------------
 
 export default async function (req: Request): Promise<Response> {
+  const ctx = newRequestContext('sms-status', req);
   try {
-    // 1. Parse request body
-    const rawBody = await req.text();
-    let body: unknown;
-    try {
-      body = JSON.parse(rawBody);
-    } catch {
-      return jsonResponse({ error: 'Invalid JSON body' }, 400);
-    }
+    const response = await withRequest(ctx, async () => {
+      // 1. Parse request body
+      const rawBody = await req.text();
+      let body: unknown;
+      try {
+        body = JSON.parse(rawBody);
+      } catch {
+        return jsonResponse({ error: 'Invalid JSON body' }, 400);
+      }
 
-    // 2. Determine SMS provider from header (default: 'mock')
-    const provider = req.headers.get('x-provider') ?? 'mock';
+      // 2. Determine SMS provider from header (default: 'mock')
+      const provider = req.headers.get('x-provider') ?? 'mock';
+      log({ ...ctx, level: 'debug', msg: 'sms-status provider selected', provider });
 
-    // CRITICAL-1 mitigation: refuse the mock provider in production. The mock
-    // adapter is for local development and tests only — it must never be
-    // reachable on a deployed URL, even with a valid signing secret.
-    if (provider === 'mock' && readEnv('ENV') === 'production') {
-      return jsonResponse(
-        { error: 'Mock SMS provider is disabled in production' },
-        400,
+      // CRITICAL-1 mitigation: refuse the mock provider in production.
+      if (provider === 'mock' && readEnv('ENV') === 'production') {
+        return jsonResponse(
+          { error: 'Mock SMS provider is disabled in production' },
+          400,
+        );
+      }
+
+      // 3. Build provider registry and get adapter
+      const registry = new ProviderRegistry();
+      registry.registerSmsAdapter('mock', new MockSmsAdapter());
+
+      let adapter;
+      try {
+        adapter = registry.getSmsAdapter(provider);
+      } catch {
+        return jsonResponse({ error: `Unknown SMS provider: ${provider}` }, 400);
+      }
+
+      // 4. Verify webhook signature
+      const signingSecret = req.headers.get('x-signing-secret') ?? '';
+      const headers: Record<string, string> = {};
+      req.headers.forEach((value, key) => {
+        headers[key] = value;
+      });
+
+      const isValid = await adapter.verifyWebhook({
+        headers,
+        body: rawBody,
+        signingSecret,
+      });
+
+      if (!isValid) {
+        return jsonResponse({ error: 'Webhook signature verification failed' }, 401);
+      }
+
+      // 5. Parse delivery status payload via adapter
+      const normalizedStatus = adapter.parseStatusWebhook(body);
+
+      // 6. Create InsForge database client
+      const baseUrl =
+        (typeof Deno !== 'undefined' ? Deno.env.get('INSFORGE_BASE_URL') : undefined) ??
+        process.env.NEXT_PUBLIC_INSFORGE_URL ??
+        '';
+      const serviceRoleKey =
+        (typeof Deno !== 'undefined' ? Deno.env.get('INSFORGE_SERVICE_ROLE_KEY') : undefined) ??
+        process.env.INSFORGE_SERVICE_ROLE_KEY ??
+        '';
+
+      const db = createDbClient(baseUrl, serviceRoleKey);
+
+      // 7. Look up the message by external_message_id
+      const messageRepo = new MessageRepository(db);
+      const message = await messageRepo.findByExternalId(
+        provider,
+        normalizedStatus.externalMessageId,
       );
-    }
 
-    // 3. Build provider registry and get adapter
-    const registry = new ProviderRegistry();
-    registry.registerSmsAdapter('mock', new MockSmsAdapter());
-    // Future: register Twilio, Telnyx, etc. adapters here
+      if (!message) {
+        return jsonResponse({ status: 'ok', message: 'Message not found, status ignored' });
+      }
 
-    let adapter;
-    try {
-      adapter = registry.getSmsAdapter(provider);
-    } catch {
-      return jsonResponse({ error: `Unknown SMS provider: ${provider}` }, 400);
-    }
-
-    // 4. Verify webhook signature
-    const signingSecret = req.headers.get('x-signing-secret') ?? '';
-    const headers: Record<string, string> = {};
-    req.headers.forEach((value, key) => {
-      headers[key] = value;
-    });
-
-    const isValid = await adapter.verifyWebhook({
-      headers,
-      body: rawBody,
-      signingSecret,
-    });
-
-    if (!isValid) {
-      return jsonResponse({ error: 'Webhook signature verification failed' }, 401);
-    }
-
-    // 5. Parse delivery status payload via adapter
-    const normalizedStatus = adapter.parseStatusWebhook(body);
-
-    // 6. Create InsForge database client
-    const baseUrl =
-      (typeof Deno !== 'undefined' ? Deno.env.get('INSFORGE_BASE_URL') : undefined) ??
-      process.env.NEXT_PUBLIC_INSFORGE_URL ??
-      '';
-    const serviceRoleKey =
-      (typeof Deno !== 'undefined' ? Deno.env.get('INSFORGE_SERVICE_ROLE_KEY') : undefined) ??
-      process.env.INSFORGE_SERVICE_ROLE_KEY ??
-      '';
-
-    const db = createDbClient(baseUrl, serviceRoleKey);
-
-    // 7. Look up the message by external_message_id
-    const messageRepo = new MessageRepository(db);
-    const message = await messageRepo.findByExternalId(
-      provider,
-      normalizedStatus.externalMessageId,
-    );
-
-    if (!message) {
-      // Message not found — acknowledge the webhook but take no action
-      return jsonResponse({ status: 'ok', message: 'Message not found, status ignored' });
-    }
-
-    // 8. Insert delivery event record
-    const deliveryEventRepo = new DeliveryEventRepository(db);
-    await deliveryEventRepo.create('sms', {
-      messageId: message.id,
-      providerAccountId: message.providerAccountId,
-      status: normalizedStatus.status,
-      errorCode: normalizedStatus.errorCode ?? null,
-      errorMessage: normalizedStatus.errorMessage ?? null,
-      rawPayload: normalizedStatus.rawPayload,
-    });
-
-    // 9. Update message delivery_status
-    await messageRepo.updateDeliveryStatus(message.id, normalizedStatus.status);
-
-    // 10. Return 200 OK
-    return jsonResponse({
-      status: 'ok',
-      data: {
+      // 8. Insert delivery event record
+      const deliveryEventRepo = new DeliveryEventRepository(db);
+      await deliveryEventRepo.create('sms', {
         messageId: message.id,
-        deliveryStatus: normalizedStatus.status,
-      },
+        providerAccountId: message.providerAccountId,
+        status: normalizedStatus.status,
+        errorCode: normalizedStatus.errorCode ?? null,
+        errorMessage: normalizedStatus.errorMessage ?? null,
+        rawPayload: normalizedStatus.rawPayload,
+      });
+      log({ ...ctx, level: 'info', msg: 'sms delivery status updated', message_id: message.id, delivery_status: normalizedStatus.status });
+
+      // 9. Update message delivery_status
+      await messageRepo.updateDeliveryStatus(message.id, normalizedStatus.status);
+
+      // 10. Return 200 OK
+      return jsonResponse({
+        status: 'ok',
+        data: {
+          messageId: message.id,
+          deliveryStatus: normalizedStatus.status,
+        },
+      });
     });
+    return withRequestIdHeader(ctx, response);
   } catch (err) {
-    console.error('sms-status error:', err);
     return jsonResponse(
       { error: 'Internal server error', message: err instanceof Error ? err.message : 'Unknown error' },
       500,

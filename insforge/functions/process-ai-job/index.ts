@@ -14,6 +14,7 @@
 
 import { createDbClient } from '../_shared/create-db-client.js';
 import { createRealtimePublisher } from '../_shared/create-realtime-publisher.js';
+import { log, logError, newRequestContext, withRequest, withRequestIdHeader } from '../_shared/logger.js';
 import { requireInternalToken } from '../_shared/require-internal-token.js';
 import { ConversationRepository } from '../../../packages/support-core/src/repositories/conversation-repository.js';
 import { MessageRepository } from '../../../packages/support-core/src/repositories/message-repository.js';
@@ -101,108 +102,115 @@ function createAiClient(baseUrl: string, serviceRoleKey: string): AiClient {
 }
 
 export default async function (req: Request): Promise<Response> {
+  // Internal-dispatch / cron entrypoint. The org_id is learned from the
+  // job body, so it gets set inside the withRequest body.
+  const ctx = newRequestContext('process-ai-job', req);
   try {
-    // 0. Internal-dispatch auth (CRITICAL-4). The function URL is public,
-    //    so anyone who guesses it could force AI analysis of any
-    //    conversation (cost amplification). Require the shared secret in
-    //    `x-internal-token`, compared against the server-side
-    //    `INTERNAL_DISPATCH_TOKEN` env var.
-    const envToken = (globalThis as Record<string, unknown>).Deno
-      ? (globalThis as Record<string, { get(key: string): string | undefined }>).Deno.env.get('INTERNAL_DISPATCH_TOKEN')
-      : process.env.INTERNAL_DISPATCH_TOKEN;
-    const authResult = requireInternalToken(req, envToken ?? undefined);
-    if (authResult.kind === 'misconfigured') {
-      return new Response(
-        JSON.stringify({ error: 'Internal dispatch token is not configured on the server' }),
-        { status: 500, headers: { 'Content-Type': 'application/json' } },
+    const response = await withRequest(ctx, async () => {
+      // 0. Internal-dispatch auth (CRITICAL-4). The function URL is public,
+      //    so anyone who guesses it could force AI analysis of any
+      //    conversation (cost amplification). Require the shared secret in
+      //    `x-internal-token`, compared against the server-side
+      //    `INTERNAL_DISPATCH_TOKEN` env var.
+      const envToken = (globalThis as Record<string, unknown>).Deno
+        ? (globalThis as Record<string, { get(key: string): string | undefined }>).Deno.env.get('INTERNAL_DISPATCH_TOKEN')
+        : process.env.INTERNAL_DISPATCH_TOKEN;
+      const authResult = requireInternalToken(req, envToken ?? undefined);
+      if (authResult.kind === 'misconfigured') {
+        return new Response(
+          JSON.stringify({ error: 'Internal dispatch token is not configured on the server' }),
+          { status: 500, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+      if (authResult.kind === 'unauthorized') {
+        return new Response(
+          JSON.stringify({ error: 'Unauthorized' }),
+          { status: 401, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+
+      // 1. Parse request body
+      const body = (await req.json()) as Record<string, unknown>;
+      const conversationId = body.conversation_id as string;
+      const orgId = body.organization_id as string;
+      ctx.org_id = orgId;
+
+      if (!conversationId || !orgId) {
+        return new Response(
+          JSON.stringify({ error: 'Missing conversation_id or organization_id' }),
+          { status: 400, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+
+      // 2. Create dependencies
+      const baseUrl = (globalThis as Record<string, unknown>).Deno
+        ? (globalThis as Record<string, { get(key: string): string | undefined }>).Deno.env.get('INSFORGE_BASE_URL')
+        : process.env.INSFORGE_BASE_URL;
+      const serviceRoleKey = (globalThis as Record<string, unknown>).Deno
+        ? (globalThis as Record<string, { get(key: string): string | undefined }>).Deno.env.get('INSFORGE_SERVICE_ROLE_KEY')
+        : process.env.INSFORGE_SERVICE_ROLE_KEY;
+
+      if (!baseUrl || !serviceRoleKey) {
+        return new Response(
+          JSON.stringify({ error: 'Missing environment configuration' }),
+          { status: 500, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+
+      const db = createDbClient(baseUrl, serviceRoleKey);
+      const realtime = createRealtimePublisher(baseUrl, serviceRoleKey);
+
+      const conversationRepo = new ConversationRepository(db);
+      const messageRepo = new MessageRepository(db);
+      const knowledgeRepo = new KnowledgeRepository(db);
+      const aiSettingsRepo = new AiSettingsRepository(db);
+      const aiDecisionRepo = new AiDecisionRepository(db);
+      const auditLogRepo = new AuditLogRepository(db);
+      const jobQueue = new PostgresJobQueue(db);
+      const aiClient = createAiClient(baseUrl, serviceRoleKey);
+      const escalationEngine = createDefaultEscalationEngine();
+
+      const aiAgentService = new AiAgentService(
+        conversationRepo,
+        messageRepo,
+        knowledgeRepo,
+        aiSettingsRepo,
+        aiDecisionRepo,
+        escalationEngine,
+        aiClient,
+        jobQueue,
+        auditLogRepo,
       );
-    }
-    if (authResult.kind === 'unauthorized') {
+
+      // 3. Delegate to AiAgentService
+      const decision = await aiAgentService.processMessage(conversationId, orgId);
+      log({ ...ctx, level: 'info', msg: 'ai decision made', decision_id: decision.id, decision_type: decision.decisionType });
+
+      // 4. Publish realtime event
+      await realtime.publish(`org:${orgId}`, 'conversation_updated', {
+        conversationId,
+        aiDecisionId: decision.id,
+        decisionType: decision.decisionType,
+      });
+
+      // 5. Return result
       return new Response(
-        JSON.stringify({ error: 'Unauthorized' }),
-        { status: 401, headers: { 'Content-Type': 'application/json' } },
+        JSON.stringify({
+          status: 'ok',
+          decision: {
+            id: decision.id,
+            decisionType: decision.decisionType,
+            confidence: decision.confidence,
+            requiresHuman: decision.requiresHuman,
+          },
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
       );
-    }
-
-    // 1. Parse request body
-    const body = (await req.json()) as Record<string, unknown>;
-    const conversationId = body.conversation_id as string;
-    const orgId = body.organization_id as string;
-
-    if (!conversationId || !orgId) {
-      return new Response(
-        JSON.stringify({ error: 'Missing conversation_id or organization_id' }),
-        { status: 400, headers: { 'Content-Type': 'application/json' } },
-      );
-    }
-
-    // 2. Create dependencies
-    const baseUrl = (globalThis as Record<string, unknown>).Deno
-      ? (globalThis as Record<string, { get(key: string): string | undefined }>).Deno.env.get('INSFORGE_BASE_URL')
-      : process.env.INSFORGE_BASE_URL;
-    const serviceRoleKey = (globalThis as Record<string, unknown>).Deno
-      ? (globalThis as Record<string, { get(key: string): string | undefined }>).Deno.env.get('INSFORGE_SERVICE_ROLE_KEY')
-      : process.env.INSFORGE_SERVICE_ROLE_KEY;
-
-    if (!baseUrl || !serviceRoleKey) {
-      return new Response(
-        JSON.stringify({ error: 'Missing environment configuration' }),
-        { status: 500, headers: { 'Content-Type': 'application/json' } },
-      );
-    }
-
-    const db = createDbClient(baseUrl, serviceRoleKey);
-    const realtime = createRealtimePublisher(baseUrl, serviceRoleKey);
-
-    const conversationRepo = new ConversationRepository(db);
-    const messageRepo = new MessageRepository(db);
-    const knowledgeRepo = new KnowledgeRepository(db);
-    const aiSettingsRepo = new AiSettingsRepository(db);
-    const aiDecisionRepo = new AiDecisionRepository(db);
-    const auditLogRepo = new AuditLogRepository(db);
-    const jobQueue = new PostgresJobQueue(db);
-    const aiClient = createAiClient(baseUrl, serviceRoleKey);
-    const escalationEngine = createDefaultEscalationEngine();
-
-    const aiAgentService = new AiAgentService(
-      conversationRepo,
-      messageRepo,
-      knowledgeRepo,
-      aiSettingsRepo,
-      aiDecisionRepo,
-      escalationEngine,
-      aiClient,
-      jobQueue,
-      auditLogRepo,
-    );
-
-    // 3. Delegate to AiAgentService
-    const decision = await aiAgentService.processMessage(conversationId, orgId);
-
-    // 4. Publish realtime event
-    await realtime.publish(`org:${orgId}`, 'conversation_updated', {
-      conversationId,
-      aiDecisionId: decision.id,
-      decisionType: decision.decisionType,
     });
-
-    // 5. Return result
-    return new Response(
-      JSON.stringify({
-        status: 'ok',
-        decision: {
-          id: decision.id,
-          decisionType: decision.decisionType,
-          confidence: decision.confidence,
-          requiresHuman: decision.requiresHuman,
-        },
-      }),
-      { status: 200, headers: { 'Content-Type': 'application/json' } },
-    );
+    return withRequestIdHeader(ctx, response);
   } catch (err) {
-    const errorMessage = err instanceof Error ? err.message : String(err);
     return new Response(
-      JSON.stringify({ error: errorMessage }),
+      JSON.stringify({ error: err instanceof Error ? err.message : String(err) }),
       { status: 500, headers: { 'Content-Type': 'application/json' } },
     );
   }

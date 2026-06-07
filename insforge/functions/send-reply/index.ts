@@ -17,6 +17,7 @@
 
 import { createDbClient } from '../_shared/create-db-client.js';
 import { createRealtimePublisher } from '../_shared/create-realtime-publisher.js';
+import { log, logError, newRequestContext, withRequest, withRequestIdHeader } from '../_shared/logger.js';
 import { requireOrgMembership } from '../_shared/require-org-membership.js';
 import { verifyJwt } from '../_shared/verify-jwt.js';
 
@@ -47,100 +48,108 @@ function jsonResponse(body: unknown, status = 200): Response {
 // ---------------------------------------------------------------------------
 
 export default async function (req: Request): Promise<Response> {
+  const ctx = newRequestContext('send-reply', req);
   try {
-    // 1. Parse request body as JSON
-    let payload: { conversationId?: string; body?: string };
-    try {
-      payload = await req.json();
-    } catch {
-      return jsonResponse({ error: 'Invalid JSON body' }, 400);
-    }
+    const response = await withRequest(ctx, async () => {
+      // 1. Parse request body as JSON
+      let payload: { conversationId?: string; body?: string };
+      try {
+        payload = await req.json();
+      } catch {
+        return jsonResponse({ error: 'Invalid JSON body' }, 400);
+      }
 
-    const { conversationId, body } = payload;
+      const { conversationId, body } = payload;
 
-    if (!conversationId || typeof conversationId !== 'string') {
-      return jsonResponse({ error: 'Missing or invalid conversationId' }, 400);
-    }
+      if (!conversationId || typeof conversationId !== 'string') {
+        return jsonResponse({ error: 'Missing or invalid conversationId' }, 400);
+      }
 
-    if (!body || typeof body !== 'string') {
-      return jsonResponse({ error: 'Missing or invalid body' }, 400);
-    }
+      if (!body || typeof body !== 'string') {
+        return jsonResponse({ error: 'Missing or invalid body' }, 400);
+      }
 
-    // 2. Verify JWT authentication
-    const baseUrl =
-      (typeof Deno !== 'undefined' ? Deno.env.get('INSFORGE_BASE_URL') : undefined) ??
-      process.env.NEXT_PUBLIC_INSFORGE_URL ??
-      '';
-    const serviceRoleKey =
-      (typeof Deno !== 'undefined' ? Deno.env.get('INSFORGE_SERVICE_ROLE_KEY') : undefined) ??
-      process.env.INSFORGE_SERVICE_ROLE_KEY ??
-      '';
+      // 2. Verify JWT authentication
+      const baseUrl =
+        (typeof Deno !== 'undefined' ? Deno.env.get('INSFORGE_BASE_URL') : undefined) ??
+        process.env.NEXT_PUBLIC_INSFORGE_URL ??
+        '';
+      const serviceRoleKey =
+        (typeof Deno !== 'undefined' ? Deno.env.get('INSFORGE_SERVICE_ROLE_KEY') : undefined) ??
+        process.env.INSFORGE_SERVICE_ROLE_KEY ??
+        '';
 
-    const verifiedUser = await verifyJwt(req, baseUrl, serviceRoleKey);
-    if (!verifiedUser) {
-      return jsonResponse({ error: 'Unauthorized' }, 401);
-    }
+      const verifiedUser = await verifyJwt(req, baseUrl, serviceRoleKey);
+      if (!verifiedUser) {
+        return jsonResponse({ error: 'Unauthorized' }, 401);
+      }
 
-    const { userId } = verifiedUser;
+      const { userId } = verifiedUser;
+      ctx.user_id = userId;
 
-    // 3. Create database client, repositories, provider registry, and service
-    const db = createDbClient(baseUrl, serviceRoleKey);
+      // 3. Create database client, repositories, provider registry, and service
+      const db = createDbClient(baseUrl, serviceRoleKey);
 
-    // CRITICAL-2: enforce org membership before any mutation. JWT alone is
-    // not enough — any authenticated user in any tenant could otherwise
-    // pass another tenant's conversationId and trigger real outbound
-    // SMS/email. requireOrgMembership returns the conversation's
-    // organizationId on success, so we reuse it for the realtime publish
-    // (avoids a redundant findById).
-    const membership = await requireOrgMembership(db, userId, conversationId);
-    if (membership.kind === 'conversation_not_found') {
-      return jsonResponse({ error: 'Conversation not found' }, 404);
-    }
-    if (membership.kind === 'forbidden') {
-      return jsonResponse({ error: 'Forbidden: not a member of this conversation\'s organization' }, 403);
-    }
-    const orgId = membership.organizationId;
+      // CRITICAL-2: enforce org membership before any mutation. JWT alone is
+      // not enough — any authenticated user in any tenant could otherwise
+      // pass another tenant's conversationId and trigger real outbound
+      // SMS/email. requireOrgMembership returns the conversation's
+      // organizationId on success, so we reuse it for the realtime publish
+      // (avoids a redundant findById).
+      const membership = await requireOrgMembership(db, userId, conversationId);
+      if (membership.kind === 'conversation_not_found') {
+        return jsonResponse({ error: 'Conversation not found' }, 404);
+      }
+      if (membership.kind === 'forbidden') {
+        return jsonResponse({ error: 'Forbidden: not a member of this conversation\'s organization' }, 403);
+      }
+      const orgId = membership.organizationId;
+      ctx.org_id = orgId;
 
-    const conversationRepo = new ConversationRepository(db);
-    const contactRepo = new ContactRepository(db);
-    const messageRepo = new MessageRepository(db);
-    const auditLogRepo = new AuditLogRepository(db);
-    const smsAccountRepo = new SmsProviderAccountRepository(db);
-    const emailAccountRepo = new EmailProviderAccountRepository(db);
+      const conversationRepo = new ConversationRepository(db);
+      const contactRepo = new ContactRepository(db);
+      const messageRepo = new MessageRepository(db);
+      const auditLogRepo = new AuditLogRepository(db);
+      const smsAccountRepo = new SmsProviderAccountRepository(db);
+      const emailAccountRepo = new EmailProviderAccountRepository(db);
 
-    // Register both mock SMS and email adapters since the conversation
-    // could be on either channel
-    const registry = new ProviderRegistry();
-    registry.registerSmsAdapter('mock', new MockSmsAdapter());
-    registry.registerEmailAdapter('mock', new MockEmailAdapter());
+      // Register both mock SMS and email adapters since the conversation
+      // could be on either channel
+      const registry = new ProviderRegistry();
+      registry.registerSmsAdapter('mock', new MockSmsAdapter());
+      registry.registerEmailAdapter('mock', new MockEmailAdapter());
 
-    const outboundService = new OutboundMessageService(
-      conversationRepo,
-      contactRepo,
-      messageRepo,
-      registry,
-      smsAccountRepo,
-      emailAccountRepo,
-      auditLogRepo,
-    );
+      const outboundService = new OutboundMessageService(
+        conversationRepo,
+        contactRepo,
+        messageRepo,
+        registry,
+        smsAccountRepo,
+        emailAccountRepo,
+        auditLogRepo,
+      );
 
-    // 4. Send the reply
-    const message = await outboundService.sendReply(conversationId, body, userId);
+      // 4. Send the reply
+      const message = await outboundService.sendReply(conversationId, body, userId);
+      log({ ...ctx, level: 'info', msg: 'reply sent', message_id: message.id });
 
-    // 5. Publish new_message realtime event on the org channel we
-    // already validated the caller is a member of.
-    if (orgId) {
-      const realtimePublisher = createRealtimePublisher(baseUrl, serviceRoleKey);
-      await realtimePublisher.publish(`org:${orgId}`, 'new_message', {
-        message,
-        conversationId: message.conversationId,
-      });
-    }
+      // 5. Publish new_message realtime event on the org channel we
+      // already validated the caller is a member of.
+      if (orgId) {
+        const realtimePublisher = createRealtimePublisher(baseUrl, serviceRoleKey);
+        await realtimePublisher.publish(`org:${orgId}`, 'new_message', {
+          message,
+          conversationId: message.conversationId,
+        });
+      }
 
-    // 6. Return 200 OK with the message data
-    return jsonResponse({ status: 'ok', data: message });
+      // 6. Return 200 OK with the message data
+      return jsonResponse({ status: 'ok', data: message });
+    });
+    return withRequestIdHeader(ctx, response);
   } catch (err) {
-    console.error('send-reply error:', err);
+    // withRequest already emitted a structured `error` event with the
+    // serialized stack. This catch only shapes the HTTP response.
     return jsonResponse(
       {
         error: 'Internal server error',

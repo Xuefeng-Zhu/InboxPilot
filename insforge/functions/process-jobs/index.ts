@@ -11,6 +11,7 @@
  * 4. Mark jobs as completed or failed with proper status updates
  */
 
+import { log, logError, newRequestContext, withRequest, withRequestIdHeader } from '../_shared/logger.js';
 import { createDbClient } from '../_shared/create-db-client.js';
 import { createRealtimePublisher } from '../_shared/create-realtime-publisher.js';
 import { requireInternalToken } from '../_shared/require-internal-token.js';
@@ -169,80 +170,113 @@ function buildJobHandlers(
 // ---------------------------------------------------------------------------
 
 export default async function (req: Request): Promise<Response> {
-  try {
-    // 0. Internal-dispatch auth (CRITICAL-4). The function URL is public,
-    //    so anyone who guesses it could claim up to 10 jobs and run them,
-    //    consuming AI tokens (cost amplification). Require the shared
-    //    secret in `x-internal-token`, compared against the server-side
-    //    `INTERNAL_DISPATCH_TOKEN` env var.
-    const envToken = (globalThis as Record<string, unknown>).Deno
-      ? (globalThis as Record<string, { get(key: string): string | undefined }>).Deno.env.get('INTERNAL_DISPATCH_TOKEN')
-      : process.env.INTERNAL_DISPATCH_TOKEN;
-    const authResult = requireInternalToken(req, envToken ?? undefined);
-    if (authResult.kind === 'misconfigured') {
+  // Internal-dispatch / cron entrypoint. No JWT, no per-tenant context
+  // at start time; per-job ctx.org_id is set inside the loop.
+  const ctx = newRequestContext('process-jobs', req);
+  return withRequest(ctx, async () => {
+    try {
+      // 0. Internal-dispatch auth (CRITICAL-4). The function URL is public,
+      //    so anyone who guesses it could claim up to 10 jobs and run them,
+      //    consuming AI tokens (cost amplification). Require the shared
+      //    secret in `x-internal-token`, compared against the server-side
+      //    `INTERNAL_DISPATCH_TOKEN` env var.
+      const envToken = (globalThis as Record<string, unknown>).Deno
+        ? (globalThis as Record<string, { get(key: string): string | undefined }>).Deno.env.get('INTERNAL_DISPATCH_TOKEN')
+        : process.env.INTERNAL_DISPATCH_TOKEN;
+      const authResult = requireInternalToken(req, envToken ?? undefined);
+      if (authResult.kind === 'misconfigured') {
+        return new Response(
+          JSON.stringify({ error: 'Internal dispatch token is not configured on the server' }),
+          { status: 500, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+      if (authResult.kind === 'unauthorized') {
+        return new Response(
+          JSON.stringify({ error: 'Unauthorized' }),
+          { status: 401, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+
+      const baseUrl = (globalThis as Record<string, unknown>).Deno
+        ? (globalThis as Record<string, { get(key: string): string | undefined }>).Deno.env.get('INSFORGE_BASE_URL')
+        : process.env.INSFORGE_BASE_URL;
+      const serviceRoleKey = (globalThis as Record<string, unknown>).Deno
+        ? (globalThis as Record<string, { get(key: string): string | undefined }>).Deno.env.get('INSFORGE_SERVICE_ROLE_KEY')
+        : process.env.INSFORGE_SERVICE_ROLE_KEY;
+
+      if (!baseUrl || !serviceRoleKey) {
+        return new Response(
+          JSON.stringify({ error: 'Missing environment configuration' }),
+          { status: 500, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+
+      const db = createDbClient(baseUrl, serviceRoleKey);
+      const jobQueue = new PostgresJobQueue(db);
+      const jobHandlers = buildJobHandlers(db, baseUrl, serviceRoleKey);
+
+      const jobs = await jobQueue.claim(MAX_JOBS_PER_RUN);
+
+      const results: Array<{ jobId: string; jobType: string; status: 'completed' | 'failed'; error?: string }> = [];
+
+      for (const job of jobs) {
+        // Tag each per-job log line with the job's org so that an
+        // operator searching by `org_id` sees every job that touched
+        // the tenant, not just the function invocation itself.
+        ctx.org_id = job.organizationId;
+
+        const handler = jobHandlers[job.jobType];
+
+        if (!handler) {
+          await jobQueue.fail(job.id, `Unknown job type: ${job.jobType}`);
+          results.push({ jobId: job.id, jobType: job.jobType, status: 'failed', error: `Unknown job type: ${job.jobType}` });
+          log({
+            level: 'warn',
+            ...ctx,
+            msg: 'unknown job type',
+            status: 'failed',
+            job_id: job.id,
+            job_type: job.jobType,
+          });
+          continue;
+        }
+
+        try {
+          await handler(job);
+          await jobQueue.complete(job.id);
+          results.push({ jobId: job.id, jobType: job.jobType, status: 'completed' });
+          log({
+            level: 'info',
+            ...ctx,
+            msg: 'job completed',
+            status: 'completed',
+            job_id: job.id,
+            job_type: job.jobType,
+          });
+        } catch (err) {
+          const errorMessage = err instanceof Error ? err.message : String(err);
+          await jobQueue.fail(job.id, errorMessage);
+          results.push({ jobId: job.id, jobType: job.jobType, status: 'failed', error: errorMessage });
+          logError(ctx, err, {
+            msg: 'job failed',
+            status: 'failed',
+            job_id: job.id,
+            job_type: job.jobType,
+          });
+        }
+      }
+
       return new Response(
-        JSON.stringify({ error: 'Internal dispatch token is not configured on the server' }),
+        JSON.stringify({ status: 'ok', claimed: jobs.length, results }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      );
+    } catch (err) {
+      logError(ctx, err, { msg: 'process-jobs caught exception' });
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      return new Response(
+        JSON.stringify({ error: errorMessage }),
         { status: 500, headers: { 'Content-Type': 'application/json' } },
       );
     }
-    if (authResult.kind === 'unauthorized') {
-      return new Response(
-        JSON.stringify({ error: 'Unauthorized' }),
-        { status: 401, headers: { 'Content-Type': 'application/json' } },
-      );
-    }
-
-    const baseUrl = (globalThis as Record<string, unknown>).Deno
-      ? (globalThis as Record<string, { get(key: string): string | undefined }>).Deno.env.get('INSFORGE_BASE_URL')
-      : process.env.INSFORGE_BASE_URL;
-    const serviceRoleKey = (globalThis as Record<string, unknown>).Deno
-      ? (globalThis as Record<string, { get(key: string): string | undefined }>).Deno.env.get('INSFORGE_SERVICE_ROLE_KEY')
-      : process.env.INSFORGE_SERVICE_ROLE_KEY;
-
-    if (!baseUrl || !serviceRoleKey) {
-      return new Response(
-        JSON.stringify({ error: 'Missing environment configuration' }),
-        { status: 500, headers: { 'Content-Type': 'application/json' } },
-      );
-    }
-
-    const db = createDbClient(baseUrl, serviceRoleKey);
-    const jobQueue = new PostgresJobQueue(db);
-    const jobHandlers = buildJobHandlers(db, baseUrl, serviceRoleKey);
-
-    const jobs = await jobQueue.claim(MAX_JOBS_PER_RUN);
-
-    const results: Array<{ jobId: string; jobType: string; status: 'completed' | 'failed'; error?: string }> = [];
-
-    for (const job of jobs) {
-      const handler = jobHandlers[job.jobType];
-
-      if (!handler) {
-        await jobQueue.fail(job.id, `Unknown job type: ${job.jobType}`);
-        results.push({ jobId: job.id, jobType: job.jobType, status: 'failed', error: `Unknown job type: ${job.jobType}` });
-        continue;
-      }
-
-      try {
-        await handler(job);
-        await jobQueue.complete(job.id);
-        results.push({ jobId: job.id, jobType: job.jobType, status: 'completed' });
-      } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : String(err);
-        await jobQueue.fail(job.id, errorMessage);
-        results.push({ jobId: job.id, jobType: job.jobType, status: 'failed', error: errorMessage });
-      }
-    }
-
-    return new Response(
-      JSON.stringify({ status: 'ok', claimed: jobs.length, results }),
-      { status: 200, headers: { 'Content-Type': 'application/json' } },
-    );
-  } catch (err) {
-    const errorMessage = err instanceof Error ? err.message : String(err);
-    return new Response(
-      JSON.stringify({ error: errorMessage }),
-      { status: 500, headers: { 'Content-Type': 'application/json' } },
-    );
-  }
+  }).then((res) => withRequestIdHeader(ctx, res));
 }

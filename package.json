@@ -11,7 +11,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:core": "vitest run --project support-core",
-    "test:webhook-tunnel": "vitest run __tests__/twilio-webhook-tunnel.test.ts"
+    "test:webhook-tunnel": "vitest run __tests__/twilio-webhook-tunnel.test.ts",
+    "test:rotation": "vitest run packages/support-core/__tests__/unit/sms-provider-credential-rotation.test.ts"
   },
   "dependencies": {
     "@insforge/sdk": "^1.2.5",

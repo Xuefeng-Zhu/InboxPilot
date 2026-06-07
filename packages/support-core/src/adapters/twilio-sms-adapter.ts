@@ -16,6 +16,31 @@ import type {
   WebhookVerificationRequest,
   DeliveryStatus,
 } from '../types/index.js';
+import { decodeTwilioCredentials, type TwilioCredentials } from '../interfaces/secret-store.js';
+
+/**
+ * Resolve a `credentialsSecretId` (a stable reference into the
+ * InsForge secrets store) to the live Twilio credentials. The
+ * resolver is called on every send, so a rotation that swaps the
+ * secret under the same id is picked up immediately on the next
+ * send. Throws when the secret cannot be found.
+ */
+export type TwilioCredentialResolver = (
+  secretId: string,
+) => Promise<TwilioCredentials>;
+
+/**
+ * Configuration for the Twilio adapter. Either provide
+ * `accountSid` + `authToken` directly (legacy mode) or provide a
+ * `resolveCredentials` function that maps a `credentialsSecretId` to
+ * the material credentials. The resolver path is required to support
+ * in-place rotation.
+ */
+export interface TwilioSmsAdapterConfig {
+  accountSid?: string;
+  authToken?: string;
+  resolveCredentials?: TwilioCredentialResolver;
+}
 
 /**
  * Map Twilio MessageStatus values to our normalized DeliveryStatus.
@@ -87,22 +112,114 @@ function parseFormBody(body: string): Record<string, string> {
 export class TwilioSmsAdapter implements SmsProviderAdapter {
   readonly providerId = 'twilio';
 
+  private readonly accountSid?: string;
+  private readonly authToken?: string;
+  private readonly resolveCredentials?: TwilioCredentialResolver;
+
+  /**
+   * @param config - Either legacy `{ accountSid, authToken }` for
+   * direct mode, or `{ resolveCredentials }` for rotation-aware mode.
+   * Legacy mode is kept so existing tests and the `sms-inbound`
+   * function can pass the secret material directly when needed.
+   */
+  constructor(config: TwilioSmsAdapterConfig = {}) {
+    if (config.resolveCredentials) {
+      this.resolveCredentials = config.resolveCredentials;
+    } else {
+      this.accountSid = config.accountSid;
+      this.authToken = config.authToken;
+    }
+  }
+
+  /**
+   * Resolve the material credentials for a given providerConfig. The
+   * config may carry either `{ accountSid, authToken }` directly or
+   * a `credentialsSecretId` to look up. Returns the resolved
+   * `{ accountSid, authToken }` pair.
+   */
+  private async resolveAuth(
+    providerConfig: Record<string, unknown>,
+  ): Promise<TwilioCredentials> {
+    const cfg = providerConfig as {
+      accountSid?: string;
+      authToken?: string;
+      credentialsSecretId?: string;
+      resolveCredentials?: TwilioCredentialResolver;
+    };
+
+    // 0. A per-call resolver overrides the constructor-bound one
+    // (useful for tests and for one-off rotations that need to
+    // re-resolve with a different secret).
+    const perCallResolver = cfg.resolveCredentials ?? this.resolveCredentials;
+
+    // 1. Direct credentials on the config take precedence (legacy).
+    if (typeof cfg.accountSid === 'string' && typeof cfg.authToken === 'string') {
+      return { accountSid: cfg.accountSid, authToken: cfg.authToken };
+    }
+
+    // 2. credentialsSecretId path — the rotation-aware path.
+    if (typeof cfg.credentialsSecretId === 'string') {
+      if (!perCallResolver) {
+        throw new Error(
+          'TwilioSmsAdapter.sendSms: providerConfig.credentialsSecretId requires the adapter to be constructed with { resolveCredentials }',
+        );
+      }
+      const resolved = await perCallResolver(cfg.credentialsSecretId);
+      if (!resolved || !resolved.accountSid || !resolved.authToken) {
+        throw new Error(
+          `TwilioSmsAdapter.sendSms: resolved credentials for secret ${cfg.credentialsSecretId} are missing accountSid or authToken`,
+        );
+      }
+      return resolved;
+    }
+
+    // 3. Fall back to the constructor-bound credentials.
+    if (this.accountSid && this.authToken) {
+      return { accountSid: this.accountSid, authToken: this.authToken };
+    }
+
+    throw new Error(
+      'TwilioSmsAdapter.sendSms: providerConfig must contain accountSid+authToken or credentialsSecretId, and the adapter must be constructed with matching credentials',
+    );
+  }
+
   /**
    * Send an SMS via the Twilio REST API.
    *
-   * providerConfig must contain:
-   * - accountSid: Twilio Account SID
-   * - authToken: Twilio Auth Token
+   * providerConfig may contain:
+   * - accountSid + authToken (direct)
+   * - credentialsSecretId (rotation-aware; resolved via the
+   *   constructor-bound `resolveCredentials`)
+   * - a JSON-encoded TwilioCredentials blob under
+   *   `credentialsBlob` (internal use by verifyWebhook's sign path)
    */
   async sendSms(params: SendSmsParams): Promise<SendSmsResult> {
-    const { accountSid, authToken } = params.providerConfig as {
-      accountSid: string;
-      authToken: string;
-    };
+    // The legacy code path used `params.providerConfig as { accountSid, authToken }`.
+    // We keep that working, plus the new rotation-aware path.
+    const cfg = (params.providerConfig ?? {}) as Record<string, unknown>;
+
+    // Fast-path: the providerConfig already carries a JSON blob
+    // (used by internal callers that have already resolved the
+    // secret and want to avoid a second lookup).
+    if (typeof cfg.credentialsBlob === 'string') {
+      const decoded = decodeTwilioCredentials(cfg.credentialsBlob);
+      return this.sendWithCreds(params, decoded.accountSid, decoded.authToken);
+    }
+
+    const { accountSid, authToken } = await this.resolveAuth(cfg);
 
     if (!accountSid || !authToken) {
       throw new Error('TwilioSmsAdapter.sendSms: providerConfig must contain accountSid and authToken');
     }
+
+    return this.sendWithCreds(params, accountSid, authToken);
+  }
+
+  private async sendWithCreds(
+    params: SendSmsParams,
+    accountSid: string,
+    authToken: string,
+  ): Promise<SendSmsResult> {
 
     const url = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`;
 

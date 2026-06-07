@@ -13,6 +13,13 @@ export type {
   QueryError,
 } from './database-client.js';
 
+// Secrets store
+export type {
+  SecretStore,
+  TwilioCredentials,
+} from './secret-store.js';
+export { encodeTwilioCredentials, decodeTwilioCredentials } from './secret-store.js';
+
 // SMS adapter
 export type { SmsProviderAdapter } from './sms-provider-adapter.js';
 

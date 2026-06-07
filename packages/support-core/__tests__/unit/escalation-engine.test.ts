@@ -384,22 +384,79 @@ describe('Escalation Rules — Individual Rule Tests', () => {
       expect(rule.evaluate(makeContext({ latestMessage: 'Where is the assembly line?' }))).toBeNull();
     });
 
-    // Attack: "asshole" — one token, stripped to "asshole", which is NOT
-    // in the list (only "ass" is). The rule does NOT catch "asshole".
-    // FINDING: a common profanity slips through. This may be intentional
-    // (false-positive guard) or a bug — the task spec says hand-craft
-    // these and document intent. The current list contains "ass" only.
-    it('does NOT trigger on "asshole" (only "ass" is in the list, "asshole" does not match)', () => {
-      const result = rule.evaluate(makeContext({ latestMessage: 'you are an asshole' }));
-      expect(result).toBeNull();
+    // Attack: words that share a prefix with profanity stems but are
+    // NOT profanity. The list deliberately enumerates conjugations
+    // rather than using startsWith/prefix matching, so words like
+    // "fable", "classical", "dickens", "bastion" must all NOT trigger.
+    // This is the false-positive guard that justifies the
+    // explicit-enumeration approach over prefix matching.
+    it('does NOT trigger on words that share a prefix with profanity stems (enumeration, not startsWith)', () => {
+      const innocent = [
+        'fable',          // fa-ble; "fuck" starts with fu-, not fa- — must NOT fire
+        'fabulous',       // fa-bulous; same as above — must NOT fire
+        'classical',      // shares substring with "ass" but is its own token — must NOT fire
+        'classify',       // shares substring with "ass" but is its own token — must NOT fire
+        'dickens',        // dick-ens; "dick" is a stem but "dickens" is its own token — must NOT fire
+        'bastion',        // bast-ion; "bastard" is a stem but "bastion" is its own token — must NOT fire
+        'basting',        // bast-ing; same as above — must NOT fire
+        'hellos',         // hell-os; "hell" is a stem but "hellos" is its own token — must NOT fire
+        'pistol',         // pist-ol; "piss" is a stem but "pistol" is its own token — must NOT fire
+        'piston',         // pist-on; same as above — must NOT fire
+      ];
+      for (const word of innocent) {
+        expect(rule.evaluate(makeContext({ latestMessage: `I have a question about ${word}` }))).toBeNull();
+      }
     });
 
-    // Attack: profanity conjugated "fucking" — one token, stripped to
-    // "fucking", NOT in the list (only "fuck" is). The rule does NOT
-    // catch the conjugated form. FINDING: a common variant slips through.
-    it('does NOT trigger on "fucking" (only "fuck" is in the list, "fucking" does not match)', () => {
+    // Attack: "asshole" — a common profanity that is a derivative of "ass".
+    // The list explicitly includes "asshole" (see ProfanityAngerRule contract),
+    // so it MUST trigger. This is the behaviour fix for t_1ccd15d1: the
+    // previous shape was exact-stem-only, which let conjugations through.
+    it('triggers on "asshole" (derivative of "ass", listed explicitly)', () => {
+      const result = rule.evaluate(makeContext({ latestMessage: 'you are an asshole' }));
+      expect(result).not.toBeNull();
+      expect(result!.ruleName).toBe('ProfanityAngerRule');
+    });
+
+    // Attack: profanity conjugated "fucking" — gerund form. Listed
+    // explicitly in the profanity list. Triggers. (t_1ccd15d1 fix.)
+    it('triggers on "fucking" (gerund, listed explicitly)', () => {
       const result = rule.evaluate(makeContext({ latestMessage: 'this is fucking ridiculous' }));
-      expect(result).toBeNull();
+      expect(result).not.toBeNull();
+      expect(result!.ruleName).toBe('ProfanityAngerRule');
+    });
+
+    // Attack: gerund "bitching" — listed explicitly. Triggers.
+    // (t_1ccd15d1 fix.)
+    it('triggers on "bitching" (gerund, listed explicitly)', () => {
+      const result = rule.evaluate(makeContext({ latestMessage: 'stop bitching at me' }));
+      expect(result).not.toBeNull();
+    });
+
+    // Attack: past-tense "fucked" — listed explicitly. Triggers.
+    it('triggers on "fucked" (past-tense, listed explicitly)', () => {
+      const result = rule.evaluate(makeContext({ latestMessage: 'you fucked up my order' }));
+      expect(result).not.toBeNull();
+    });
+
+    // Attack: adjective form "damned" — listed explicitly. Triggers.
+    it('triggers on "damned" (adjective form, listed explicitly)', () => {
+      const result = rule.evaluate(makeContext({ latestMessage: 'this damned app crashed again' }));
+      expect(result).not.toBeNull();
+    });
+
+    // Attack: adjective form "crappy" — listed explicitly. Triggers.
+    it('triggers on "crappy" (adjective form, listed explicitly)', () => {
+      const result = rule.evaluate(makeContext({ latestMessage: 'this crappy service is unusable' }));
+      expect(result).not.toBeNull();
+    });
+
+    // Attack: "pissed off" — whitespace split gives two tokens: "pissed"
+    // and "off". "pissed" is in the list, so the rule fires. This is
+    // the intended behaviour: a common angry phrase is escalated.
+    it('triggers on "pissed off" ("pissed" is in the list, whitespace split isolates it)', () => {
+      const result = rule.evaluate(makeContext({ latestMessage: 'I am pissed off at you' }));
+      expect(result).not.toBeNull();
     });
 
     // Attack: anger indicator with extra context. "this is unacceptable"

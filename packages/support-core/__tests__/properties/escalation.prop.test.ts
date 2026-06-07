@@ -82,9 +82,26 @@ const HUMAN_REQUEST_PHRASES = [
   'live person',
 ];
 
+// Mirrors `PROFANITY_WORDS` in `src/services/escalation-rules.ts`. Keep these
+// two lists in lockstep — if you add a conjugation to the implementation, add
+// it here too so the property test exercises it.
 const PROFANITY_WORDS = [
   'fuck', 'shit', 'damn', 'bastard', 'bitch', 'crap',
   'hell', 'piss', 'dick', 'bullshit',
+  // Conjugations / derivatives — the profanity list explicitly enumerates
+  // these rather than using prefix matching, to avoid false positives on
+  // words like "fable" or "classical". See ProfanityAngerRule contract in
+  // src/services/escalation-rules.ts.
+  'asshole',
+  'fucks', 'fucked', 'fucking', 'fucker',
+  'shits', 'shitted', 'shitting',
+  'damned', 'damning', 'damnit', 'goddamn',
+  'bastards',
+  'bitched', 'bitching', 'bitchy', 'bitches',
+  'craps', 'crapped', 'crapping', 'crappy',
+  'pissed', 'pissing', 'pisser',
+  'dicked', 'dicking', 'dickhead',
+  'bullshits', 'bullshitted', 'bullshitting', 'bullshitter',
 ];
 
 const ANGER_INDICATORS = [

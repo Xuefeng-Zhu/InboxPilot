@@ -59,9 +59,48 @@ export class HumanRequestRule implements EscalationRule {
 
 // ─── Rule 2: ProfanityAngerRule ──────────────────────────────────────
 
+/**
+ * Profanity + anger word list.
+ *
+ * Contract:
+ *  - Hand-curated. Each entry was chosen to be unambiguous profanity in
+ *    US English. Do NOT add "borderline" words without a code review.
+ *  - Matched as exact whitespace-delimited tokens after non-alpha is
+ *    stripped (lowercased). This means:
+ *      - "bullshit!" (trailing "!")  -> "bullshit"  -> matches
+ *      - "bullshitting"              -> "bullshitting" -> matches (explicit entry)
+ *      - "shits"                     -> "shits"     -> matches (explicit entry)
+ *      - "class"                     -> "class"     -> does NOT match (good —
+ *                                                 substring of "ass" is not how
+ *                                                 we match)
+ *  - Conjugated/derived forms (e.g. "asshole", "fucking", "bitching",
+ *    "crappy", "damned") are listed explicitly rather than using
+ *    prefix/stem matching. Reason: prefix matching ("startsWith") would
+ *    produce false positives on innocent words like "fable", "classical",
+ *    "dickens", "discuss". Explicit enumeration is auditable and
+ *    bounds the blast radius of any addition.
+ *  - If you find yourself wanting to add a new conjugation, add it
+ *    here AND to the `PROFANITY_WORDS` list in
+ *    `__tests__/properties/escalation.prop.test.ts` so the property
+ *    test still exercises it.
+ */
 const PROFANITY_WORDS = [
+  // Stems (original list)
   'fuck', 'shit', 'damn', 'ass', 'bastard', 'bitch', 'crap',
   'hell', 'piss', 'dick', 'bullshit',
+  // Derivatives / conjugations of the stems above
+  'asshole',          // ass
+  'fucks', 'fucked', 'fucking', 'fucker',                  // fuck
+  'shits', 'shitted', 'shitting',                          // shit
+  'damned', 'damning', 'damnit', 'goddamn',                // damn
+  'bastards',                                          // bastard
+  'bitched', 'bitching', 'bitchy', 'bitches',            // bitch
+  'craps', 'crapped', 'crapping', 'crappy',              // crap
+  'hells',                                              // hell (rare, but unambiguous)
+  'pissed', 'pissing', 'pisser',                          // piss
+  'dicked', 'dicking', 'dickhead',                        // dick
+  'bullshits', 'bullshitted', 'bullshitting',            // bullshit
+  'bullshitter',                                        // bullshit
 ];
 
 const ANGER_INDICATORS = [

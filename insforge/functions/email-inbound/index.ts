@@ -134,6 +134,39 @@ function jsonResponse(body: unknown, status = 200): Response {
 }
 
 // ---------------------------------------------------------------------------
+// Helper: read an env var across Deno / Node runtimes
+// ---------------------------------------------------------------------------
+
+/**
+ * Read an environment variable, working in both Deno (serverless function) and
+ * Node (local dev / tests) runtimes. Returns `undefined` if not set.
+ *
+ * Uses the `(globalThis as ...).Deno` cast pattern instead of `typeof Deno !==
+ * 'undefined'` because Next.js's bundled TypeScript pass does not have Deno
+ * ambient types, and the cast pattern avoids type-checker false positives.
+ * Same pattern is used in `process-jobs/index.ts`.
+ */
+function readEnv(key: string): string | undefined {
+  const g = globalThis as Record<string, unknown>;
+  if (g.Deno && typeof g.Deno === 'object') {
+    const deno = g.Deno as { env?: { get?: (k: string) => string | undefined } };
+    try {
+      if (deno.env && typeof deno.env.get === 'function') {
+        const v = deno.env.get(key);
+        if (typeof v === 'string' && v.length > 0) return v;
+      }
+    } catch {
+      // Deno.env.get can throw on permission errors; fall through to process.env.
+    }
+  }
+  if (typeof process !== 'undefined' && process.env) {
+    const v = process.env[key];
+    if (typeof v === 'string' && v.length > 0) return v;
+  }
+  return undefined;
+}
+
+// ---------------------------------------------------------------------------
 // Function entrypoint
 // ---------------------------------------------------------------------------
 
@@ -150,6 +183,16 @@ export default async function (req: Request): Promise<Response> {
 
     // 2. Determine email provider from header (default: 'mock')
     const provider = req.headers.get('x-provider') ?? 'mock';
+
+    // CRITICAL-1 mitigation: refuse the mock provider in production. The mock
+    // adapter is for local development and tests only — it must never be
+    // reachable on a deployed URL, even with a valid signing secret.
+    if (provider === 'mock' && readEnv('ENV') === 'production') {
+      return jsonResponse(
+        { error: 'Mock email provider is disabled in production' },
+        400,
+      );
+    }
 
     // 3. Build provider registry and get adapter
     const registry = new ProviderRegistry();

@@ -157,9 +157,73 @@ export class MockEmailAdapter implements EmailProviderAdapter {
 
   /**
    * Verify webhook authenticity.
-   * The mock adapter always returns true — no signature verification needed.
+   *
+   * The mock adapter is intended ONLY for local development, unit tests, and
+   * CI integration tests. It must never be reachable from a deployed
+   * environment without an explicit test-only signing secret.
+   *
+   * Reads the test secret from `MOCK_WEBHOOK_SECRET` (via `Deno.env` or
+   * `process.env`). If the secret env var is unset, the adapter rejects every
+   * webhook call. If it is set, the caller-supplied `signingSecret` header
+   * must match exactly (constant-time compare to avoid timing leaks).
+   *
+   * CRITICAL-1 mitigation: the entrypoint layer also refuses `x-provider:
+   * mock` when `ENV === 'production'`, so this is defense in depth — even if
+   * the secret leaks, production cannot route through the mock.
    */
-  async verifyWebhook(_req: WebhookVerificationRequest): Promise<boolean> {
-    return true;
+  async verifyWebhook(req: WebhookVerificationRequest): Promise<boolean> {
+    const expectedSecret = readMockSecret();
+    if (!expectedSecret) {
+      // No test secret configured — never accept any webhook in this environment.
+      return false;
+    }
+    if (typeof req.signingSecret !== 'string' || req.signingSecret.length === 0) {
+      return false;
+    }
+    return timingSafeEqual(req.signingSecret, expectedSecret);
   }
+}
+
+// ---------------------------------------------------------------------------
+// Helpers (module-private)
+// ---------------------------------------------------------------------------
+
+/**
+ * Read the mock-adapter webhook test secret from the runtime environment.
+ * Returns `null` if not configured. Reads from `process.env` — the mock
+ * adapter lives in `support-core` which must remain Deno-agnostic, and Deno
+ * exposes `process.env` as a Node-compatible polyfill.
+ */
+function readMockSecret(): string | null {
+  if (typeof process === 'undefined' || !process.env) {
+    return null;
+  }
+  const value = process.env.MOCK_WEBHOOK_SECRET;
+  if (typeof value !== 'string' || value.length === 0) {
+    return null;
+  }
+  return value;
+}
+
+/**
+ * Constant-time string compare. Returns false on length mismatch without
+ * short-circuiting (we still walk both buffers to the end).
+ */
+function timingSafeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) {
+    // Still walk the shorter string to keep timing comparable, then return false.
+    let dummy = 0;
+    const max = Math.max(a.length, b.length);
+    for (let i = 0; i < max; i++) {
+      dummy |= (a.charCodeAt(i % a.length) ^ b.charCodeAt(i % b.length));
+    }
+    // Reference dummy so V8 doesn't optimize the loop away.
+    if (dummy === 0xdeadbeef) return true;
+    return false;
+  }
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) {
+    diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return diff === 0;
 }

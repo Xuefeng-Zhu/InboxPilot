@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { MockEmailAdapter } from '@support-core/adapters/mock-email-adapter';
 import type {
   SendEmailParams,
@@ -230,11 +230,66 @@ describe('MockEmailAdapter', () => {
   });
 
   describe('verifyWebhook', () => {
-    it('always returns true', async () => {
+    // CRITICAL-1 regression: the mock adapter must NEVER accept an unsigned
+    // webhook. The default behavior (no MOCK_WEBHOOK_SECRET in env) is to
+    // reject every call. Tests that need a positive path must set the env var
+    // (and unset it in afterEach).
+    const originalEnv = process.env.MOCK_WEBHOOK_SECRET;
+
+    afterEach(() => {
+      if (originalEnv === undefined) {
+        delete process.env.MOCK_WEBHOOK_SECRET;
+      } else {
+        process.env.MOCK_WEBHOOK_SECRET = originalEnv;
+      }
+    });
+
+    it('rejects when MOCK_WEBHOOK_SECRET is not set', async () => {
+      delete process.env.MOCK_WEBHOOK_SECRET;
+      const req: WebhookVerificationRequest = {
+        headers: {},
+        body: '',
+        signingSecret: 'anything',
+      };
+      expect(await adapter.verifyWebhook(req)).toBe(false);
+    });
+
+    it('rejects when MOCK_WEBHOOK_SECRET is set but signingSecret is empty', async () => {
+      process.env.MOCK_WEBHOOK_SECRET = 'test-secret-123';
       const req: WebhookVerificationRequest = {
         headers: {},
         body: '',
         signingSecret: '',
+      };
+      expect(await adapter.verifyWebhook(req)).toBe(false);
+    });
+
+    it('rejects when MOCK_WEBHOOK_SECRET is set and signingSecret does not match', async () => {
+      process.env.MOCK_WEBHOOK_SECRET = 'test-secret-123';
+      const req: WebhookVerificationRequest = {
+        headers: {},
+        body: '',
+        signingSecret: 'wrong-secret',
+      };
+      expect(await adapter.verifyWebhook(req)).toBe(false);
+    });
+
+    it('rejects when MOCK_WEBHOOK_SECRET is set and signingSecret is a prefix match (length mismatch)', async () => {
+      process.env.MOCK_WEBHOOK_SECRET = 'test-secret-123';
+      const req: WebhookVerificationRequest = {
+        headers: {},
+        body: '',
+        signingSecret: 'test-secret-',
+      };
+      expect(await adapter.verifyWebhook(req)).toBe(false);
+    });
+
+    it('accepts when MOCK_WEBHOOK_SECRET matches signingSecret exactly', async () => {
+      process.env.MOCK_WEBHOOK_SECRET = 'test-secret-123';
+      const req: WebhookVerificationRequest = {
+        headers: {},
+        body: '',
+        signingSecret: 'test-secret-123',
       };
       expect(await adapter.verifyWebhook(req)).toBe(true);
     });

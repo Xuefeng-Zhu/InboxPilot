@@ -2,7 +2,7 @@
  * OrganizationService — orchestrates organization and member management.
  *
  * Provides:
- * - createOrganization: creates org and assigns creator as owner
+ * - createOrganization: bootstraps a new org, assigns the JWT caller as owner
  * - inviteMember: adds a member with a specified role
  * - changeMemberRole: updates role, enforces single-owner invariant
  * - removeMember: removes member, prevents removing the last owner
@@ -14,6 +14,7 @@
 import type { OrganizationRepository } from '../repositories/organization-repository.js';
 import type { MemberRepository } from '../repositories/member-repository.js';
 import type { AuditLogRepository } from '../repositories/audit-log-repository.js';
+import type { DatabaseClient } from '../interfaces/database-client.js';
 import type { Organization, OrganizationMember, MemberRole } from '../types/index.js';
 
 export class OrganizationService {
@@ -21,14 +22,40 @@ export class OrganizationService {
     private orgRepo: OrganizationRepository,
     private memberRepo: MemberRepository,
     private auditLog: AuditLogRepository,
+    private db: DatabaseClient,
   ) {}
 
   /**
-   * Create a new organization and assign the creating user as the owner.
+   * Bootstrap a new organization and assign the JWT caller as the owner.
+   *
+   * Implementation note (CRITICAL-1 from docs/RLS_AUDIT.md):
+   * The `organizations` table's INSERT policy is `WITH CHECK (false)` —
+   * direct INSERTs from any client role (including `authenticated`) are
+   * denied. The only sanctioned path is the SECURITY DEFINER RPC
+   * `public.create_organization(name, slug)` defined in
+   * `insforge/migrations/007_org_rpc_functions.sql`. That RPC, in one
+   * transaction:
+   *
+   *   1. inserts the `organizations` row,
+   *   2. inserts the matching `organization_members` row (role = 'owner')
+   *      with `user_id = auth.uid()` (the JWT 'sub' claim — this prevents
+   *      a caller from bootstrapping an org under a forged user id), and
+   *   3. appends an `audit_logs` row (action = 'organization_created').
+   *
+   * This method then re-fetches the owner member via the existing
+   * `MemberRepository` so the return shape is stable for callers.
+   *
+   * The `userId` parameter is kept for API stability but is no longer
+   * trusted: the actual owner is always whoever the JWT identifies. The
+   * service uses `userId` only to look up the just-created membership in
+   * the return value — if a caller passes a `userId` that doesn't match
+   * the JWT (e.g. a server-internal misuse), `findByOrgAndUser` returns
+   * null and we surface a clear error rather than returning a partial
+   * result.
    *
    * @param name - Organization display name
    * @param slug - Unique URL-friendly slug
-   * @param userId - The user ID of the creator (becomes owner)
+   * @param userId - Expected owner user id (must match the JWT 'sub')
    * @returns The created organization and owner member
    */
   async createOrganization(
@@ -36,25 +63,63 @@ export class OrganizationService {
     slug: string,
     userId: string,
   ): Promise<{ organization: Organization; member: OrganizationMember }> {
-    // Create the organization record
-    const organization = await this.orgRepo.create({ name, slug });
-
-    // Assign the creator as the owner
-    const member = await this.memberRepo.create({
-      organizationId: organization.id,
-      userId,
-      role: 'owner',
+    // The RPC enforces authentication and derives the owner from the JWT.
+    // We pass only name + slug — never a userId — to close the
+    // impersonation vector (a forged `owner_user_id` parameter).
+    const { data, error } = await this.db.rpc('create_organization', {
+      name,
+      slug,
     });
 
-    // Record audit log
-    await this.auditLog.create({
-      organizationId: organization.id,
-      actorId: userId,
-      actorType: 'user',
-      action: 'organization_created',
-      resourceType: 'organization',
-      resourceId: organization.id,
-    });
+    if (error) {
+      // Common error codes (from 007_org_rpc_functions.sql):
+      //   42501 — insufficient_privilege (not authenticated)
+      //   22023 — invalid_parameter_value (empty name/slug)
+      //   23505 — unique_violation (slug already taken)
+      //   42501 — new row violates RLS (shouldn't happen — RPC is SECURITY DEFINER)
+      throw new Error(`create_organization: ${error.message}`);
+    }
+    if (!data) {
+      throw new Error('create_organization: RPC returned no data');
+    }
+
+    // The RPC returns a single `organizations` row. Map snake_case → camelCase
+    // the same way OrganizationRepository does, but inline so we don't take
+    // a dependency on the repo's private row type.
+    const row = data as {
+      id: string;
+      name: string;
+      slug: string;
+      metadata: Record<string, unknown>;
+      created_at: string;
+      updated_at: string;
+    };
+    const organization: Organization = {
+      id: row.id,
+      name: row.name,
+      slug: row.slug,
+      metadata: row.metadata,
+      createdAt: new Date(row.created_at),
+      updatedAt: new Date(row.updated_at),
+    };
+
+    // Re-fetch the owner member so callers still get the same
+    // `{ organization, member }` shape. We look up by (orgId, userId)
+    // — the caller-supplied userId must match the JWT 'sub', otherwise
+    // this returns null and we throw.
+    const member = await this.memberRepo.findByOrgAndUser(organization.id, userId);
+    if (!member) {
+      // This indicates a contract violation: caller passed a userId
+      // that doesn't match the JWT identity. The org WAS created
+      // (the RPC succeeded with the JWT's 'sub' as owner), but the
+      // member we just looked up is for the wrong user. Surface the
+      // mismatch loudly — it is almost always a bug in the route
+      // handler that assembled the call.
+      throw new Error(
+        `createOrganization: owner membership not found for userId=${userId} in org ${organization.id}. ` +
+          `The RPC created the org with the JWT 'sub' as owner; the passed userId must match.`,
+      );
+    }
 
     return { organization, member };
   }

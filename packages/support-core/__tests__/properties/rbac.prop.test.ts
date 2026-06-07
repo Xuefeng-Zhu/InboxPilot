@@ -12,6 +12,7 @@ import { OrganizationService } from '../../src/services/organization-service.js'
 import type { OrganizationRepository } from '../../src/repositories/organization-repository.js';
 import type { MemberRepository } from '../../src/repositories/member-repository.js';
 import type { AuditLogRepository } from '../../src/repositories/audit-log-repository.js';
+import type { DatabaseClient } from '../../src/interfaces/database-client.js';
 
 /**
  * Property-based tests for organization owner invariant and RBAC permission enforcement.
@@ -88,6 +89,24 @@ function createMockOrgRepo(): OrganizationRepository {
     update: vi.fn(),
     delete: vi.fn(),
   } as unknown as OrganizationRepository;
+}
+
+/**
+ * DatabaseClient stub for OrganizationService tests.
+ *
+ * The createOrganization path now uses db.rpc('create_organization', …)
+ * (CRITICAL-1 fix), so we hand the service a noop db that throws if any
+ * RPC is actually called — none of the RBAC tests in this file exercise
+ * createOrganization, only inviteMember / changeMemberRole / removeMember,
+ * which don't touch the db. This is intentional: it surfaces a test bug
+ * where a refactor mistakenly routes one of those operations through the
+ * RPC path.
+ */
+function createMockDb(): DatabaseClient {
+  return {
+    from: vi.fn(),
+    rpc: vi.fn().mockRejectedValue(new Error('test db stub: rpc should not be called in RBAC tests')),
+  } as unknown as DatabaseClient;
 }
 
 function createMockAuditLogRepo(): AuditLogRepository {
@@ -184,7 +203,8 @@ describe('RBAC property tests', () => {
         const memberRepo = createInMemoryMemberRepo(members);
         const orgRepo = createMockOrgRepo();
         const auditRepo = createMockAuditLogRepo();
-        const service = new OrganizationService(orgRepo, memberRepo, auditRepo);
+        const db = createMockDb();
+        const service = new OrganizationService(orgRepo, memberRepo, auditRepo, db);
 
         // Apply each operation, catching expected errors
         for (const op of ops) {

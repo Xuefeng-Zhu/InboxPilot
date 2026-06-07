@@ -309,3 +309,33 @@ CREATE TABLE audit_logs (
 );
 
 CREATE INDEX idx_audit_logs_org_created ON audit_logs (organization_id, created_at DESC);
+
+-- =============================================================================
+-- @down
+-- Reverse the entire initial schema. Order matters: child tables before
+-- parents (CASCADE handles FK chains but explicit order makes the diff
+-- easier to read and reduces the chance that a future CASCADE change breaks
+-- the rollback). Extensions last — we keep pgcrypto/vector available so any
+-- subsequent migration that depends on them can still resolve at parse time
+-- before being dropped itself.
+-- =============================================================================
+DROP TABLE IF EXISTS audit_logs        CASCADE;
+DROP TABLE IF EXISTS support_jobs      CASCADE;
+DROP TABLE IF EXISTS knowledge_chunks  CASCADE;
+DROP TABLE IF EXISTS knowledge_documents CASCADE;
+DROP TABLE IF EXISTS ai_decisions      CASCADE;
+DROP TABLE IF EXISTS ai_settings       CASCADE;
+DROP TABLE IF EXISTS email_delivery_events CASCADE;
+DROP TABLE IF EXISTS email_addresses   CASCADE;
+DROP TABLE IF EXISTS email_provider_accounts CASCADE;
+DROP TABLE IF EXISTS sms_delivery_events    CASCADE;
+DROP TABLE IF EXISTS sms_phone_numbers      CASCADE;
+DROP TABLE IF EXISTS sms_provider_accounts  CASCADE;
+DROP TABLE IF EXISTS messages          CASCADE;
+DROP TABLE IF EXISTS conversations     CASCADE;
+DROP TABLE IF EXISTS contacts          CASCADE;
+DROP TABLE IF EXISTS organization_members CASCADE;
+DROP TABLE IF EXISTS organizations     CASCADE;
+DROP EXTENSION IF EXISTS "vector";
+DROP EXTENSION IF EXISTS "pgcrypto";
+-- @end

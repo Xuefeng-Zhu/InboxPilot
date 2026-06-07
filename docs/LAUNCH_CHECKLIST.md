@@ -67,9 +67,9 @@ This is the **single source of truth** for "do we ship v1 today?". If a box is u
 | # | Criterion | State | Verifiable evidence | Owner |
 |---|---|---|---|---|
 | 4.1 | Every function entrypoint under `insforge/functions/` logs a structured JSON line on entry (request_id, org_id, function_name, ts) and on exit (status, duration_ms) | ☐ | `grep -L "console.log(JSON.stringify" insforge/functions/**/index.ts` returns no results. A sample line in `docs/evidence/structured-log-sample.json`. | ENG-LEAD |
-| 4.2 | `audit_logs` is queryable per org via a documented SQL query that returns under 1s for 30 days of data | ☐ | `docs/METRICS.md` §"Audit log query" (produced by child card `t_ops_runbook`). Query plan: `EXPLAIN ANALYZE` output pasted. | DEVOPS |
+| 4.2 | `audit_logs` is queryable per org via a documented SQL query that returns under 1s for 30 days of data | ☐ | `docs/METRICS.md` §"Audit log query". Query plan: `EXPLAIN ANALYZE` output pasted. **Cross-link:** `docs/OPERATOR_RUNBOOK.md` §2 (rollback drill record) and §6 (on-call) reference the same log. | DEVOPS |
 | 4.3 | Cost-per-conversation metric is computable: a SQL query joins `ai_decisions` (tokens) × OpenRouter price table and divides by `conversations` count, per org per day | ☐ | Same `docs/METRICS.md` §"Cost per conversation". Query + a 1-week run against staging showing per-org cost. | DEVOPS + ENG-LEAD |
-| 4.4 | The 5xx alert fires within 5 minutes of a synthetic failure | ☐ | Test: kill `process-jobs` cron for 1 cycle. Pager (or PagerDuty webhook) receives alert. | DEVOPS |
+| 4.4 | The 5xx alert fires within 5 minutes of a synthetic failure | ☐ | Test: kill `process-jobs` cron for 1 cycle. Pager (or PagerDuty webhook) receives alert. **Cross-link:** `docs/OPERATOR_RUNBOOK.md` §6 (on-call rotation, alert routing) — for v0.1 the alert is a Twilio-SMS to the operator's phone, not PagerDuty. | DEVOPS |
 | 4.5 | Web-vitals and API p95 budgets are documented, instrumented, and gated in CI (>10% regression fails the PR) | ☐ | `docs/PERFORMANCE.md` exists with the budget rationale. `lighthouserc.cjs` + `scripts/api-perf.sh` + `.github/workflows/perf.yml` are wired (child card `t_devops_perf_budget`). Last 3 main-branch runs all green. | DEVOPS |
 
 **All criteria met?** ☐ · **Sign-off (verifier):** ______________ · **Date:** ______________
@@ -85,7 +85,7 @@ This is the **single source of truth** for "do we ship v1 today?". If a box is u
 | 5.1 | README quickstart works on a fresh clone (Linux + macOS) | ☐ | Cold-clone test: `git clone … && cp .env.example .env.local && npm install && npm run dev` succeeds with documented values; smoke test (`curl localhost:3000`) returns 200. | PM |
 | 5.2 | PRD exists at a stable, repo-relative path and is the source of truth for requirements | ☐ | `.kiro/specs/ai-customer-support/requirements.md` is current (last touched within 30 days). Cross-linked from README and from this checklist. | PM |
 | 5.3 | `docs/USER_STORIES.md` exists with priority tags (P0/P1/P2) and acceptance bullets | ☐ | File exists. Each story links back to a PRD requirement ID. | PM |
-| 5.4 | `docs/METRICS.md` exists with: activation, retention, AI-quality, and unit-economics queries | ☐ | File exists (child card `t_ops_runbook`). At least 6 SQL queries with sample output. | DEVOPS |
+| 5.4 | `docs/METRICS.md` exists with: activation, retention, AI-quality, and unit-economics queries | ☐ | File exists. At least 6 SQL queries with sample output. **Cross-link:** `docs/OPERATOR_RUNBOOK.md` §5 (quota reset) reuses the usage_counters queries for the 1st-of-month cron. | DEVOPS |
 | 5.5 | `docs/ARCHITECTURE.md` is updated to reflect the 14-function, 8-rule, 17-table reality (no "TBD" sections) | ☐ | File exists at 23k+ lines. No `TODO` or `TBD` markers in body. | ENG-LEAD |
 | 5.6 | `docs/README_INDEX.md` table of contents exists, lists every doc in `docs/` with a one-line purpose, and cross-links to PRD, METRICS, USER_STORIES, INCIDENT_RESPONSE, SECURITY_MODEL, LAUNCH_CHECKLIST | ☐ | File exists. All 6 cross-links resolve. | PM |
 | 5.7 | All public API endpoints in `insforge/functions/` are documented in `docs/API.md` with request, response, auth, and rate-limit columns | ☐ | Endpoint count in `API.md` matches `ls insforge/functions/ \| wc -l` (14). | ENG-LEAD |
@@ -134,10 +134,10 @@ This is the **single source of truth** for "do we ship v1 today?". If a box is u
 
 | # | Criterion | State | Verifiable evidence | Owner |
 |---|---|---|---|---|
-| 8.1 | Every function in `insforge/functions/` is independently redeployable | ☐ | `insforge functions list` shows 14 deployable units. The deploy script (`scripts/deploy.sh` or equivalent) takes a function name arg and updates only that one. | DEVOPS |
-| 8.2 | All SQL migrations are reversible: either a paired `-- @down` block, or a documented `DROP TABLE … CASCADE` chain | ☐ | `grep -L "@down" insforge/migrations/*.sql` returns no results. Down blocks are tested in staging (see 8.4). | DEVOPS + ENG-LEAD |
-| 8.3 | A one-command rollback script exists that: (a) reverts the most recent migration, (b) re-deploys the previous function versions, (c) verifies the app responds 200 | ☐ | `scripts/rollback.sh` — exists, executable, idempotent. Takes an optional `--to <migration_id>` arg. | DEVOPS |
-| 8.4 | `scripts/rollback.sh` has been run clean against a staging DB and the resulting app passes a smoke test | ☐ | Date + operator + smoke-test output recorded in `docs/evidence/rollback-drill.txt`. | DEVOPS |
+| 8.1 | Every function in `insforge/functions/` is independently redeployable | ☐ | `insforge functions list` shows 14 deployable units. The deploy script (`scripts/deploy.sh` or equivalent) takes a function name arg and updates only that one. **Cross-link:** `docs/OPERATOR_RUNBOOK.md` §1 (deploy procedure) documents the manual sequence until the script lands. | DEVOPS |
+| 8.2 | All SQL migrations are reversible: either a paired `-- @down` block, or a documented `DROP TABLE … CASCADE` chain | ☐ | `grep -L "@down" insforge/migrations/*.sql` returns no results. Down blocks are tested in staging (see 8.4). **Status as of 2026-06-07:** all 3 existing migrations (001, 002, 003) have `-- @down` blocks (added by `t_ops_runbook`). | DEVOPS + ENG-LEAD |
+| 8.3 | A one-command rollback script exists that: (a) reverts the most recent migration, (b) re-deploys the previous function versions, (c) verifies the app responds 200 | ☐ | `scripts/rollback.sh` — exists, executable, idempotent. Takes an optional `--to <migration_id>` arg. **Status as of 2026-06-07:** shipped by `t_ops_runbook`. Full procedure in `docs/OPERATOR_RUNBOOK.md` §2. | DEVOPS |
+| 8.4 | `scripts/rollback.sh` has been run clean against a staging DB and the resulting app passes a smoke test | ☐ | Date + operator + smoke-test output recorded in `docs/evidence/rollback-drill.txt`. **Status as of 2026-06-07:** script verified via `--dry-run` against all 3 migrations; the live staging drill is owed to a follow-up. | DEVOPS |
 | 8.5 | A pre-launch backup of the staging DB exists and can be restored in <30 minutes | ☐ | `pg_dump` output in `s3://inboxpilot-backups/launch-pre/`. Restore time captured in the drill log. | DEVOPS |
 
 **All criteria met?** ☐ · **Sign-off (verifier):** ______________ · **Date:** ______________
@@ -183,7 +183,11 @@ This is the **single source of truth** for "do we ship v1 today?". If a box is u
 - `t_sec_incident_response` — AI incident-response runbook (feeds §3)
 - `t_sec_security_model` — one-page security model (feeds §6)
 - `t_devops_perf_budget` — performance budget (feeds §4, §8)
-- `t_ops_runbook` — `docs/METRICS.md` (feeds §4, §5)
+- `t_ops_runbook` — `docs/METRICS.md` (feeds §4, §5) AND `docs/OPERATOR_RUNBOOK.md` (feeds §8)
+- `t_devops_deploy_script` — `scripts/deploy.sh` (feeds §8.1) — referenced from OPERATOR_RUNBOOK.md §1
+- `t_devops_purge_cron` — `purge-offboarded-tenants` cron (feeds §4.3 Phase C, OPERATOR_RUNBOOK.md §4)
+- `t_devops_quota_table` — `usage_counters` table + `quota-reset` cron (feeds §5.2, OPERATOR_RUNBOOK.md §5)
+- `t_devops_pager_integration` — PagerDuty / proper alert routing (feeds §4.4, §6, OPERATOR_RUNBOOK.md §6.3)
 - `t_pm_beta_program` — design-partner cohort (feeds §7)
 - `t_pm_pricing_packaging` — pricing page + tiers (feeds §7) — see `docs/PRICING.md` for the 3-tier hypothesis, gating schema, and design-partner profiles
 - `t_pm_competitive` — competitive landscape (feeds §7 pitch). See `docs/COMPETITIVE.md` for the 5 one-pagers (Front, Intercom Fin, Ada, Forethought, DIY), the 2-axis positioning map (AI autonomy × channel breadth), and the "We will NOT compete on" anti-PRD (8 items, each with a v2 milestone).
@@ -197,10 +201,12 @@ These are real, not "feels good". Each gap blocks a section above.
 3. `docs/SECURITY_MODEL.md` does not exist → blocks §6.4
 4. `docs/README_INDEX.md` does not exist → blocks §5.6
 5. `docs/USER_STORIES.md` does not exist as a standalone doc (lives inside requirements.md) → blocks §5.3
-6. `scripts/rollback.sh` does not exist → blocks §8.3
-7. No down-migration blocks in `insforge/migrations/` → blocks §8.2
+6. ~~`scripts/rollback.sh` does not exist → blocks §8.3~~ **RESOLVED 2026-06-07** by `t_ops_runbook` (see §8.3 status note)
+7. ~~No down-migration blocks in `insforge/migrations/` → blocks §8.2~~ **RESOLVED 2026-06-07** by `t_ops_runbook` (all 3 migrations have `-- @down` blocks; see §8.2 status note)
 8. `insforge/seed.sql` creates 1 tenant only; 3-tenant demo seed does not exist → blocks §1.3
 9. `packages/support-core/__tests__/integration/ai-safety.test.ts` does not exist → blocks §3.2
 10. Escalation test files exist (`unit/escalation-engine.test.ts`, `properties/escalation.prop.test.ts`) but coverage of all 8 rules with positive + negative cases must be verified before §3.1 can be ticked.
+11. **NEW 2026-06-07** — `docs/OPERATOR_RUNBOOK.md` §4 Phase C (hard-delete cron) references `purge-offboarded-tenants` cron which does not exist → blocks the offboarding drill verification (the soft-delete + export phases are verified; the hard-delete cron is `t_devops_purge_cron`).
+12. **NEW 2026-06-07** — `docs/OPERATOR_RUNBOOK.md` §5 references `usage_counters` table which does not exist in `001_initial_schema.sql` → blocks the v1.1 quota-reset schema change (`t_devops_quota_table`). For v1, the quota cap is enforced per-reply via `ai_settings.per_reply_token_cap` and the runbook's Phase C is a no-op.
 
 Each gap has an owning child card above. The child cards unblock the parent.

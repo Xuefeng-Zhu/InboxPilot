@@ -67,3 +67,12 @@ BEGIN
   RETURNING *;
 END;
 $fn_claim$;
+
+-- =============================================================================
+-- @down
+-- Drop the two RPC functions added by this migration. IF EXISTS guards
+-- against the case where a previous partial rollback already removed one.
+-- =============================================================================
+DROP FUNCTION IF EXISTS public.claim_support_jobs(int);
+DROP FUNCTION IF EXISTS public.match_knowledge_chunks(uuid, vector(1536), float, int);
+-- @end

@@ -421,3 +421,96 @@ REVOKE SELECT (credentials_secret_id) ON sms_provider_accounts FROM authenticate
 -- Revoke column-level SELECT on email_provider_accounts.credentials_secret_id
 REVOKE SELECT (credentials_secret_id) ON email_provider_accounts FROM anon;
 REVOKE SELECT (credentials_secret_id) ON email_provider_accounts FROM authenticated;
+-- =============================================================================
+-- @down
+-- Reverse every RLS change in 003_rls_policies.sql. We DROP every policy
+-- added in the up block, then GRANT back the column-level SELECTs on the
+-- credentials_secret_id columns (the reverse of the REVOKEs at the bottom
+-- of the up block), then DROP the helper functions user_org_ids and
+-- auth.uid().
+--
+-- Note: the policies were applied across 17 tables × 4 verbs (select/
+-- insert/update/delete) = 66 DROP statements, generated programmatically
+-- from the up block. If you add a new table or policy in the up block,
+-- regenerate this section:  grep -E '^CREATE POLICY' <up> | awk '{print "DROP POLICY IF EXISTS " $3 " ON " $5 ";"}'
+-- =============================================================================
+
+DROP POLICY IF EXISTS organizations_select ON organizations;
+DROP POLICY IF EXISTS organizations_insert ON organizations;
+DROP POLICY IF EXISTS organizations_update ON organizations;
+DROP POLICY IF EXISTS organizations_delete ON organizations;
+DROP POLICY IF EXISTS org_members_select ON organization_members;
+DROP POLICY IF EXISTS org_members_insert ON organization_members;
+DROP POLICY IF EXISTS org_members_update ON organization_members;
+DROP POLICY IF EXISTS org_members_delete ON organization_members;
+DROP POLICY IF EXISTS contacts_select ON contacts;
+DROP POLICY IF EXISTS contacts_insert ON contacts;
+DROP POLICY IF EXISTS contacts_update ON contacts;
+DROP POLICY IF EXISTS contacts_delete ON contacts;
+DROP POLICY IF EXISTS conversations_select ON conversations;
+DROP POLICY IF EXISTS conversations_insert ON conversations;
+DROP POLICY IF EXISTS conversations_update ON conversations;
+DROP POLICY IF EXISTS conversations_delete ON conversations;
+DROP POLICY IF EXISTS messages_select ON messages;
+DROP POLICY IF EXISTS messages_insert ON messages;
+DROP POLICY IF EXISTS messages_update ON messages;
+DROP POLICY IF EXISTS messages_delete ON messages;
+DROP POLICY IF EXISTS sms_provider_accounts_select ON sms_provider_accounts;
+DROP POLICY IF EXISTS sms_provider_accounts_insert ON sms_provider_accounts;
+DROP POLICY IF EXISTS sms_provider_accounts_update ON sms_provider_accounts;
+DROP POLICY IF EXISTS sms_provider_accounts_delete ON sms_provider_accounts;
+DROP POLICY IF EXISTS sms_phone_numbers_select ON sms_phone_numbers;
+DROP POLICY IF EXISTS sms_phone_numbers_insert ON sms_phone_numbers;
+DROP POLICY IF EXISTS sms_phone_numbers_update ON sms_phone_numbers;
+DROP POLICY IF EXISTS sms_phone_numbers_delete ON sms_phone_numbers;
+DROP POLICY IF EXISTS sms_delivery_events_select ON sms_delivery_events;
+DROP POLICY IF EXISTS sms_delivery_events_insert ON sms_delivery_events;
+DROP POLICY IF EXISTS sms_delivery_events_update ON sms_delivery_events;
+DROP POLICY IF EXISTS sms_delivery_events_delete ON sms_delivery_events;
+DROP POLICY IF EXISTS email_provider_accounts_select ON email_provider_accounts;
+DROP POLICY IF EXISTS email_provider_accounts_insert ON email_provider_accounts;
+DROP POLICY IF EXISTS email_provider_accounts_update ON email_provider_accounts;
+DROP POLICY IF EXISTS email_provider_accounts_delete ON email_provider_accounts;
+DROP POLICY IF EXISTS email_addresses_select ON email_addresses;
+DROP POLICY IF EXISTS email_addresses_insert ON email_addresses;
+DROP POLICY IF EXISTS email_addresses_update ON email_addresses;
+DROP POLICY IF EXISTS email_addresses_delete ON email_addresses;
+DROP POLICY IF EXISTS email_delivery_events_select ON email_delivery_events;
+DROP POLICY IF EXISTS email_delivery_events_insert ON email_delivery_events;
+DROP POLICY IF EXISTS email_delivery_events_update ON email_delivery_events;
+DROP POLICY IF EXISTS email_delivery_events_delete ON email_delivery_events;
+DROP POLICY IF EXISTS ai_settings_select ON ai_settings;
+DROP POLICY IF EXISTS ai_settings_insert ON ai_settings;
+DROP POLICY IF EXISTS ai_settings_update ON ai_settings;
+DROP POLICY IF EXISTS ai_settings_delete ON ai_settings;
+DROP POLICY IF EXISTS ai_decisions_select ON ai_decisions;
+DROP POLICY IF EXISTS ai_decisions_insert ON ai_decisions;
+DROP POLICY IF EXISTS ai_decisions_update ON ai_decisions;
+DROP POLICY IF EXISTS ai_decisions_delete ON ai_decisions;
+DROP POLICY IF EXISTS knowledge_documents_select ON knowledge_documents;
+DROP POLICY IF EXISTS knowledge_documents_insert ON knowledge_documents;
+DROP POLICY IF EXISTS knowledge_documents_update ON knowledge_documents;
+DROP POLICY IF EXISTS knowledge_documents_delete ON knowledge_documents;
+DROP POLICY IF EXISTS knowledge_chunks_select ON knowledge_chunks;
+DROP POLICY IF EXISTS knowledge_chunks_insert ON knowledge_chunks;
+DROP POLICY IF EXISTS knowledge_chunks_update ON knowledge_chunks;
+DROP POLICY IF EXISTS knowledge_chunks_delete ON knowledge_chunks;
+DROP POLICY IF EXISTS support_jobs_select ON support_jobs;
+DROP POLICY IF EXISTS support_jobs_insert ON support_jobs;
+DROP POLICY IF EXISTS support_jobs_update ON support_jobs;
+DROP POLICY IF EXISTS support_jobs_delete ON support_jobs;
+DROP POLICY IF EXISTS audit_logs_select ON audit_logs;
+DROP POLICY IF EXISTS audit_logs_insert ON audit_logs;
+
+-- Reverse the column-level REVOKEs (re-grant SELECT on credentials_secret_id)
+GRANT SELECT (credentials_secret_id) ON sms_provider_accounts    TO anon;
+GRANT SELECT (credentials_secret_id) ON sms_provider_accounts    TO authenticated;
+GRANT SELECT (credentials_secret_id) ON email_provider_accounts  TO anon;
+GRANT SELECT (credentials_secret_id) ON email_provider_accounts  TO authenticated;
+
+-- Drop the helper functions (auth.uid is recreated as a stub by PostgREST
+-- on next restart, so dropping it here is safe).
+DROP FUNCTION IF EXISTS public.user_org_ids();
+DROP FUNCTION IF EXISTS auth.uid();
+-- @end
+

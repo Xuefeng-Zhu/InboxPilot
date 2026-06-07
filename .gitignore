@@ -42,3 +42,17 @@ next-env.d.ts
 .roo
 .trae
 .windsurf
+
+# Operator runbook artifacts (per-run logs; the canonical record lives in
+# docs/evidence/rollback-drill.txt, not in this transient dir)
+docs/evidence/.rollback-logs/
+
+# Snapshot of live functions dir taken by scripts/rollback.sh before any
+# redeploy, so a botched rollback can be reverted without a deploy
+insforge/functions/.last_good/
+
+# AI eval output — most files are transient (re-runnable from
+# scripts/eval/). The baseline is checked in so CI has a stable target.
+eval-output/
+!eval-output/baseline.json
+!eval-output/.gitkeep

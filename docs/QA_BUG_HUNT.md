@@ -149,6 +149,7 @@ The 6 integration suites are all `.skip()`-equivalent (file-level skip pattern),
 - **Suggested fix:** Add `CREATE INDEX idx_messages_conversation_created ON messages (conversation_id, created_at ASC);` in a new migration `004_perf_indexes.sql`. Verify with `EXPLAIN ANALYZE` before/after.
 - **Theme:** Performance
 - **Effort:** XS
+- **Status:** ✅ **Fixed (card t_13a7896e).** Migration `004_perf_indexes.sql` adds `idx_messages_conversation_created (conversation_id, created_at ASC)` and an `ANALYZE messages`. Local verification against Postgres 14 with 210k rows (21 conversations × 10k messages) on the exact `MessageThread.tsx` query: `Seq Scan + Sort` (18.9 ms, 3433 buffers) → `Index Scan using idx_messages_conversation_created` (4.1 ms, 211 buffers). ~4.6× faster execution, ~16× fewer shared-buffer reads. Migration's `-- @down` block drops the index with `IF EXISTS` guard; idempotent re-apply verified.
 
 ### HIGH-5 — Cookie `insforge_access_token` is not HttpOnly; token leak via XSS
 - **File:line:** `lib/auth-context.tsx:39-44` (setCookie), `lib/insforge.ts:36-45` (getAccessToken)

@@ -1,0 +1,182 @@
+# .github/workflows/migrate-integration.yml — Migration integration gate.
+#
+# Runs the migration runner against an ephemeral InsForge preview project
+# before the unit-test job, so any PR that touches the migration files or
+# the runner scripts exercises the apply → test → rollback loop end-to-end.
+#
+# What this does on every PR that matches the path filter:
+#   1. Boot a transient InsForge preview project (or skip with note if
+#      INSFORGE_PREVIEW_* secrets are not set; the unit tests still run).
+#   2. Run scripts/apply-migrations.sh to apply every migration.
+#   3. Run scripts/seed.sh to populate the seed dataset (idempotent).
+#   4. Run the vitest suite (the apply-migrations.test.ts cases hit the
+#      scripts offline; the broader support-core tests run against the
+#      preview project when INSFORGE_* is set).
+#   5. Run scripts/apply-migrations.down.sh --last 1 to confirm rollback
+#      works (then --last 1 again — proof the runner is reversible).
+#
+# Required GitHub secrets (Settings → Secrets → Actions):
+#   INSFORGE_PREVIEW_API_BASE     e.g. https://preview-xyz.insforge.app
+#   INSFORGE_PREVIEW_SERVICE_KEY  service-role key used to mint a JWT for
+#                                 the runner. The same key is exposed to
+#                                 the unit tests as INSFORGE_SERVICE_KEY.
+#
+# Required GitHub variables (Settings → Variables → Actions):
+#   INSFORGE_PREVIEW_ENABLED  "true" to enable the live migration run;
+#                             anything else makes the workflow skip the
+#                             live steps and run the tests against the
+#                             offline-only apply-migrations.test.ts suite.
+#
+# Pair with:
+#   scripts/apply-migrations.sh
+#   scripts/apply-migrations.down.sh
+#   scripts/seed.sh
+#   __tests__/apply-migrations.test.ts
+#
+# Local sanity check (no InsForge required):
+#   npm test -- apply-migrations
+#   INSFORGE_PREVIEW_API_BASE=... INSFORGE_PREVIEW_SERVICE_KEY=... \
+#     scripts/apply-migrations.sh --no-color
+
+name: Migration integration
+
+on:
+  pull_request:
+    paths:
+      - 'insforge/migrations/**'
+      - 'insforge/seed.sql'
+      - 'scripts/apply-migrations.sh'
+      - 'scripts/apply-migrations.down.sh'
+      - 'scripts/seed.sh'
+      - 'scripts/lib/migration-test-helpers.sh'
+      - '__tests__/apply-migrations.test.ts'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/migrate-integration.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'insforge/migrations/**'
+      - 'insforge/seed.sql'
+      - 'scripts/apply-migrations.sh'
+      - 'scripts/apply-migrations.down.sh'
+      - 'scripts/seed.sh'
+
+# Cancel any in-flight run for the same PR ref.
+concurrency:
+  group: migrate-integration-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # 1) Unit tests for the runner itself. Always runs — no InsForge required.
+  #    This is the fast-feedback layer: catches logic bugs in the bash
+  #    helpers and the @down block extractor.
+  # ---------------------------------------------------------------------------
+  runner-unit:
+    name: Runner unit tests (offline)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Run migration runner tests
+        run: npx vitest run __tests__/apply-migrations.test.ts
+
+  # ---------------------------------------------------------------------------
+  # 2) Live integration: apply + seed + vitest + rollback. Only runs when
+  #    INSFORGE_PREVIEW_ENABLED is set to "true" and the secrets are present.
+  #    When skipped, the runner-unit job above is the only quality gate.
+  # ---------------------------------------------------------------------------
+  live-migrate:
+    name: Live apply + seed + tests + rollback
+    runs-on: ubuntu-latest
+    needs: runner-unit
+    if: vars.INSFORGE_PREVIEW_ENABLED == 'true'
+    timeout-minutes: 20
+    env:
+      INSFORGE_API_BASE: ${{ secrets.INSFORGE_PREVIEW_API_BASE }}
+      INSFORGE_SERVICE_KEY: ${{ secrets.INSFORGE_PREVIEW_SERVICE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Link InsForge CLI to preview project
+        run: |
+          set -euo pipefail
+          if [ -z "$INSFORGE_API_BASE" ] || [ -z "$INSFORGE_SERVICE_KEY" ]; then
+            echo "::error::INSFORGE_PREVIEW_API_BASE and INSFORGE_PREVIEW_SERVICE_KEY must be set when INSFORGE_PREVIEW_ENABLED=true."
+            exit 1
+          fi
+          # The CLI uses .insforge/project.json for the project pin.
+          mkdir -p .insforge
+          cat > .insforge/project.json <<EOF
+          {
+            "apiBase": "$INSFORGE_API_BASE",
+            "anonKey": "$INSFORGE_SERVICE_KEY"
+          }
+          EOF
+          echo "Linked CLI to $INSFORGE_API_BASE"
+
+      - name: Apply migrations
+        id: apply
+        run: |
+          set -euo pipefail
+          scripts/apply-migrations.sh --no-color
+          echo "applied=$(scripts/apply-migrations.sh --no-color --dry-run | grep -c 'Will apply' || echo 0)" >> "$GITHUB_OUTPUT"
+
+      - name: Verify migrations table on a re-run is a no-op
+        run: |
+          set -euo pipefail
+          # Re-running should be a no-op: the "Will apply" count must be 0.
+          APPLYING=$(scripts/apply-migrations.sh --no-color --dry-run 2>&1 | grep -c 'Will apply' || true)
+          if [ "$APPLYING" -ne 0 ]; then
+            echo "::error::Second apply reported $APPLYING migrations to apply; expected 0 (runner not idempotent)."
+            exit 1
+          fi
+          echo "Re-run was a no-op (0 to apply). Idempotency confirmed."
+
+      - name: Apply seed
+        run: scripts/seed.sh --no-color
+
+      - name: Run full vitest suite
+        run: npx vitest run
+
+      - name: Roll back the most recent migration
+        run: scripts/apply-migrations.down.sh --last 1 --no-color
+
+      - name: Roll back the second-most-recent migration
+        run: scripts/apply-migrations.down.sh --last 1 --no-color
+
+      - name: Re-apply all migrations from scratch
+        run: |
+          set -euo pipefail
+          scripts/apply-migrations.sh --no-color
+
+      - name: Upload integration artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: migrate-integration-logs
+          path: |
+            eval-output/
+            .insforge/
+          if-no-files-found: warn
+          retention-days: 14

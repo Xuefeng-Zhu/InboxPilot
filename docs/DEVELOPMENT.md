@@ -27,12 +27,13 @@
 
 4. **Apply database migrations**
 
-   Apply the SQL migration files in order via the InsForge SQL editor or migrations API:
+   Use the migration runner so the schema is reproducible across machines and CI:
+   ```bash
+   scripts/apply-migrations.sh          # apply any pending migrations
+   scripts/seed.sh                       # load idempotent dev data
+   scripts/apply-migrations.down.sh --last 1   # roll back the last migration
    ```
-   insforge/migrations/001_initial_schema.sql   # Tables, indexes, constraints
-   insforge/migrations/002_rpc_functions.sql     # RPC functions
-   insforge/migrations/003_rls_policies.sql      # RLS policies
-   ```
+   The runner is idempotent — re-running it is a no-op. It records every applied migration in `public.schema_migrations` (version + sha256) and refuses to silently skip a migration whose contents have changed since the last apply (pass `--force` to re-apply a drifted migration).
 
 5. **Seed development data** (optional)
    ```
@@ -72,14 +73,15 @@ The `NEXT_PUBLIC_` prefix makes variables available in the browser bundle. Only 
 
 ## Database Migration Workflow
 
-Migrations are plain SQL files in `insforge/migrations/`. They are applied manually via the InsForge SQL editor or migrations API.
+Migrations are plain SQL files in `insforge/migrations/`, applied via `scripts/apply-migrations.sh`. The runner uses the InsForge CLI's `db import` path (multi-statement DDL works there; the `db query` path silently drops DDL — see the `insforge-cli` skill note). Every migration file is paired with a `-- @down` / `-- @end` rollback block; the `apply-migrations.down.sh` script extracts and applies it in reverse order.
 
 ### Adding a New Migration
 
 1. Create a new file: `insforge/migrations/004_your_change.sql`
-2. Write idempotent SQL (use `IF NOT EXISTS`, `CREATE OR REPLACE`, etc.)
-3. Apply via the InsForge SQL editor
-4. Update `docs/DATABASE.md` if the schema changes
+2. Write idempotent SQL (use `IF NOT EXISTS`, `CREATE OR REPLACE`, etc.) so the file is safe to re-apply.
+3. Add a paired `-- @down ... -- @end` block at the bottom with the inverse DDL (DROP TABLE / DROP FUNCTION / DROP POLICY, etc.) so `apply-migrations.down.sh --last 1` can reverse it.
+4. Run `scripts/apply-migrations.sh` to apply. The runner records the new row in `public.schema_migrations` with the file's sha256, so future runs skip it unless you `--force`.
+5. Update `docs/DATABASE.md` if the schema changes.
 
 ### Conventions
 

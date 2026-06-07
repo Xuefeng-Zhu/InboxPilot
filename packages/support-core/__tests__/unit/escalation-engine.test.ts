@@ -697,14 +697,16 @@ describe('Escalation Rules — Individual Rule Tests', () => {
     });
 
     // Boundary: NaN confidence. NaN < threshold is always false in
-    // IEEE 754, so the rule never fires on NaN. FINDING: NaN
-    // confidence should arguably escalate (the model returned garbage)
-    // but the current implementation silently treats NaN as "good
-    // enough". This is a pre-LLM-engine call only — the upstream
-    // AiAgentService should guard against NaN before calling.
-    it('evaluateConfidence does NOT trigger on NaN confidence (NaN < x is false)', () => {
+    // IEEE 754, so a naive `confidence < threshold` check would let
+    // a garbage confidence silently pass as "good enough" and trigger
+    // an auto-reply. The rule defensively treats NaN confidence as
+    // low confidence so a human reviews it (parse failure, model
+    // timeout, missing token upstream all surface here).
+    it('evaluateConfidence DOES trigger on NaN confidence (treated as low confidence)', () => {
       const result = rule.evaluateConfidence(Number.NaN, 0.75);
-      expect(result).toBeNull();
+      expect(result).not.toBeNull();
+      expect(result!.reason).toBe('low_confidence');
+      expect(result!.triggered).toBe(true);
     });
 
     // Boundary: confidence = 1, threshold = 1. Strict-less-than is

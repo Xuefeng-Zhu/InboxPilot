@@ -233,7 +233,12 @@ export class LowConfidenceRule implements EscalationRule {
    * Called explicitly by AiAgentService after LLM response.
    */
   evaluateConfidence(confidence: number, threshold: number): EscalationResult | null {
-    if (confidence < threshold) {
+    // Defensive: NaN confidence means the upstream LLM pipeline returned
+    // garbage (parse failure, model timeout, missing token, etc.). IEEE 754
+    // makes `NaN < threshold` always false, which would otherwise let a
+    // garbage confidence silently pass as "good enough" and trigger an
+    // auto-reply. Treat NaN as low confidence so a human reviews it.
+    if (Number.isNaN(confidence) || confidence < threshold) {
       return {
         triggered: true,
         reason: 'low_confidence',

@@ -244,7 +244,8 @@ export default async function (req: Request): Promise<Response> {
 
     // 11. Trigger process-jobs to immediately handle the AI message job
     // Fire-and-forget — don't block the inbound response
-    fetch(`${baseUrl}/functions/v1/process-jobs`, {
+    const functionsUrl = baseUrl.replace(/\.\w+-\w+\.insforge\.app/, '.functions.insforge.app');
+    fetch(`${functionsUrl}/process-jobs`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

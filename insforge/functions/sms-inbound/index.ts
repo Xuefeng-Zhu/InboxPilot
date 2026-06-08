@@ -239,7 +239,20 @@ export default async function (req: Request): Promise<Response> {
       conversationId: message.conversationId,
     });
 
-    // 11. Return 200 OK with message data
+    // 11. Trigger process-jobs to immediately handle the AI message job
+    // Fire-and-forget — don't block the inbound response
+    const functionsUrl = baseUrl.replace(/\.\w+-\w+\.insforge\.app/, '.functions.insforge.app');
+    fetch(`${functionsUrl}/process-jobs`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: serviceRoleKey,
+        Authorization: `Bearer ${serviceRoleKey}`,
+      },
+      body: '{}',
+    }).catch(() => { /* non-critical — job will be picked up on next trigger */ });
+
+    // 12. Return 200 OK with message data
     return jsonResponse({ status: 'ok', data: message });
   } catch (err) {
     console.error('sms-inbound error:', err);

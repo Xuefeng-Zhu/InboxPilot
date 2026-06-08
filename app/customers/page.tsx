@@ -1,45 +1,33 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import { insforge } from '@/lib/insforge';
 import { AppShell } from '@/components/layout';
-import { Card } from '@/components/ui';
-
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-interface Contact {
-  id: string;
-  name: string | null;
-  email: string | null;
-  phone: string | null;
-  created_at: string;
-}
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-  });
-}
-
-// ---------------------------------------------------------------------------
-// Component
-// ---------------------------------------------------------------------------
+import {
+  CustomerTable,
+  CustomerFilters,
+  EditCustomerModal,
+  DeleteCustomerModal,
+  type Contact,
+} from '@/components/customers';
 
 export default function CustomersPage() {
   const { user, loading: authLoading } = useAuth();
+  const router = useRouter();
 
   const [customers, setCustomers] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Filters
+  const [search, setSearch] = useState('');
+  const [channelFilter, setChannelFilter] = useState<'all' | 'email' | 'phone'>('all');
+
+  // Modal state
+  const [editingCustomer, setEditingCustomer] = useState<Contact | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const fetchCustomers = useCallback(async () => {
     setLoading(true);
@@ -47,7 +35,7 @@ export default function CustomersPage() {
     try {
       const { data, error: fetchError } = await insforge.database
         .from('contacts')
-        .select('id,name,email,phone,created_at')
+        .select('id,name,email,phone,created_at,updated_at')
         .order('created_at', { ascending: false });
 
       if (fetchError) {
@@ -70,7 +58,18 @@ export default function CustomersPage() {
     }
   }, [authLoading, user, fetchCustomers]);
 
-  // Loading state
+  // Client-side filter
+  const filteredCustomers = customers.filter((c) => {
+    if (channelFilter === 'email' && !c.email) return false;
+    if (channelFilter === 'phone' && !c.phone) return false;
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      if (!c.name?.toLowerCase().includes(q) && !c.email?.toLowerCase().includes(q) && !c.phone?.includes(q)) return false;
+    }
+    return true;
+  });
+
+  // Loading / auth guards
   if (authLoading || loading) {
     return (
       <AppShell>
@@ -96,53 +95,60 @@ export default function CustomersPage() {
   return (
     <AppShell>
       <div className="p-container-margin">
+        {/* Header */}
         <div>
           <h1 className="text-headline-sm text-gray-900">Customers</h1>
           <p className="mt-1 text-body-md text-gray-500">
-            Manage your contacts and customer relationships.
+            Manage your user base and view conversation history.
           </p>
         </div>
 
         {/* Error */}
         {error && (
-          <div className="mt-4 rounded-md bg-red-50 p-3" role="alert">
+          <div className="mt-4 rounded bg-red-50 p-3" role="alert">
             <p className="text-body-sm text-red-700">{error}</p>
           </div>
         )}
 
-        {/* Customer List */}
-        <div className="mt-6 space-y-element-gap">
-          {customers.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-surface-border p-8 text-center">
-              <p className="text-body-md text-gray-500">No customers yet.</p>
-              <p className="mt-1 text-label-sm text-gray-400">
-                Customers will appear here when contacts are created through conversations.
-              </p>
-            </div>
-          ) : (
-            customers.map((customer) => (
-              <Card key={customer.id}>
-                <div className="flex items-start justify-between gap-element-gap">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-body-md font-medium text-gray-900 truncate">
-                      {customer.name || 'Unknown Contact'}
-                    </p>
-                    {(customer.email || customer.phone) && (
-                      <p className="mt-0.5 text-body-sm text-gray-500 truncate">
-                        {customer.email}
-                        {customer.email && customer.phone && ' · '}
-                        {customer.phone}
-                      </p>
-                    )}
-                    <p className="mt-1 text-label-sm text-gray-400">
-                      Added {formatDate(customer.created_at)}
-                    </p>
-                  </div>
-                </div>
-              </Card>
-            ))
-          )}
-        </div>
+        {/* Filters */}
+        <CustomerFilters
+          search={search}
+          onSearchChange={setSearch}
+          channelFilter={channelFilter}
+          onChannelChange={setChannelFilter}
+          filteredCount={filteredCustomers.length}
+          totalCount={customers.length}
+        />
+
+        {/* Table */}
+        <CustomerTable
+          customers={filteredCustomers}
+          totalCount={customers.length}
+          onViewConversations={(id) => router.push(`/inbox?contact=${id}`)}
+          onEdit={(customer) => setEditingCustomer(customer)}
+          onDelete={(id) => setDeletingId(id)}
+        />
+
+        {/* Edit modal */}
+        {editingCustomer && (
+          <EditCustomerModal
+            customerId={editingCustomer.id}
+            initialName={editingCustomer.name ?? ''}
+            initialEmail={editingCustomer.email ?? ''}
+            initialPhone={editingCustomer.phone ?? ''}
+            onClose={() => setEditingCustomer(null)}
+            onSaved={() => { setEditingCustomer(null); fetchCustomers(); }}
+          />
+        )}
+
+        {/* Delete modal */}
+        {deletingId && (
+          <DeleteCustomerModal
+            customerId={deletingId}
+            onClose={() => setDeletingId(null)}
+            onDeleted={() => { setDeletingId(null); fetchCustomers(); }}
+          />
+        )}
       </div>
     </AppShell>
   );

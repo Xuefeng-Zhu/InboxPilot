@@ -1,69 +1,97 @@
 'use client';
 
-import { useState } from 'react';
+import { Suspense, useCallback, useState } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { AppShell } from '@/components/layout';
 import { ConversationList } from '@/components/inbox/ConversationList';
 import { MessageThread } from '@/components/inbox/MessageThread';
-import type { ConversationStatus } from '@support-core/types';
-
-const filterOptions: { id: ConversationStatus | 'all'; label: string }[] = [
-  { id: 'all', label: 'All Open' },
-  { id: 'pending', label: 'Pending' },
-  { id: 'escalated', label: 'Escalated' },
-  { id: 'resolved', label: 'Resolved' },
-];
+import { InboxFilters, type InboxFilterState } from '@/components/inbox/InboxFilters';
+import type { ConversationStatus, Channel } from '@support-core/types';
 
 export default function InboxPage() {
+  return (
+    <Suspense fallback={
+      <AppShell>
+        <div className="flex h-full items-center justify-center">
+          <p className="text-body-sm text-gray-500">Loading inbox…</p>
+        </div>
+      </AppShell>
+    }>
+      <InboxContent />
+    </Suspense>
+  );
+}
+
+function InboxContent() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+
+  const [filters, setFilters] = useState<InboxFilterState>({
+    status: (searchParams.get('status') ?? 'all') as ConversationStatus | 'all',
+    channel: (searchParams.get('channel') ?? 'all') as Channel | 'all',
+    search: searchParams.get('q') ?? '',
+    customerId: searchParams.get('contact') ?? null,
+  });
+
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
-  const [statusFilter, setStatusFilter] = useState<ConversationStatus | 'all'>('all');
+
+  const syncToUrl = useCallback((state: InboxFilterState) => {
+    const params = new URLSearchParams();
+    if (state.status !== 'all') params.set('status', state.status);
+    if (state.channel !== 'all') params.set('channel', state.channel);
+    if (state.search.trim()) params.set('q', state.search.trim());
+    if (state.customerId) params.set('contact', state.customerId);
+    const qs = params.toString();
+    router.replace(`/inbox${qs ? `?${qs}` : ''}`, { scroll: false });
+  }, [router]);
+
+  const handleFilterChange = (newFilters: InboxFilterState) => {
+    setFilters(newFilters);
+    if (newFilters.search === filters.search) {
+      syncToUrl(newFilters);
+    }
+  };
+
+  const handleSearchCommit = () => {
+    syncToUrl(filters);
+  };
+
+  const handleClearAll = () => {
+    const cleared: InboxFilterState = {
+      status: 'all',
+      channel: 'all',
+      search: '',
+      customerId: null,
+    };
+    setFilters(cleared);
+    router.replace('/inbox', { scroll: false });
+  };
 
   return (
     <AppShell>
       <div className="flex flex-col lg:flex-row h-full">
-        {/* Conversation List panel — 360px fixed width */}
+        {/* Conversation List panel */}
         <div className="w-full lg:w-inbox-list-w border-b lg:border-b-0 lg:border-r border-surface-border overflow-hidden shrink-0 flex flex-col">
-          {/* List header with title and filter icon */}
-          <header className="flex items-center justify-between border-b border-surface-border px-4 py-3 xl:px-4">
-            <h1 className="text-headline-sm text-gray-900">Inbox</h1>
-            {/* Filter toggle icon */}
-            <button
-              className="p-1.5 rounded hover:bg-gray-50 text-gray-500 transition-colors"
-              aria-label="Filter conversations"
-            >
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M2 4h12M4 8h8M6 12h4" />
-              </svg>
-            </button>
-          </header>
+          <InboxFilters
+            filters={filters}
+            onChange={handleFilterChange}
+            onSearchCommit={handleSearchCommit}
+            onClearAll={handleClearAll}
+          />
 
-          {/* Status filter pills */}
-          <div className="flex items-center gap-1.5 px-4 py-2.5 border-b border-surface-border overflow-x-auto">
-            {filterOptions.map((opt) => (
-              <button
-                key={opt.id}
-                onClick={() => setStatusFilter(opt.id)}
-                className={`shrink-0 rounded-full px-3 py-1 text-label-sm font-medium transition-colors ${
-                  statusFilter === opt.id
-                    ? 'bg-primary text-white'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                }`}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
-
-          {/* Conversation list */}
           <div className="flex-1 overflow-y-auto">
             <ConversationList
               selectedId={selectedConversationId}
               onSelect={setSelectedConversationId}
-              statusFilter={statusFilter}
+              statusFilter={filters.status}
+              channelFilter={filters.channel}
+              contactFilter={filters.customerId ?? undefined}
+              searchQuery={filters.search}
             />
           </div>
         </div>
 
-        {/* Detail View — fluid width */}
+        {/* Detail View */}
         <div className="flex-1 overflow-hidden flex flex-col">
           {selectedConversationId ? (
             <MessageThread conversationId={selectedConversationId} />

@@ -15,13 +15,16 @@ interface ConversationListProps {
   selectedId: string | null;
   onSelect: (id: string) => void;
   statusFilter?: string;
+  channelFilter?: string;
+  contactFilter?: string;
+  searchQuery?: string;
 }
 
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
-export function ConversationList({ selectedId, onSelect, statusFilter }: ConversationListProps) {
+export function ConversationList({ selectedId, onSelect, statusFilter, channelFilter, contactFilter, searchQuery }: ConversationListProps) {
   const { user, loading: authLoading } = useAuth();
   const [conversations, setConversations] = useState<ConversationRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -37,14 +40,13 @@ export function ConversationList({ selectedId, onSelect, statusFilter }: Convers
       return;
     }
 
-    // Only show loading spinner on initial load, not on background polls
     if (!isBackground) {
       setLoading(true);
     }
     setError(null);
 
     try {
-      // First get the user's organization membership to find their org
+      // Get organization membership
       const { data: members, error: memberError } = await insforge.database
         .from('organization_members')
         .select('organization_id')
@@ -96,15 +98,42 @@ export function ConversationList({ selectedId, onSelect, statusFilter }: Convers
         return;
       }
 
-      const orgId = (memberArr[0] as { organization_id: string }).organization_id;
-      setOrgId(orgId);
+      const resolvedOrgId = (memberArr[0] as { organization_id: string }).organization_id;
+      setOrgId(resolvedOrgId);
 
-      // Fetch conversations with joined contact data, sorted by last_message_at desc
-      const { data, error: fetchError } = await insforge.database
+      // Build server-side filtered query
+      let query = insforge.database
         .from('conversations')
         .select('*, contacts(*)')
-        .eq('organization_id', orgId)
-        .order('last_message_at', { ascending: false, nullsFirst: false });
+        .eq('organization_id', resolvedOrgId);
+
+      // Status filter — server side
+      if (statusFilter && statusFilter !== 'all') {
+        query = query.eq('status', statusFilter);
+      } else {
+        // Default: exclude resolved
+        query = query.neq('status', 'resolved');
+      }
+
+      // Channel filter — server side
+      if (channelFilter && channelFilter !== 'all') {
+        query = query.eq('channel', channelFilter);
+      }
+
+      // Contact filter — server side
+      if (contactFilter) {
+        query = query.eq('contact_id', contactFilter);
+      }
+
+      // Search filter — server side (ilike on subject)
+      if (searchQuery && searchQuery.trim()) {
+        query = query.ilike('subject', `%${searchQuery.trim()}%`);
+      }
+
+      // Order and execute
+      query = query.order('last_message_at', { ascending: false });
+
+      const { data, error: fetchError } = await query;
 
       if (fetchError) {
         setError(fetchError.message);
@@ -118,7 +147,7 @@ export function ConversationList({ selectedId, onSelect, statusFilter }: Convers
     } finally {
       setLoading(false);
     }
-  }, [authLoading, user]);
+  }, [authLoading, user, statusFilter, channelFilter, contactFilter, searchQuery]);
 
   useEffect(() => {
     fetchConversations();
@@ -145,19 +174,8 @@ export function ConversationList({ selectedId, onSelect, statusFilter }: Convers
             viewBox="0 0 24 24"
             aria-hidden="true"
           >
-            <circle
-              className="opacity-25"
-              cx="12"
-              cy="12"
-              r="10"
-              stroke="currentColor"
-              strokeWidth="4"
-            />
-            <path
-              className="opacity-75"
-              fill="currentColor"
-              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-            />
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
           </svg>
           Loading conversations…
         </div>
@@ -178,19 +196,14 @@ export function ConversationList({ selectedId, onSelect, statusFilter }: Convers
   if (conversations.length === 0) {
     return (
       <div className="flex h-full items-center justify-center p-4">
-        <p className="text-sm text-gray-500">No conversations yet.</p>
+        <p className="text-sm text-gray-500">No conversations found.</p>
       </div>
     );
   }
 
   return (
     <nav aria-label="Conversation list" className="overflow-y-auto">
-      {conversations
-        .filter((c) => {
-          if (!statusFilter || statusFilter === 'all') return c.status !== 'resolved';
-          return c.status === statusFilter;
-        })
-        .map((conversation) => (
+      {conversations.map((conversation) => (
         <ConversationItem
           key={conversation.id}
           conversation={conversation}

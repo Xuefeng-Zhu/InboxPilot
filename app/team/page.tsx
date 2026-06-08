@@ -1,6 +1,5 @@
 'use client';
 
-import { useAuth } from '@/lib/auth-context';
 import { useTeamMembers } from '@/lib/queries';
 import { AppShell } from '@/components/layout';
 import { Button, Card } from '@/components/ui';
@@ -39,28 +38,15 @@ function formatDate(iso: string): string {
 // ---------------------------------------------------------------------------
 
 export default function TeamPage() {
-  const { user, loading: authLoading } = useAuth();
   const { data: members = [], isLoading, error } = useTeamMembers();
 
-  if (authLoading || isLoading) {
+  if (isLoading) {
     return (
       <AppShell>
         <div className="p-container-margin">
           <h1 className="text-headline-sm text-gray-900">Team</h1>
           <p className="mt-1 text-body-md text-gray-500">Manage your team members and roles.</p>
           <p className="mt-4 text-body-md text-gray-500">Loading team members…</p>
-        </div>
-      </AppShell>
-    );
-  }
-
-  if (!user) {
-    return (
-      <AppShell>
-        <div className="p-container-margin">
-          <h1 className="text-headline-sm text-gray-900">Team</h1>
-          <p className="mt-1 text-body-md text-gray-500">Manage your team members and roles.</p>
-          <p className="mt-4 text-body-md text-red-600">Please sign in to manage your team.</p>
         </div>
       </AppShell>
     );

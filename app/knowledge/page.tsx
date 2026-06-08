@@ -58,7 +58,7 @@ function formatDate(iso: string): string {
 // ---------------------------------------------------------------------------
 
 export default function KnowledgePage() {
-  const { user, loading: authLoading } = useAuth();
+  const { user } = useAuth();
   const queryClient = useQueryClient();
 
   const { data: documents = [], isLoading: loading, error: queryError } = useKnowledgeDocs();
@@ -176,24 +176,13 @@ export default function KnowledgePage() {
     }
   };
 
-  // Loading state
-  if (authLoading || loading) {
+  // Loading state for documents query
+  if (loading) {
     return (
       <AppShell>
         <div className="p-container-margin">
           <h1 className="text-headline-sm text-gray-900">Knowledge Base</h1>
           <p className="mt-4 text-body-md text-gray-500">Loading documents…</p>
-        </div>
-      </AppShell>
-    );
-  }
-
-  if (!user) {
-    return (
-      <AppShell>
-        <div className="p-container-margin">
-          <h1 className="text-headline-sm text-gray-900">Knowledge Base</h1>
-          <p className="mt-4 text-body-md text-red-600">Please sign in to manage the knowledge base.</p>
         </div>
       </AppShell>
     );

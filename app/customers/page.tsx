@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useAuth } from '@/lib/auth-context';
 import { useContacts } from '@/lib/queries';
 import { useQueryClient } from '@tanstack/react-query';
 import { AppShell } from '@/components/layout';
@@ -16,7 +15,6 @@ import {
 import { queryKeys } from '@/lib/queries';
 
 export default function CustomersPage() {
-  const { user, loading: authLoading } = useAuth();
   const router = useRouter();
   const queryClient = useQueryClient();
 
@@ -45,24 +43,13 @@ export default function CustomersPage() {
     queryClient.invalidateQueries({ queryKey: queryKeys.contacts() });
   };
 
-  // Loading / auth guards
-  if (authLoading || isLoading) {
+  // Loading state for contacts query
+  if (isLoading) {
     return (
       <AppShell>
         <div className="p-container-margin">
           <h1 className="text-headline-sm text-gray-900">Customers</h1>
           <p className="mt-4 text-body-md text-gray-500">Loading customers…</p>
-        </div>
-      </AppShell>
-    );
-  }
-
-  if (!user) {
-    return (
-      <AppShell>
-        <div className="p-container-margin">
-          <h1 className="text-headline-sm text-gray-900">Customers</h1>
-          <p className="mt-4 text-body-md text-red-600">Please sign in to view customers.</p>
         </div>
       </AppShell>
     );

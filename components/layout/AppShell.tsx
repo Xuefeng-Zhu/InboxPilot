@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { Sidebar } from './Sidebar';
+import { AuthGuard } from './AuthGuard';
 import { cn } from '../ui/cn';
 
 interface AppShellProps {
@@ -65,7 +66,7 @@ export function AppShell({ children }: AppShellProps) {
 
         {/* Page content */}
         <main className="flex-1 overflow-auto bg-surface-background">
-          {children}
+          <AuthGuard>{children}</AuthGuard>
         </main>
       </div>
     </div>

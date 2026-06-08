@@ -1,7 +1,6 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { useAuth } from '@/lib/auth-context';
 import { insforge } from '@/lib/insforge';
 import { AppShell } from '@/components/layout';
 import { MetricCard, Card } from '@/components/ui';
@@ -76,8 +75,6 @@ function getDefaultDateRange(): { start: string; end: string } {
 // ---------------------------------------------------------------------------
 
 export default function AnalyticsPage() {
-  const { user, loading: authLoading } = useAuth();
-
   const defaultRange = getDefaultDateRange();
   const [startDate, setStartDate] = useState(defaultRange.start);
   const [endDate, setEndDate] = useState(defaultRange.end);
@@ -192,31 +189,16 @@ export default function AnalyticsPage() {
   }, [startDate, endDate]);
 
   useEffect(() => {
-    if (!authLoading && user) {
-      computeMetrics();
-    } else if (!authLoading && !user) {
-      setLoading(false);
-    }
-  }, [authLoading, user, computeMetrics]);
+    computeMetrics();
+  }, [computeMetrics]);
 
   // Loading state
-  if (authLoading || loading) {
+  if (loading) {
     return (
       <AppShell>
         <div className="p-container-margin">
           <h1 className="text-headline-sm text-gray-900">Analytics</h1>
           <p className="mt-4 text-body-md text-gray-500">Loading analytics…</p>
-        </div>
-      </AppShell>
-    );
-  }
-
-  if (!user) {
-    return (
-      <AppShell>
-        <div className="p-container-margin">
-          <h1 className="text-headline-sm text-gray-900">Analytics</h1>
-          <p className="mt-4 text-body-md text-red-600">Please sign in to view analytics.</p>
         </div>
       </AppShell>
     );

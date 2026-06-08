@@ -46,34 +46,28 @@ export function AppShell({ children }: AppShellProps) {
       )}
 
       {/* Main content area */}
-      <main className="flex-1 overflow-auto bg-surface-background">
-        {/* Mobile hamburger button */}
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Mobile hamburger */}
         <button
           className={cn(
-            'fixed top-3 left-3 z-30 p-2 rounded-md bg-white border border-surface-border shadow-sm cursor-pointer transition-colors duration-150 hover:bg-gray-50',
+            'fixed top-3 left-3 z-30 p-2 rounded bg-white border border-surface-border shadow-sm cursor-pointer transition-colors duration-150 hover:bg-gray-50',
             'xl:hidden'
           )}
           onClick={() => setMobileOpen(true)}
           aria-label="Open navigation menu"
         >
-          <svg
-            width="20"
-            height="20"
-            viewBox="0 0 20 20"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <line x1="3" y1="5" x2="17" y2="5" />
-            <line x1="3" y1="10" x2="17" y2="10" />
-            <line x1="3" y1="15" x2="17" y2="15" />
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="3" y1="4.5" x2="15" y2="4.5" />
+            <line x1="3" y1="9" x2="15" y2="9" />
+            <line x1="3" y1="13.5" x2="15" y2="13.5" />
           </svg>
         </button>
 
-        {children}
-      </main>
+        {/* Page content */}
+        <main className="flex-1 overflow-auto bg-surface-background">
+          {children}
+        </main>
+      </div>
     </div>
   );
 }

@@ -374,7 +374,7 @@ export default function EmailSettingsPanel() {
                           type="text"
                           value={editLabel}
                           onChange={(e) => setEditLabel(e.target.value)}
-                          className="rounded border border-gray-300 px-2 py-1 text-body-md focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                          className="rounded border border-surface-border px-2 py-1 text-body-md focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
                         />
                         <Button variant="ghost" size="sm" onClick={() => handleSaveEdit(account.id)}>
                           Save

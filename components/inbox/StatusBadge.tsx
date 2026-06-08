@@ -9,19 +9,19 @@ import type { ConversationStatus, AiState } from '@support-core/types';
 const statusConfig: Record<ConversationStatus, { label: string; className: string }> = {
   open: {
     label: 'Open',
-    className: 'bg-green-100 text-green-800',
+    className: 'bg-orange-50 text-orange-700',
   },
   pending: {
     label: 'Pending',
-    className: 'bg-yellow-100 text-yellow-800',
+    className: 'bg-yellow-50 text-yellow-700',
   },
   escalated: {
     label: 'Escalated',
-    className: 'bg-red-100 text-red-800',
+    className: 'bg-red-50 text-red-700',
   },
   resolved: {
     label: 'Resolved',
-    className: 'bg-gray-100 text-gray-800',
+    className: 'bg-green-50 text-green-700',
   },
 };
 
@@ -42,8 +42,8 @@ export function StatusBadge({ status }: { status: ConversationStatus }) {
 
 const aiStateConfig: Record<AiState, { label: string; className: string; show: boolean }> = {
   idle: { label: '', className: '', show: false },
-  thinking: { label: 'AI Thinking', className: 'text-blue-600', show: true },
-  drafted: { label: 'AI Draft', className: 'text-blue-600', show: true },
+  thinking: { label: 'AI Thinking', className: 'text-ai-600', show: true },
+  drafted: { label: 'AI Draft', className: 'text-ai-600', show: true },
   auto_replied: { label: 'Auto-replied', className: 'text-green-600', show: true },
   needs_human: { label: 'Needs Human', className: 'text-orange-600', show: true },
   failed: { label: 'AI Failed', className: 'text-red-600', show: true },

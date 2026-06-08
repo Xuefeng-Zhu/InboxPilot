@@ -42,7 +42,7 @@ export default function SettingsPage() {
                   className={`whitespace-nowrap border-b-2 px-1 pb-3 text-body-md font-medium transition-colors ${
                     activeTab === tab.id
                       ? 'border-primary text-primary'
-                      : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+                      : 'border-transparent text-gray-500 hover:border-surface-border hover:text-gray-700'
                   }`}
                 >
                   {tab.label}

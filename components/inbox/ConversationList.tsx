@@ -14,13 +14,14 @@ import { ConversationItem, type ConversationRow } from './ConversationItem';
 interface ConversationListProps {
   selectedId: string | null;
   onSelect: (id: string) => void;
+  statusFilter?: string;
 }
 
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
-export function ConversationList({ selectedId, onSelect }: ConversationListProps) {
+export function ConversationList({ selectedId, onSelect, statusFilter }: ConversationListProps) {
   const { user, loading: authLoading } = useAuth();
   const [conversations, setConversations] = useState<ConversationRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -184,7 +185,12 @@ export function ConversationList({ selectedId, onSelect }: ConversationListProps
 
   return (
     <nav aria-label="Conversation list" className="overflow-y-auto">
-      {conversations.map((conversation) => (
+      {conversations
+        .filter((c) => {
+          if (!statusFilter || statusFilter === 'all') return c.status !== 'resolved';
+          return c.status === statusFilter;
+        })
+        .map((conversation) => (
         <ConversationItem
           key={conversation.id}
           conversation={conversation}

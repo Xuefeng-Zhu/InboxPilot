@@ -12,7 +12,7 @@ export interface SelectProps
 }
 
 const baseClasses =
-  'w-full border border-gray-300 rounded px-3 py-2 text-body-md focus:border-primary focus:ring-2 focus:ring-primary/20 focus:ring-offset-1 focus:outline-none transition-colors duration-150';
+  'w-full border border-surface-border rounded px-3 py-2 text-body-md focus:border-primary focus:ring-2 focus:ring-primary/20 focus:ring-offset-1 focus:outline-none transition-colors duration-150';
 
 const errorClasses = 'border-red-500 focus:border-red-500 focus:ring-red-500/20';
 

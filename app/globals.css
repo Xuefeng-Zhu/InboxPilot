@@ -2,15 +2,63 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ─── Stitch Design System: "Efficient Precision" ──────────────────────────── */
 :root {
-  --foreground-rgb: 0, 0, 0;
-  --background-start-rgb: 255, 255, 255;
-  --background-end-rgb: 255, 255, 255;
+  /* Surface tiers */
+  --surface: #fcf8ff;
+  --surface-dim: #dcd8e5;
+  --surface-bright: #fcf8ff;
+  --surface-container-lowest: #ffffff;
+  --surface-container-low: #f5f2ff;
+  --surface-container: #f0ecf9;
+  --surface-container-high: #eae6f4;
+  --surface-container-highest: #e4e1ee;
+
+  /* Content on surface */
+  --on-surface: #1b1b24;
+  --on-surface-variant: #464555;
+
+  /* Outline */
+  --outline: #777587;
+  --outline-variant: #c7c4d8;
+
+  /* Primary */
+  --primary: #4f46e5;
+  --on-primary: #ffffff;
+  --primary-container: #4f46e5;
+  --on-primary-container: #dad7ff;
+
+  /* Secondary (AI purple) */
+  --secondary: #8b5cf6;
+  --secondary-container: #8455ef;
+  --on-secondary: #ffffff;
+
+  /* Tertiary (status orange) */
+  --tertiary: #f59e0b;
+  --tertiary-container: #885500;
+
+  /* Error */
+  --error: #ba1a1a;
+  --error-container: #ffdad6;
+  --on-error: #ffffff;
+
+  /* Inverse */
+  --inverse-surface: #302f39;
+  --inverse-on-surface: #f3effc;
+  --inverse-primary: #c3c0ff;
+
+  /* Functional neutrals (legacy compat) */
+  --background: #f9fafb;
+  --foreground: #1b1b24;
+  --border: #e5e7eb;
 }
 
 body {
-  color: rgb(var(--foreground-rgb));
-  background: rgb(var(--background-start-rgb));
+  color: var(--foreground);
+  background: var(--background);
+  font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 /* Respect reduced-motion preference (UX Pro Max §7) */

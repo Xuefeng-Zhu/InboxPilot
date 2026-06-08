@@ -1,7 +1,9 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { insforge } from '@/lib/insforge';
+import { useContact } from '@/lib/queries';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -14,17 +16,13 @@ interface CustomerOption {
   phone: string | null;
 }
 
-// ---------------------------------------------------------------------------
-// CustomerSelector — searchable dropdown for picking a contact
-// ---------------------------------------------------------------------------
-
 interface CustomerSelectorProps {
   selectedId: string | null;
   onSelect: (id: string) => void;
   onClear: () => void;
 }
 
-function getLabel(c: CustomerOption) {
+function getLabel(c: { name: string | null; email: string | null; phone: string | null }) {
   return c.name || c.email || c.phone || 'Unknown';
 }
 
@@ -34,76 +32,36 @@ function getSublabel(c: CustomerOption) {
   return null;
 }
 
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
+
 export function CustomerSelector({ selectedId, onSelect, onClear }: CustomerSelectorProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
-  const [options, setOptions] = useState<CustomerOption[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [resolvedLabel, setResolvedLabel] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Resolve label from ID when selectedId changes
-  useEffect(() => {
-    if (!selectedId) {
-      setResolvedLabel(null);
-      return;
-    }
+  // Resolve selected contact label
+  const { data: selectedContact } = useContact(selectedId);
 
-    // Check if we already have it in options
-    const cached = options.find((o) => o.id === selectedId);
-    if (cached) {
-      setResolvedLabel(getLabel(cached));
-      return;
-    }
-
-    // Fetch just this contact
-    let cancelled = false;
-    insforge.database
-      .from('contacts')
-      .select('id,name,email,phone')
-      .eq('id', selectedId)
-      .limit(1)
-      .then(({ data }) => {
-        if (cancelled) return;
-        const rows = Array.isArray(data) ? data : data ? [data] : [];
-        const contact = rows[0] as CustomerOption | undefined;
-        if (contact) {
-          setResolvedLabel(getLabel(contact));
-          setOptions((prev) => prev.some((o) => o.id === contact.id) ? prev : [...prev, contact]);
-        } else {
-          setResolvedLabel('Unknown');
-        }
-      });
-
-    return () => { cancelled = true; };
-  }, [selectedId, options]);
-
-  const fetchCustomers = useCallback(async (search: string) => {
-    setLoading(true);
-    try {
+  // Fetch dropdown options
+  const { data: options = [], isLoading } = useQuery({
+    queryKey: ['customer-selector-options', query],
+    queryFn: async () => {
       let q = insforge.database
         .from('contacts')
         .select('id,name,email,phone')
         .limit(20);
 
-      if (search.trim()) {
-        q = q.ilike('name', `%${search.trim()}%`);
+      if (query.trim()) {
+        q = q.ilike('name', `%${query.trim()}%`);
       }
 
       const { data } = await q;
-      setOptions(Array.isArray(data) ? (data as CustomerOption[]) : []);
-    } catch {
-      setOptions([]);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (open) {
-      fetchCustomers(query);
-    }
-  }, [open, query, fetchCustomers]);
+      return Array.isArray(data) ? (data as CustomerOption[]) : [];
+    },
+    enabled: open,
+  });
 
   // Selected state — show chip
   if (selectedId) {
@@ -113,7 +71,7 @@ export function CustomerSelector({ selectedId, onSelect, onClear }: CustomerSele
           <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0" />
         </svg>
         <span className="text-body-sm text-gray-900 truncate flex-1">
-          {resolvedLabel ?? 'Loading…'}
+          {selectedContact ? getLabel(selectedContact) : 'Loading…'}
         </span>
         <button
           onClick={onClear}
@@ -150,7 +108,7 @@ export function CustomerSelector({ selectedId, onSelect, onClear }: CustomerSele
         <>
           <div className="fixed inset-0 z-10" onClick={() => { setOpen(false); setQuery(''); }} />
           <div className="absolute left-0 right-0 top-9 z-20 max-h-48 overflow-y-auto rounded border border-surface-border bg-white py-1 shadow-level-2">
-            {loading ? (
+            {isLoading ? (
               <div className="px-3 py-2 text-body-sm text-gray-500">Searching…</div>
             ) : options.length === 0 ? (
               <div className="px-3 py-2 text-body-sm text-gray-500">No customers found</div>
@@ -160,7 +118,6 @@ export function CustomerSelector({ selectedId, onSelect, onClear }: CustomerSele
                   key={c.id}
                   onClick={() => {
                     onSelect(c.id);
-                    setResolvedLabel(getLabel(c));
                     setOpen(false);
                     setQuery('');
                   }}

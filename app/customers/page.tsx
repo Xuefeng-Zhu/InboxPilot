@@ -1,9 +1,10 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
-import { insforge } from '@/lib/insforge';
+import { useContacts } from '@/lib/queries';
+import { useQueryClient } from '@tanstack/react-query';
 import { AppShell } from '@/components/layout';
 import {
   CustomerTable,
@@ -12,14 +13,12 @@ import {
   DeleteCustomerModal,
   type Contact,
 } from '@/components/customers';
+import { queryKeys } from '@/lib/queries';
 
 export default function CustomersPage() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
-
-  const [customers, setCustomers] = useState<Contact[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
 
   // Filters
   const [search, setSearch] = useState('');
@@ -29,37 +28,10 @@ export default function CustomersPage() {
   const [editingCustomer, setEditingCustomer] = useState<Contact | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  const fetchCustomers = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const { data, error: fetchError } = await insforge.database
-        .from('contacts')
-        .select('id,name,email,phone,created_at,updated_at')
-        .order('created_at', { ascending: false });
+  const { data: customers = [], isLoading, error } = useContacts();
 
-      if (fetchError) {
-        setError(fetchError.message);
-        return;
-      }
-      setCustomers(Array.isArray(data) ? (data as Contact[]) : []);
-    } catch {
-      setError('Failed to load customers');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!authLoading && user) {
-      fetchCustomers();
-    } else if (!authLoading && !user) {
-      setLoading(false);
-    }
-  }, [authLoading, user, fetchCustomers]);
-
-  // Client-side filter
-  const filteredCustomers = customers.filter((c) => {
+  // Client-side channel filter (contacts table doesn't have a channel column)
+  const filteredCustomers = (customers as Contact[]).filter((c) => {
     if (channelFilter === 'email' && !c.email) return false;
     if (channelFilter === 'phone' && !c.phone) return false;
     if (search.trim()) {
@@ -69,8 +41,12 @@ export default function CustomersPage() {
     return true;
   });
 
+  const refetchCustomers = () => {
+    queryClient.invalidateQueries({ queryKey: queryKeys.contacts() });
+  };
+
   // Loading / auth guards
-  if (authLoading || loading) {
+  if (authLoading || isLoading) {
     return (
       <AppShell>
         <div className="p-container-margin">
@@ -106,7 +82,7 @@ export default function CustomersPage() {
         {/* Error */}
         {error && (
           <div className="mt-4 rounded bg-red-50 p-3" role="alert">
-            <p className="text-body-sm text-red-700">{error}</p>
+            <p className="text-body-sm text-red-700">{error.message}</p>
           </div>
         )}
 
@@ -117,13 +93,13 @@ export default function CustomersPage() {
           channelFilter={channelFilter}
           onChannelChange={setChannelFilter}
           filteredCount={filteredCustomers.length}
-          totalCount={customers.length}
+          totalCount={(customers as Contact[]).length}
         />
 
         {/* Table */}
         <CustomerTable
           customers={filteredCustomers}
-          totalCount={customers.length}
+          totalCount={(customers as Contact[]).length}
           onViewConversations={(id) => router.push(`/inbox?contact=${id}`)}
           onEdit={(customer) => setEditingCustomer(customer)}
           onDelete={(id) => setDeletingId(id)}
@@ -137,7 +113,7 @@ export default function CustomersPage() {
             initialEmail={editingCustomer.email ?? ''}
             initialPhone={editingCustomer.phone ?? ''}
             onClose={() => setEditingCustomer(null)}
-            onSaved={() => { setEditingCustomer(null); fetchCustomers(); }}
+            onSaved={() => { setEditingCustomer(null); refetchCustomers(); }}
           />
         )}
 
@@ -146,7 +122,7 @@ export default function CustomersPage() {
           <DeleteCustomerModal
             customerId={deletingId}
             onClose={() => setDeletingId(null)}
-            onDeleted={() => { setDeletingId(null); fetchCustomers(); }}
+            onDeleted={() => { setDeletingId(null); refetchCustomers(); }}
           />
         )}
       </div>

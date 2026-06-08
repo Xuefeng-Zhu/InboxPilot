@@ -7,6 +7,7 @@ export type { SelectProps } from './Select';
 export { Textarea } from './Textarea';
 export type { TextareaProps } from './Textarea';
 export { StatusBadge } from './StatusBadge';
+export { Tooltip } from './Tooltip';
 export { Card } from './Card';
 export { MetricCard } from './MetricCard';
 export { cn } from './cn';

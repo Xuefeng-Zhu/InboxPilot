@@ -2,8 +2,8 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { StatusBadge } from '@/components/ui';
-import { type KnowledgeDocument, mapStatusToBadge, formatDate } from './types';
+import { StatusBadge, Tooltip } from '@/components/ui';
+import { type KnowledgeDocument, mapStatusToBadge, formatDate, getStatusTooltip } from './types';
 
 interface KnowledgeTableProps {
   documents: KnowledgeDocument[];
@@ -92,7 +92,7 @@ export function KnowledgeTable({ documents, totalCount, onDelete }: KnowledgeTab
                   {doc.source_type}
                 </span>
 
-                <div>
+                <Tooltip content={getStatusTooltip(doc.status)} side="top">
                   {doc.status === 'processing' ? (
                     <span className="inline-flex items-center gap-1.5">
                       <svg
@@ -119,7 +119,7 @@ export function KnowledgeTable({ documents, totalCount, onDelete }: KnowledgeTab
                   ) : (
                     <StatusBadge status={mapStatusToBadge(doc.status)} />
                   )}
-                </div>
+                </Tooltip>
 
                 <span className="text-body-sm text-gray-500">
                   {formatDate(doc.created_at)}

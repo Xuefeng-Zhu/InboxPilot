@@ -1,7 +1,7 @@
 'use client';
 
-import { Button, StatusBadge } from '@/components/ui';
-import { mapStatusToBadge, formatDate } from './types';
+import { Button, StatusBadge, Tooltip } from '@/components/ui';
+import { mapStatusToBadge, formatDate, getStatusTooltip } from './types';
 
 interface DocumentHeaderProps {
   title: string;
@@ -48,7 +48,9 @@ export function DocumentHeader({
           <h1 className="text-headline-sm text-gray-900">{title}</h1>
         )}
         <div className="mt-2 flex items-center gap-3 flex-wrap">
-          <StatusBadge status={mapStatusToBadge(status)} />
+          <Tooltip content={getStatusTooltip(status)} side="bottom">
+            <StatusBadge status={mapStatusToBadge(status)} />
+          </Tooltip>
           <span className="text-body-sm text-gray-500 capitalize">{sourceType}</span>
           <span className="text-body-sm text-gray-400">Created {formatDate(createdAt)}</span>
           {updatedAt !== createdAt && (

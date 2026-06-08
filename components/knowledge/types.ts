@@ -12,7 +12,7 @@ export interface KnowledgeDocument {
   updated_at: string;
 }
 
-export const SOURCE_TYPES = ['faq', 'article', 'policy', 'manual', 'other'] as const;
+export const SOURCE_TYPES = ['faq', 'article', 'policy', 'manual', 'product_info', 'other'] as const;
 
 export const ACCEPTED_FILE_TYPES = '.pdf,.txt,.md,.docx,.csv';
 export const MAX_FILE_SIZE_MB = 10;
@@ -40,4 +40,19 @@ export function formatDate(iso: string): string {
     month: 'short',
     day: 'numeric',
   });
+}
+
+export function getStatusTooltip(status: KnowledgeDocument['status']): string {
+  switch (status) {
+    case 'pending':
+      return 'Waiting to be processed. AI cannot use this document yet.';
+    case 'processing':
+      return 'Being chunked and embedded. Will be available to AI shortly.';
+    case 'ready':
+      return 'Processed and available. AI uses this document to answer questions.';
+    case 'failed':
+      return 'Processing failed. AI cannot use this document. Check the error for details.';
+    default:
+      return '';
+  }
 }

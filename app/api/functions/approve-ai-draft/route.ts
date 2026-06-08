@@ -50,9 +50,9 @@ export async function POST(req: NextRequest) {
         direction: 'outbound',
         channel: conversation.channel,
         body: decision.response_text,
-        provider: 'mock',
+        provider: conversation.channel === 'webchat' ? 'webchat' : 'mock',
         external_message_id: `approved_${Date.now()}`,
-        delivery_status: 'queued',
+        delivery_status: conversation.channel === 'webchat' ? 'sent' : 'queued',
       }])
       .select('*');
 
@@ -67,6 +67,35 @@ export async function POST(req: NextRequest) {
       .from('conversations')
       .update({ ai_state: 'idle', last_message_at: new Date().toISOString() })
       .eq('id', conversationId);
+
+    // For webchat: publish to the visitor's realtime channel
+    if (conversation.channel === 'webchat') {
+      const { data: threadData } = await insforge.database
+        .from('webchat_threads')
+        .select('widget_id,visitor_token_jti')
+        .eq('conversation_id', conversationId)
+        .limit(1);
+
+      const thread = Array.isArray(threadData) ? threadData[0] : threadData;
+      if (thread) {
+        const baseUrl = process.env.NEXT_PUBLIC_INSFORGE_URL ?? '';
+        const serviceRoleKey = process.env.INSFORGE_SERVICE_ROLE_KEY ?? '';
+
+        fetch(`${baseUrl}/realtime/v1/api/broadcast`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            apikey: serviceRoleKey,
+            Authorization: `Bearer ${serviceRoleKey}`,
+          },
+          body: JSON.stringify({
+            channel: `widget:${thread.widget_id}:${thread.visitor_token_jti}`,
+            event: 'new_message',
+            payload: { message, conversationId },
+          }),
+        }).catch(() => { /* non-critical */ });
+      }
+    }
 
     // Audit log
     await insforge.database

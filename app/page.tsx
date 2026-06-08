@@ -1,5 +1,9 @@
 import Link from 'next/link';
+import Script from 'next/script';
 import { Logo } from '@/components/ui/Logo';
+import { OpenChatButton } from '@/components/landing/OpenChatButton';
+
+const demoWidgetId = process.env.NEXT_PUBLIC_DEMO_WIDGET_ID ?? '';
 
 export default function HomePage() {
   return (
@@ -87,6 +91,27 @@ export default function HomePage() {
                 >
                   Sign in to dashboard
                 </Link>
+                {demoWidgetId && (
+                  <OpenChatButton
+                    className="cursor-pointer w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded border border-primary-200 bg-primary-50 px-6 py-3 text-sm font-medium text-primary hover:bg-primary-100 hover:border-primary-300 transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:ring-offset-2"
+                  >
+                    <svg
+                      className="h-4 w-4"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      strokeWidth={2}
+                      stroke="currentColor"
+                      aria-hidden="true"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M8.625 12a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H8.25m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H12m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 0 1-2.555-.337A5.972 5.972 0 0 1 5.41 20.97a5.969 5.969 0 0 1-.474-.065 4.48 4.48 0 0 0 .978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25Z"
+                      />
+                    </svg>
+                    Chat with us
+                  </OpenChatButton>
+                )}
               </div>
 
               <p className="mt-6 text-xs text-gray-400">
@@ -281,6 +306,17 @@ export default function HomePage() {
           </p>
         </div>
       </footer>
+
+      {demoWidgetId && (
+        <Script
+          id="inboxpilot-landing-widget"
+          src="/widget.js"
+          strategy="lazyOnload"
+          data-widget-id={demoWidgetId}
+          data-position="bottom-right"
+          data-color="#2563eb"
+        />
+      )}
     </div>
   );
 }

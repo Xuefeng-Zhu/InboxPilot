@@ -21,7 +21,9 @@ import type { MessageRepository } from '../repositories/message-repository.js';
 import type { AuditLogRepository } from '../repositories/audit-log-repository.js';
 import type { SmsProviderAccountRepository } from '../repositories/sms-provider-account-repository.js';
 import type { EmailProviderAccountRepository } from '../repositories/email-provider-account-repository.js';
+import type { WebchatThreadRepository } from '../repositories/webchat-thread-repository.js';
 import type { ProviderRegistry } from '../interfaces/provider-registry.js';
+import type { RealtimePublisher } from '../interfaces/realtime-publisher.js';
 import type { Message } from '../types/index.js';
 
 export class OutboundMessageService {
@@ -33,6 +35,8 @@ export class OutboundMessageService {
     private smsAccountRepo: SmsProviderAccountRepository,
     private emailAccountRepo: EmailProviderAccountRepository,
     private auditLog: AuditLogRepository,
+    private webchatThreadRepo?: WebchatThreadRepository,
+    private realtimePublisher?: RealtimePublisher,
   ) {}
 
   /**
@@ -95,7 +99,7 @@ export class OutboundMessageService {
       providerAccountId = smsAccount.id;
       externalMessageId = sendResult.externalMessageId;
       deliveryStatus = sendResult.status;
-    } else {
+    } else if (channel === 'email') {
       // 5a. Find default email address for the org
       const defaultEmail = await this.emailAccountRepo.findDefaultEmailAddress(organizationId);
       if (!defaultEmail) {
@@ -127,6 +131,25 @@ export class OutboundMessageService {
       providerAccountId = emailAccount.id;
       externalMessageId = sendResult.externalMessageId;
       deliveryStatus = sendResult.status;
+    } else {
+      // channel === 'webchat'
+      // No external provider call — deliver via realtime push
+      provider = 'webchat';
+      providerAccountId = '';
+      externalMessageId = `wc_reply_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      deliveryStatus = 'sent';
+
+      // Publish to the visitor's realtime channel
+      if (this.webchatThreadRepo && this.realtimePublisher) {
+        const thread = await this.webchatThreadRepo.findByConversationId(conversation.id);
+        if (thread) {
+          await this.realtimePublisher.publish(
+            `widget:${thread.widgetId}:${thread.visitorTokenJti}`,
+            'new_message',
+            { body, senderType: 'user', conversationId: conversation.id, senderId: userId },
+          );
+        }
+      }
     }
 
     // 6. Create outbound message record

@@ -44,6 +44,7 @@ function getContactDisplayName(contact: ContactRow | null, channel: Channel): st
   if (contact.name) return contact.name;
   if (channel === 'sms' && contact.phone) return contact.phone;
   if (channel === 'email' && contact.email) return contact.email;
+  if (channel === 'webchat') return contact.email ?? contact.name ?? 'Visitor';
   return contact.phone ?? contact.email ?? 'Unknown Contact';
 }
 
@@ -64,7 +65,9 @@ function formatTimestamp(dateStr: string | null): string {
 }
 
 function channelLabel(channel: Channel): string {
-  return channel === 'sms' ? 'SMS' : 'Email';
+  if (channel === 'sms') return 'SMS';
+  if (channel === 'webchat') return 'Web';
+  return 'Email';
 }
 
 // ---------------------------------------------------------------------------

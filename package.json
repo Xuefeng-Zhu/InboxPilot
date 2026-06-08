@@ -4,7 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "npm run build:widget && next build",
+    "build:widget": "cd widget-src && npm run build",
     "start": "next start",
     "lint": "next lint",
     "test": "vitest run",

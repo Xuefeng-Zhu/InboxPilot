@@ -16,12 +16,12 @@
  * Requirements: 7.6, 8.6, 16.1, 16.2, 16.3, 23.1, 23.2
  */
 
-import { createDbClient } from '../_shared/create-db-client.js';
+import { createDbClient } from '../_shared/create-db-client.ts';
 
-import { ProviderRegistry } from '../../../packages/support-core/src/interfaces/provider-registry.js';
-import { MockSmsAdapter } from '../../../packages/support-core/src/adapters/mock-sms-adapter.js';
-import { MessageRepository } from '../../../packages/support-core/src/repositories/message-repository.js';
-import { DeliveryEventRepository } from '../../../packages/support-core/src/repositories/delivery-event-repository.js';
+import { ProviderRegistry } from '../../../packages/support-core/src/interfaces/provider-registry.ts';
+import { MockSmsAdapter } from '../../../packages/support-core/src/adapters/mock-sms-adapter.ts';
+import { MessageRepository } from '../../../packages/support-core/src/repositories/message-repository.ts';
+import { DeliveryEventRepository } from '../../../packages/support-core/src/repositories/delivery-event-repository.ts';
 
 // ---------------------------------------------------------------------------
 // Helper: JSON response builder

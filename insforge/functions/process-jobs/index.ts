@@ -11,22 +11,22 @@
  * 4. Mark jobs as completed or failed with proper status updates
  */
 
-import { createDbClient } from '../_shared/create-db-client.js';
-import { createRealtimePublisher } from '../_shared/create-realtime-publisher.js';
-import { PostgresJobQueue } from '../../../packages/support-core/src/services/postgres-job-queue.js';
-import { ConversationRepository } from '../../../packages/support-core/src/repositories/conversation-repository.js';
-import { MessageRepository } from '../../../packages/support-core/src/repositories/message-repository.js';
-import { KnowledgeRepository } from '../../../packages/support-core/src/repositories/knowledge-repository.js';
-import { AiSettingsRepository } from '../../../packages/support-core/src/repositories/ai-settings-repository.js';
-import { AiDecisionRepository } from '../../../packages/support-core/src/repositories/ai-decision-repository.js';
-import { AuditLogRepository } from '../../../packages/support-core/src/repositories/audit-log-repository.js';
-import { AiAgentService } from '../../../packages/support-core/src/services/ai-agent-service.js';
-import { KnowledgeIngestionService } from '../../../packages/support-core/src/services/knowledge-ingestion-service.js';
-import { createFileContentFetcher } from '../../../packages/support-core/src/utils/file-content-fetcher.js';
-import { createDefaultEscalationEngine } from '../../../packages/support-core/src/services/escalation-rules.js';
-import type { AiClient } from '../../../packages/support-core/src/interfaces/ai-client.js';
-import type { Job, JobType } from '../../../packages/support-core/src/types/index.js';
-import type { DatabaseClient } from '../../../packages/support-core/src/interfaces/database-client.js';
+import { createDbClient } from '../_shared/create-db-client.ts';
+import { createRealtimePublisher } from '../_shared/create-realtime-publisher.ts';
+import { PostgresJobQueue } from '../../../packages/support-core/src/services/postgres-job-queue.ts';
+import { ConversationRepository } from '../../../packages/support-core/src/repositories/conversation-repository.ts';
+import { MessageRepository } from '../../../packages/support-core/src/repositories/message-repository.ts';
+import { KnowledgeRepository } from '../../../packages/support-core/src/repositories/knowledge-repository.ts';
+import { AiSettingsRepository } from '../../../packages/support-core/src/repositories/ai-settings-repository.ts';
+import { AiDecisionRepository } from '../../../packages/support-core/src/repositories/ai-decision-repository.ts';
+import { AuditLogRepository } from '../../../packages/support-core/src/repositories/audit-log-repository.ts';
+import { AiAgentService } from '../../../packages/support-core/src/services/ai-agent-service.ts';
+import { KnowledgeIngestionService } from '../../../packages/support-core/src/services/knowledge-ingestion-service.ts';
+import { createFileContentFetcher } from '../../../packages/support-core/src/utils/file-content-fetcher.ts';
+import { createDefaultEscalationEngine } from '../../../packages/support-core/src/services/escalation-rules.ts';
+import type { AiClient } from '../../../packages/support-core/src/interfaces/ai-client.ts';
+import type { Job, JobType } from '../../../packages/support-core/src/types/index.ts';
+import type { DatabaseClient } from '../../../packages/support-core/src/interfaces/database-client.ts';
 
 /** Maximum number of jobs to claim per invocation. */
 const MAX_JOBS_PER_RUN = 10;

@@ -1,0 +1,220 @@
+/**
+ * webchat-inbound — Handles inbound webchat messages from visitors.
+ *
+ * Auth: Visitor JWT (HS256, per-widget secret) via Authorization: Bearer header.
+ * Anti-flood: max 10 messages/minute per thread (in-memory per worker).
+ *
+ * Side effects:
+ * - Insert inbound message (channel='webchat')
+ * - Update conversation lastMessageAt
+ * - Enqueue process_ai_message job
+ * - Publish new_message on org:{orgId}
+ * - Update webchat_threads.page_url + last_seen_at
+ * - Write audit log entry
+ */
+
+import { createDbClient } from '../_shared/create-db-client.ts';
+import { createRealtimePublisher } from '../_shared/create-realtime-publisher.ts';
+import { verifyVisitorJwt } from '../_shared/verify-visitor-jwt.ts';
+import { handleCorsPreFlight, corsJsonResponse } from '../_shared/cors.ts';
+
+import { ContactRepository } from '../../../packages/support-core/src/repositories/contact-repository.ts';
+import { ConversationRepository } from '../../../packages/support-core/src/repositories/conversation-repository.ts';
+import { MessageRepository } from '../../../packages/support-core/src/repositories/message-repository.ts';
+import { AuditLogRepository } from '../../../packages/support-core/src/repositories/audit-log-repository.ts';
+import { WebchatThreadRepository } from '../../../packages/support-core/src/repositories/webchat-thread-repository.ts';
+import { InboundMessageService } from '../../../packages/support-core/src/services/inbound-message-service.ts';
+
+import type { DatabaseClient } from '../../../packages/support-core/src/interfaces/database-client.ts';
+import type { JobQueue } from '../../../packages/support-core/src/interfaces/job-queue.ts';
+import type { Job, JobType } from '../../../packages/support-core/src/types/index.ts';
+
+// ---------------------------------------------------------------------------
+// Anti-flood: in-memory rate limiter (per worker instance)
+// ---------------------------------------------------------------------------
+
+const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
+const RATE_LIMIT_WINDOW_MS = 60_000; // 1 minute
+const RATE_LIMIT_MAX = 10;
+
+function checkRateLimit(threadId: string): boolean {
+  const now = Date.now();
+  const entry = rateLimitMap.get(threadId);
+
+  if (!entry || now > entry.resetAt) {
+    rateLimitMap.set(threadId, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
+    return true;
+  }
+
+  if (entry.count >= RATE_LIMIT_MAX) {
+    return false;
+  }
+
+  entry.count++;
+  return true;
+}
+
+// ---------------------------------------------------------------------------
+// PostgREST JobQueue (same pattern as sms-inbound)
+// ---------------------------------------------------------------------------
+
+class PostgRestJobQueue implements JobQueue {
+  constructor(private db: DatabaseClient) {}
+
+  async enqueue(jobType: JobType, payload: Record<string, unknown>, orgId: string): Promise<Job> {
+    const row = {
+      organization_id: orgId,
+      job_type: jobType,
+      payload,
+      status: 'pending',
+      attempts: 0,
+      max_attempts: 5,
+      run_after: new Date().toISOString(),
+    };
+
+    const { data, error } = await this.db
+      .from('support_jobs')
+      .insert(row)
+      .select('*')
+      .single();
+
+    if (error) throw new Error(`PostgRestJobQueue.enqueue failed: ${error.message}`);
+
+    const d = data as Record<string, unknown>;
+    return {
+      id: d.id as string,
+      organizationId: d.organization_id as string,
+      jobType: d.job_type as JobType,
+      payload: d.payload as Record<string, unknown>,
+      status: d.status as Job['status'],
+      attempts: d.attempts as number,
+      maxAttempts: d.max_attempts as number,
+      lastError: (d.last_error as string) ?? null,
+      runAfter: new Date(d.run_after as string),
+      createdAt: new Date(d.created_at as string),
+      updatedAt: new Date(d.updated_at as string),
+      completedAt: d.completed_at ? new Date(d.completed_at as string) : null,
+    };
+  }
+
+  async claim(): Promise<Job[]> { throw new Error('Not implemented'); }
+  async complete(): Promise<void> { throw new Error('Not implemented'); }
+  async fail(): Promise<void> { throw new Error('Not implemented'); }
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function jsonResponse(body: unknown, status = 200): Response {
+  return corsJsonResponse(body, status);
+}
+
+// ---------------------------------------------------------------------------
+// Entrypoint
+// ---------------------------------------------------------------------------
+
+export default async function (req: Request): Promise<Response> {
+  try {
+    if (req.method === 'OPTIONS') return handleCorsPreFlight();
+    if (req.method !== 'POST') {
+      return jsonResponse({ error: 'Method not allowed' }, 405);
+    }
+
+    // 1. Create DB client
+    const baseUrl =
+      (typeof Deno !== 'undefined' ? Deno.env.get('INSFORGE_BASE_URL') : undefined) ??
+      process.env.NEXT_PUBLIC_INSFORGE_URL ?? '';
+    const serviceRoleKey =
+      (typeof Deno !== 'undefined' ? Deno.env.get('INSFORGE_SERVICE_ROLE_KEY') : undefined) ??
+      process.env.INSFORGE_SERVICE_ROLE_KEY ?? '';
+
+    const db = createDbClient(baseUrl, serviceRoleKey);
+
+    // 2. Verify visitor JWT
+    const verified = await verifyVisitorJwt(req, db);
+    if (!verified) {
+      return jsonResponse({ error: 'Unauthorized' }, 401);
+    }
+
+    const { claims, widget, thread } = verified;
+
+    // 3. Check widget is active
+    if (!widget.isActive) {
+      return jsonResponse({ error: 'Widget is inactive' }, 403);
+    }
+
+    // 4. Anti-flood rate limiting
+    if (!checkRateLimit(claims.threadId)) {
+      return jsonResponse({ error: 'Rate limit exceeded. Max 10 messages per minute.' }, 429);
+    }
+
+    // 5. Parse body
+    const body = await req.json() as { text?: string; page_url?: string };
+    const text = body.text?.trim();
+    if (!text) {
+      return jsonResponse({ error: 'Missing text field' }, 400);
+    }
+
+    // 6. Update thread page_url and last_seen_at
+    const threadRepo = new WebchatThreadRepository(db);
+    const threadUpdates: Record<string, unknown> = { lastSeenAt: new Date() };
+    if (body.page_url) {
+      threadUpdates.pageUrl = body.page_url;
+    }
+    await threadRepo.update(thread.id, threadUpdates as { lastSeenAt?: Date; pageUrl?: string });
+
+    // 7. Process inbound message
+    const contactRepo = new ContactRepository(db);
+    const conversationRepo = new ConversationRepository(db);
+    const messageRepo = new MessageRepository(db);
+    const auditLogRepo = new AuditLogRepository(db);
+    const jobQueue = new PostgRestJobQueue(db);
+
+    const inboundService = new InboundMessageService(
+      contactRepo,
+      conversationRepo,
+      messageRepo,
+      jobQueue,
+      auditLogRepo,
+    );
+
+    const message = await inboundService.processInboundWebchat({
+      conversationId: thread.conversationId,
+      contactId: claims.contactId,
+      body: text,
+      orgId: claims.organizationId,
+    });
+
+    // 8. Publish new_message realtime event to the org channel (for agent inbox)
+    const realtimePublisher = createRealtimePublisher(baseUrl, serviceRoleKey);
+    await realtimePublisher.publish(`org:${claims.organizationId}`, 'new_message', {
+      message,
+      conversationId: thread.conversationId,
+    });
+
+    // 9. Trigger process-jobs (fire-and-forget)
+    const functionsUrl = baseUrl.replace(/\.\w+-\w+\.insforge\.app/, '.functions.insforge.app');
+    fetch(`${functionsUrl}/process-jobs`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: serviceRoleKey,
+        Authorization: `Bearer ${serviceRoleKey}`,
+      },
+      body: '{}',
+    }).catch(() => { /* non-critical */ });
+
+    // 10. Return success
+    return jsonResponse({
+      status: 'ok',
+      data: { message, conversationId: thread.conversationId },
+    });
+  } catch (err) {
+    console.error('webchat-inbound error:', err);
+    return jsonResponse(
+      { error: 'Internal server error', message: err instanceof Error ? err.message : 'Unknown error' },
+      500,
+    );
+  }
+}

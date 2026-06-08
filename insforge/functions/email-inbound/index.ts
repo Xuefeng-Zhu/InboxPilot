@@ -18,20 +18,20 @@
  * Requirements: 8.4, 16.1, 16.2, 16.3, 23.2, 23.3
  */
 
-import { createDbClient } from '../_shared/create-db-client.js';
-import { createRealtimePublisher } from '../_shared/create-realtime-publisher.js';
+import { createDbClient } from '../_shared/create-db-client.ts';
+import { createRealtimePublisher } from '../_shared/create-realtime-publisher.ts';
 
-import { ProviderRegistry } from '../../../packages/support-core/src/interfaces/provider-registry.js';
-import { MockEmailAdapter } from '../../../packages/support-core/src/adapters/mock-email-adapter.js';
-import { ContactRepository } from '../../../packages/support-core/src/repositories/contact-repository.js';
-import { ConversationRepository } from '../../../packages/support-core/src/repositories/conversation-repository.js';
-import { MessageRepository } from '../../../packages/support-core/src/repositories/message-repository.js';
-import { AuditLogRepository } from '../../../packages/support-core/src/repositories/audit-log-repository.js';
-import { InboundMessageService } from '../../../packages/support-core/src/services/inbound-message-service.js';
+import { ProviderRegistry } from '../../../packages/support-core/src/interfaces/provider-registry.ts';
+import { MockEmailAdapter } from '../../../packages/support-core/src/adapters/mock-email-adapter.ts';
+import { ContactRepository } from '../../../packages/support-core/src/repositories/contact-repository.ts';
+import { ConversationRepository } from '../../../packages/support-core/src/repositories/conversation-repository.ts';
+import { MessageRepository } from '../../../packages/support-core/src/repositories/message-repository.ts';
+import { AuditLogRepository } from '../../../packages/support-core/src/repositories/audit-log-repository.ts';
+import { InboundMessageService } from '../../../packages/support-core/src/services/inbound-message-service.ts';
 
-import type { DatabaseClient } from '../../../packages/support-core/src/interfaces/database-client.js';
-import type { JobQueue } from '../../../packages/support-core/src/interfaces/job-queue.js';
-import type { Job, JobType } from '../../../packages/support-core/src/types/index.js';
+import type { DatabaseClient } from '../../../packages/support-core/src/interfaces/database-client.ts';
+import type { JobQueue } from '../../../packages/support-core/src/interfaces/job-queue.ts';
+import type { Job, JobType } from '../../../packages/support-core/src/types/index.ts';
 
 // ---------------------------------------------------------------------------
 // Minimal JobQueue implementation backed by PostgREST

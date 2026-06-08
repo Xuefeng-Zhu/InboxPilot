@@ -88,6 +88,71 @@ export class InboundMessageService {
     });
   }
 
+  /**
+   * Process an inbound webchat message.
+   *
+   * Unlike SMS/email, webchat skips the find-or-create contact/conversation step
+   * because those are already created during thread init. Goes straight to
+   * message insert + AI enqueue.
+   *
+   * @param params - The webchat message params (conversationId, contactId already resolved)
+   * @param orgId - The organization ID
+   * @returns The created Message
+   */
+  async processInboundWebchat(params: {
+    conversationId: string;
+    contactId: string;
+    body: string;
+    orgId: string;
+    externalMessageId?: string;
+  }): Promise<Message> {
+    const { conversationId, contactId, body, orgId, externalMessageId } = params;
+
+    // Dedup check if externalMessageId provided
+    if (externalMessageId) {
+      const existing = await this.messageRepo.findByExternalId('webchat', externalMessageId);
+      if (existing) {
+        return existing;
+      }
+    }
+
+    // Insert message
+    const message = await this.messageRepo.create({
+      conversationId,
+      senderType: 'contact',
+      direction: 'inbound',
+      channel: 'webchat',
+      body,
+      provider: 'webchat',
+      externalMessageId: externalMessageId ?? `wc_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      deliveryStatus: 'delivered',
+    });
+
+    // Update conversation lastMessageAt
+    await this.conversationRepo.update(conversationId, {
+      lastMessageAt: new Date(),
+    });
+
+    // Enqueue AI processing job
+    await this.jobQueue.enqueue(
+      'process_ai_message',
+      { conversationId, messageId: message.id },
+      orgId,
+    );
+
+    // Record audit log
+    await this.auditLog.create({
+      organizationId: orgId,
+      actorType: 'system',
+      action: 'message_received',
+      resourceType: 'message',
+      resourceId: message.id,
+      metadata: { channel: 'webchat', contactId },
+    });
+
+    return message;
+  }
+
   // ─── Private ────────────────────────────────────────────────────────
 
   private async processInbound(params: {

@@ -29,6 +29,7 @@ export default function proxy(request: NextRequest) {
   if (
     pathname.startsWith('/_next') ||
     pathname.startsWith('/api') ||
+    pathname.startsWith('/functions') ||
     pathname.includes('.') // static files (favicon.ico, images, etc.)
   ) {
     return NextResponse.next();

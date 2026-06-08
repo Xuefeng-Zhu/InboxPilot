@@ -37,6 +37,7 @@ const channelOptions: { id: Channel | 'all'; label: string }[] = [
   { id: 'all', label: 'All' },
   { id: 'email', label: 'Email' },
   { id: 'sms', label: 'SMS' },
+  { id: 'webchat', label: 'Web' },
 ];
 
 // ---------------------------------------------------------------------------

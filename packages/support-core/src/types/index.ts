@@ -6,7 +6,7 @@
 
 // ─── Enums / Union Types ────────────────────────────────────────────
 
-export type Channel = 'sms' | 'email';
+export type Channel = 'sms' | 'email' | 'webchat';
 
 export type ConversationStatus = 'open' | 'pending' | 'resolved' | 'escalated';
 
@@ -497,4 +497,90 @@ export interface ConversationFilters {
   assignedTo?: string;
   limit?: number;
   offset?: number;
+}
+
+
+// ─── Webchat Types ──────────────────────────────────────────────────
+
+export interface WebchatWidget {
+  id: string;
+  organizationId: string;
+  name: string;
+  widgetToken: string;
+  hmacSecret: string;
+  allowedDomains: string[];
+  position: 'bottom-right' | 'bottom-left';
+  primaryColor: string | null;
+  greeting: string | null;
+  preChatEnabled: boolean;
+  aiModeOverride: AiMode | null;
+  isActive: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface WebchatThread {
+  id: string;
+  organizationId: string;
+  widgetId: string;
+  conversationId: string;
+  contactId: string;
+  visitorTokenJti: string;
+  firstSeenAt: Date;
+  lastSeenAt: Date;
+  identifiedAt: Date | null;
+  pageUrl: string | null;
+  referrer: string | null;
+  userAgent: string | null;
+  ipCountry: string | null;
+  ipCity: string | null;
+  metadata: Record<string, unknown>;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface CreateWebchatWidgetInput {
+  organizationId: string;
+  name: string;
+  widgetToken: string;
+  hmacSecret: string;
+  allowedDomains?: string[];
+  position?: 'bottom-right' | 'bottom-left';
+  primaryColor?: string | null;
+  greeting?: string | null;
+  preChatEnabled?: boolean;
+  aiModeOverride?: AiMode | null;
+}
+
+export interface UpdateWebchatWidgetInput {
+  name?: string;
+  allowedDomains?: string[];
+  position?: 'bottom-right' | 'bottom-left';
+  primaryColor?: string | null;
+  greeting?: string | null;
+  preChatEnabled?: boolean;
+  aiModeOverride?: AiMode | null;
+  isActive?: boolean;
+}
+
+export interface CreateWebchatThreadInput {
+  organizationId: string;
+  widgetId: string;
+  conversationId: string;
+  contactId: string;
+  visitorTokenJti: string;
+  pageUrl?: string | null;
+  referrer?: string | null;
+  userAgent?: string | null;
+  ipCountry?: string | null;
+  ipCity?: string | null;
+  metadata?: Record<string, unknown>;
+}
+
+export interface UpdateWebchatThreadInput {
+  lastSeenAt?: Date;
+  identifiedAt?: Date | null;
+  pageUrl?: string | null;
+  visitorTokenJti?: string;
+  metadata?: Record<string, unknown>;
 }

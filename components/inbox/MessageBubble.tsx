@@ -13,7 +13,7 @@ export interface MessageRow {
   sender_type: SenderType;
   sender_id: string | null;
   direction: 'inbound' | 'outbound';
-  channel: 'sms' | 'email';
+  channel: 'sms' | 'email' | 'webchat';
   body: string;
   subject: string | null;
   raw_payload: Record<string, unknown>;
@@ -53,7 +53,9 @@ function formatMessageTime(dateStr: string): string {
 }
 
 function formatChannelLabel(channel: string): string {
-  return channel === 'sms' ? 'SMS' : 'Email';
+  if (channel === 'sms') return 'SMS';
+  if (channel === 'webchat') return 'Web';
+  return 'Email';
 }
 
 // ---------------------------------------------------------------------------

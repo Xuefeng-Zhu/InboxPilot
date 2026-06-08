@@ -1,21 +1,44 @@
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useMemo } from 'react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { AppShell } from '@/components/layout';
 import AiSettingsPanel from './_components/AiSettingsPanel';
 import EmailSettingsPanel from './_components/EmailSettingsPanel';
 import SmsSettingsPanel from './_components/SmsSettingsPanel';
+import WebchatSettingsPanel from './_components/WebchatSettingsPanel';
+
+export const dynamic = 'force-dynamic';
 
 const tabs = [
   { id: 'ai', label: 'AI' },
   { id: 'email', label: 'Email' },
   { id: 'sms', label: 'SMS' },
+  { id: 'webchat', label: 'Web Chat' },
 ] as const;
 
 type TabId = (typeof tabs)[number]['id'];
+const DEFAULT_TAB: TabId = 'ai';
+const TAB_IDS = new Set<string>(tabs.map((t) => t.id));
 
 export default function SettingsPage() {
-  const [activeTab, setActiveTab] = useState<TabId>('ai');
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  const activeTab: TabId = useMemo(() => {
+    const raw = searchParams.get('tab');
+    return raw && TAB_IDS.has(raw) ? (raw as TabId) : DEFAULT_TAB;
+  }, [searchParams]);
+
+  const handleTabClick = useCallback(
+    (tab: TabId) => {
+      const params = new URLSearchParams(searchParams.toString());
+      params.set('tab', tab);
+      router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+    },
+    [router, pathname, searchParams],
+  );
 
   return (
     <AppShell>
@@ -38,7 +61,7 @@ export default function SettingsPage() {
                   aria-selected={activeTab === tab.id}
                   aria-controls={`panel-${tab.id}`}
                   id={`tab-${tab.id}`}
-                  onClick={() => setActiveTab(tab.id)}
+                  onClick={() => handleTabClick(tab.id)}
                   className={`whitespace-nowrap border-b-2 px-1 pb-3 text-body-md font-medium transition-colors ${
                     activeTab === tab.id
                       ? 'border-primary text-primary'
@@ -61,6 +84,7 @@ export default function SettingsPage() {
               {activeTab === 'ai' && <AiSettingsPanel />}
               {activeTab === 'email' && <EmailSettingsPanel />}
               {activeTab === 'sms' && <SmsSettingsPanel />}
+              {activeTab === 'webchat' && <WebchatSettingsPanel />}
             </div>
           </div>
         </div>

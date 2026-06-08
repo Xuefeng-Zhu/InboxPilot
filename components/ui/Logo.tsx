@@ -31,15 +31,15 @@ export function Logo({
     >
       {/* The "p" — circle */}
       <div
-        className={`absolute ${d.ringPos} ${d.ring} rounded-full border-indigo-500`}
+        className={`absolute ${d.ringPos} ${d.ring} rounded-full border-primary`}
       />
       {/* The "p" — vertical stem */}
       <div
-        className={`absolute ${d.stemPos} ${d.stem} rounded-full bg-indigo-500`}
+        className={`absolute ${d.stemPos} ${d.stem} rounded-full bg-primary`}
       />
       {/* The "i" — dot / tittle */}
       <div
-        className={`absolute ${d.dotPos} ${d.dot} rounded-full bg-indigo-300`}
+        className={`absolute ${d.dotPos} ${d.dot} rounded-full bg-primary-300`}
       />
     </div>
   );

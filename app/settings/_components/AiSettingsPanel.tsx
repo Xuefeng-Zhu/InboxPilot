@@ -399,7 +399,7 @@ export default function AiSettingsPanel() {
             max="100"
             value={contextWindowSize}
             onChange={(e) => setContextWindowSize(parseInt(e.target.value, 10) || 1)}
-            className="block w-32 rounded border border-gray-300 px-3 py-2 text-body-md focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 focus:ring-offset-1"
+            className="block w-32 rounded border border-surface-border px-3 py-2 text-body-md focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 focus:ring-offset-1"
             aria-label="Context window size"
           />
         </Card>
@@ -445,7 +445,7 @@ export default function AiSettingsPanel() {
               onChange={(e) => setKeywordInput(e.target.value)}
               onKeyDown={handleKeywordKeyDown}
               placeholder="Type a keyword and press Enter"
-              className="block flex-1 rounded border border-gray-300 px-3 py-2 text-body-md placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 focus:ring-offset-1"
+              className="block flex-1 rounded border border-surface-border px-3 py-2 text-body-md placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 focus:ring-offset-1"
             />
             <Button type="button" variant="secondary" size="md" onClick={addKeyword}>
               Add

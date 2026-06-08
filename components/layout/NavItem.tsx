@@ -16,10 +16,10 @@ export function NavItem({ href, icon, label, isActive }: NavItemProps) {
     <Link
       href={href}
       className={cn(
-        'flex items-center gap-3 px-4 py-2 text-body-md cursor-pointer transition-colors duration-150',
+        'flex items-center gap-3 px-4 py-2.5 text-body-md cursor-pointer transition-colors duration-150',
         isActive
-          ? 'bg-surface-container border-l-2 border-l-primary text-primary font-medium'
-          : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+          ? 'border-l-2 border-l-primary bg-surface-container text-primary font-medium'
+          : 'border-l-2 border-l-transparent text-gray-600 hover:bg-gray-50 hover:text-gray-900'
       )}
     >
       {icon}

@@ -13,7 +13,7 @@ export function Card({ children, header, elevated, className }: CardProps) {
     <div
       className={cn(
         'bg-white border border-surface-border rounded-lg p-section-padding',
-        elevated && 'shadow-[0px_4px_12px_rgba(0,0,0,0.05)]',
+        elevated && 'shadow-level-2',
         className
       )}
     >

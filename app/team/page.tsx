@@ -118,7 +118,7 @@ export default function TeamPage() {
         {/* Team Members List */}
         <div className="mt-6 space-y-element-gap">
           {members.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-gray-300 p-8 text-center">
+            <div className="rounded-lg border border-dashed border-surface-border p-8 text-center">
               <p className="text-body-md text-gray-500">No team members found.</p>
               <p className="mt-1 text-body-sm text-gray-400">
                 Invite team members to start collaborating.

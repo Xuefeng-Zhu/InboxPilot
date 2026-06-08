@@ -36,14 +36,24 @@ const senderLabels: Record<SenderType, string> = {
   system: 'System',
 };
 
+const senderInitials: Record<SenderType, string> = {
+  contact: '',
+  user: 'AG',
+  ai: 'AI',
+  system: 'SY',
+};
+
 function formatMessageTime(dateStr: string): string {
   const date = new Date(dateStr);
   return date.toLocaleString(undefined, {
-    month: 'short',
-    day: 'numeric',
     hour: 'numeric',
     minute: '2-digit',
+    hour12: true,
   });
+}
+
+function formatChannelLabel(channel: string): string {
+  return channel === 'sms' ? 'SMS' : 'Email';
 }
 
 // ---------------------------------------------------------------------------
@@ -55,50 +65,77 @@ interface MessageBubbleProps {
 }
 
 export function MessageBubble({ message }: MessageBubbleProps) {
-  const { sender_type, body, created_at } = message;
+  const { sender_type, body, created_at, channel } = message;
 
-  // System messages — centered, italic
+  // System messages — centered, subtle
   if (sender_type === 'system') {
     return (
-      <div className="flex justify-center px-4 py-2">
-        <div className="max-w-md text-center">
-          <p className="text-xs italic text-gray-400">{body}</p>
-          <time className="mt-0.5 block text-label-sm text-gray-500" dateTime={created_at}>
-            {formatMessageTime(created_at)}
-          </time>
+      <div className="flex justify-center py-2">
+        <div className="flex items-center gap-2 rounded-full bg-gray-100 px-3 py-1">
+          <p className="text-label-sm text-gray-500">{body}</p>
         </div>
       </div>
     );
   }
 
-  // Customer messages (contact): light gray background
-  // Agent/AI replies (user, ai): white background
   const isContact = sender_type === 'contact';
+  const isAi = sender_type === 'ai';
 
   return (
-    <div className="relative flex px-4 py-1.5">
-      {/* Timeline dot */}
-      <div className="absolute left-6 top-1/2 h-2 w-2 -translate-y-1/2 rounded-full border-2 border-gray-200 bg-white" />
+    <div className="flex gap-3">
+      {/* Avatar */}
+      <div className={`flex items-center justify-center w-8 h-8 rounded-full shrink-0 text-label-sm font-semibold ${
+        isContact
+          ? 'bg-gray-200 text-gray-600'
+          : isAi
+            ? 'bg-ai-50 text-ai'
+            : 'bg-primary-50 text-primary'
+      }`}>
+        {isContact ? (
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="7" cy="5" r="2.5" />
+            <path d="M3 13c0-2.5 1.8-4 4-4s4 1.5 4 4" />
+          </svg>
+        ) : (
+          senderInitials[sender_type]
+        )}
+      </div>
 
-      <div className="ml-6 w-full max-w-[85%] pl-4">
-        <div
-          className={`rounded-lg border p-3 ${
-            isContact
-              ? 'bg-gray-50 border-gray-200'
-              : 'bg-white border-surface-border'
-          }`}
-        >
-          <p className="text-label-sm text-gray-500 font-medium">
+      {/* Message card */}
+      <div className="flex-1 min-w-0">
+        {/* Sender info + time */}
+        <div className="flex items-center gap-2 mb-1">
+          <span className="text-body-sm font-medium text-gray-900">
             {senderLabels[sender_type]}
-          </p>
-          <p className="mt-1 whitespace-pre-wrap text-body-md text-gray-900">{body}</p>
-          <time
-            className="mt-1.5 block text-right text-label-sm text-gray-500"
-            dateTime={created_at}
-          >
+          </span>
+          <span className="text-label-sm text-gray-400">
+            via {formatChannelLabel(channel)}
+          </span>
+          <span className="ml-auto text-label-sm text-gray-400">
             {formatMessageTime(created_at)}
-          </time>
+          </span>
         </div>
+
+        {/* Message body */}
+        <div className={`rounded border p-3 ${
+          isContact
+            ? 'bg-white border-surface-border'
+            : isAi
+              ? 'bg-ai-50/50 border-ai-200'
+              : 'bg-white border-surface-border'
+        }`}>
+          <p className="whitespace-pre-wrap text-body-md text-gray-800">{body}</p>
+        </div>
+
+        {/* AI confidence indicator */}
+        {isAi && (
+          <div className="mt-1.5 flex items-center gap-1.5">
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className="text-ai">
+              <path d="M6 1l1.5 3 3.5.5-2.5 2.5.5 3.5L6 9l-3 1.5.5-3.5L1 4.5 4.5 4 6 1z" fill="currentColor" />
+            </svg>
+            <span className="text-label-sm text-ai font-medium">AI Generated</span>
+          </div>
+        )}
       </div>
     </div>
   );

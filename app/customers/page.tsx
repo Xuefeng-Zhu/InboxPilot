@@ -113,7 +113,7 @@ export default function CustomersPage() {
         {/* Customer List */}
         <div className="mt-6 space-y-element-gap">
           {customers.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-gray-300 p-8 text-center">
+            <div className="rounded-lg border border-dashed border-surface-border p-8 text-center">
               <p className="text-body-md text-gray-500">No customers yet.</p>
               <p className="mt-1 text-label-sm text-gray-400">
                 Customers will appear here when contacts are created through conversations.

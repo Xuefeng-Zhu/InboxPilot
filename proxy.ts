@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 /**
- * Auth middleware — redirects unauthenticated users to /login.
+ * Auth proxy — redirects unauthenticated users to /login.
  *
  * Protected routes: everything except /login, /register, and static assets.
  * Authentication is determined by the presence of the `insforge_access_token`
  * cookie or the token stored in localStorage (checked client-side).
  *
- * Because localStorage is not accessible in middleware (runs on the edge),
+ * Because localStorage is not accessible in the proxy (runs on Node.js),
  * we check for a cookie. The AuthProvider on the client side also handles
  * redirect for cases where the cookie is absent but localStorage has a token.
  *
@@ -17,7 +17,7 @@ import { NextRequest, NextResponse } from 'next/server';
 /** Routes that do not require authentication. */
 const PUBLIC_PATHS = ['/', '/login', '/register'];
 
-export function middleware(request: NextRequest) {
+export default function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // Allow public paths

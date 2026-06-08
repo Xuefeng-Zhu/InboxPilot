@@ -191,7 +191,7 @@ take after a return?") would handle highly ambiguous cases, but:
 2. **Fix #2** (prompt string, ~10 lines, same file)
 3. Re-run all 5 multi-round scenarios as regression
 4. (Optional) Add a property-based test for multi-turn context retrieval
-5. Update `docs/DEVELOPMENT.md` or `docs/TESTING.md` if the property test lands
+5. Update `docs/guides/local-development.md` or `docs/reference/testing.md` if the property test lands
 
 ## Verification Plan
 

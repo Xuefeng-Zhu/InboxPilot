@@ -7,38 +7,53 @@ alwaysApply: true
 # InboxPilot Project Guide
 
 ## Project Overview
-InboxPilot is a multi-tenant AI customer support platform. See `docs/` for comprehensive documentation.
+InboxPilot is a multi-tenant AI customer support platform. See `docs/README.md` for the full docs index.
 
 ## Key Documentation
-- `docs/ARCHITECTURE.md` — System architecture, data flows, design decisions
-- `docs/DATABASE.md` — Schema reference, RLS policies, migrations
-- `docs/API.md` — All 14 serverless function endpoints
-- `docs/DEVELOPMENT.md` — Local setup, adding features, conventions
-- `docs/TESTING.md` — Testing strategy, correctness properties
+Start at `docs/README.md`. The most-referenced docs are:
+
+- `docs/reference/architecture.md` — System architecture, data flows, design decisions
+- `docs/reference/database.md` — Schema reference (19 tables, 5 migrations), RLS policies, RPCs
+- `docs/reference/api.md` — 9 InsForge Deno functions + 7 Next.js API routes
+- `docs/reference/rbac.md` — Role × permission matrix
+- `docs/reference/jobs.md` — Job queue lifecycle, types, payloads, idempotency
+- `docs/reference/audit.md` — Every `audit_logs.action` string emitted
+- `docs/reference/frontend.md` — React Query patterns, `lib/queries.ts`, auth context
+- `docs/reference/webchat.md` — Web chat widget integration guide
+- `docs/reference/testing.md` — Property-based testing, 17 correctness properties
+- `docs/guides/getting-started.md` — 15-minute setup
+- `docs/guides/local-development.md` — Day-to-day workflow
+- `docs/guides/adding-a-channel.md` — Add a new SMS/email provider
+- `docs/guides/adding-an-escalation-rule.md` — Add a new escalation rule
+- `docs/guides/debugging.md` — Diagnose common issues
+- `docs/guides/deploying.md` — Frontend + functions + widget deploy
 
 ## Critical Rules for This Project
 1. **Portability**: Business logic in `packages/support-core/` MUST NOT import `@insforge/sdk` or any InsForge-specific code. All external dependencies are injected via interfaces.
 2. **SDK Usage**: Frontend code uses `@insforge/sdk` via `lib/insforge.ts`. Use `insforge.database.from()` chainable API, NOT raw fetch.
 3. **Auth**: Use `insforge.auth.signUp()`, `insforge.auth.signInWithPassword()`, `insforge.auth.getCurrentUser()`, `insforge.auth.signOut()`.
-4. **Database Queries**: Use `insforge.database.from('table').select().eq().order()` pattern. See `docs/DEVELOPMENT.md` for examples.
+4. **Database Queries**: Use `insforge.database.from('table').select().eq().order()` pattern. See `docs/reference/frontend.md` for examples.
 5. **Tailwind CSS**: Use v3.4 only. Do NOT upgrade to v4.
-6. **Testing**: All new business logic needs property-based tests (fast-check). See `docs/TESTING.md`.
-7. **Audit Logging**: All significant actions must be logged to `audit_logs` table.
+6. **Testing**: All new business logic needs property-based tests (fast-check). See `docs/reference/testing.md`.
+7. **Audit Logging**: All significant actions must be logged to `audit_logs` table. See `docs/reference/audit.md` for the action catalog.
 8. **RLS**: All tenant-scoped tables have Row Level Security. Never bypass RLS from client code.
 
 ## Project Structure Quick Reference
-- `app/` — Next.js pages (login, register, inbox, knowledge, analytics, settings)
-- `components/inbox/` — Inbox UI components
-- `lib/` — InsForge client, auth context, realtime hook
+- `app/` — Next.js pages (login, register, inbox, knowledge, analytics, settings, customers, team, wchat)
+- `app/api/functions/` — 7 JWT-authed Next.js Route Handlers
+- `components/` — React components (inbox, knowledge, customers, layout, ui, landing)
+- `lib/` — Frontend utilities (`insforge.ts`, `auth-context.tsx`, `queries.ts`, `use-realtime.ts`, `query-provider.tsx`, `insforge-admin.ts`, `onboarding.ts`)
+- `widget-src/` — Vite project for the embeddable web chat widget bundle
 - `packages/support-core/src/` — Portable business logic
-  - `adapters/` — SMS/email provider adapters
-  - `interfaces/` — TypeScript interfaces (DatabaseClient, JobQueue, etc.)
-  - `repositories/` — Data access layer (13 repositories)
-  - `services/` — Business logic (InboundMessage, OutboundMessage, AiAgent, etc.)
-  - `types/` — Shared type definitions
-  - `utils/` — Normalization, chunking utilities
-- `insforge/functions/` — 14 serverless function entrypoints
-- `insforge/migrations/` — SQL migration files
+  - `adapters/` — SMS/email provider adapters (Twilio, Telnyx, Postmark, mocks, stubs)
+  - `interfaces/` — TypeScript interfaces (DatabaseClient, JobQueue, SmsProviderAdapter, EmailProviderAdapter, AiClient, RealtimePublisher, ProviderRegistry, EscalationEngine, …)
+  - `repositories/` — Data access layer (16 repositories)
+  - `services/` — Business logic (InboundMessage, OutboundMessage, AiAgent, KnowledgeIngestion, WebchatThread, Organization, PostgresJobQueue, …)
+  - `types/` — Shared entity types, enums, input/output shapes
+  - `utils/` — Normalization, chunking
+- `insforge/functions/` — 9 Deno serverless function entrypoints
+- `insforge/migrations/` — 5 SQL migration files
+- `scripts/mock-sms.mjs` — Local helper to simulate SMS inbound/outbound against a real backend
 
 ---
 

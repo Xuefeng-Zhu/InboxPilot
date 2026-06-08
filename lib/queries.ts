@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { insforge } from './insforge';
+import { useAuth } from './auth-context';
 
 // ---------------------------------------------------------------------------
 // Query Keys
@@ -13,16 +14,28 @@ export const queryKeys = {
   contacts: (filters?: Record<string, unknown>) => ['contacts', filters] as const,
   contact: (id: string) => ['contact', id] as const,
   knowledgeDocs: () => ['knowledge-documents'] as const,
+  knowledgeDoc: (id: string) => ['knowledge-document', id] as const,
   teamMembers: () => ['team-members'] as const,
   aiDecision: (conversationId: string) => ['ai-decision', conversationId] as const,
   orgMembership: (userId: string) => ['org-membership', userId] as const,
 };
 
 // ---------------------------------------------------------------------------
+// Auth-aware helper
+// ---------------------------------------------------------------------------
+
+/** Returns true when auth has finished loading and a user is present. */
+function useAuthReady() {
+  const { user, loading } = useAuth();
+  return !loading && !!user;
+}
+
+// ---------------------------------------------------------------------------
 // Hooks
 // ---------------------------------------------------------------------------
 
 export function useOrgMembership(userId: string | undefined) {
+  const authReady = useAuthReady();
   return useQuery({
     queryKey: queryKeys.orgMembership(userId ?? ''),
     queryFn: async () => {
@@ -37,7 +50,7 @@ export function useOrgMembership(userId: string | undefined) {
       if (arr.length === 0) return null;
       return (arr[0] as { organization_id: string }).organization_id;
     },
-    enabled: !!userId,
+    enabled: authReady && !!userId,
   });
 }
 
@@ -45,6 +58,7 @@ export function useConversations(
   orgId: string | undefined,
   filters?: { status?: string; channel?: string; contactId?: string; search?: string },
 ) {
+  const authReady = useAuthReady();
   return useQuery({
     queryKey: queryKeys.conversations(orgId ?? '', filters),
     queryFn: async () => {
@@ -77,11 +91,12 @@ export function useConversations(
       if (error) throw new Error(error.message);
       return Array.isArray(data) ? data : data ? [data] : [];
     },
-    enabled: !!orgId,
+    enabled: authReady && !!orgId,
   });
 }
 
 export function useConversation(conversationId: string | undefined) {
+  const authReady = useAuthReady();
   return useQuery({
     queryKey: queryKeys.conversation(conversationId ?? ''),
     queryFn: async () => {
@@ -94,11 +109,12 @@ export function useConversation(conversationId: string | undefined) {
       if (error) throw new Error(error.message);
       return data;
     },
-    enabled: !!conversationId,
+    enabled: authReady && !!conversationId,
   });
 }
 
 export function useMessages(conversationId: string | undefined) {
+  const authReady = useAuthReady();
   return useQuery({
     queryKey: queryKeys.messages(conversationId ?? ''),
     queryFn: async () => {
@@ -111,11 +127,12 @@ export function useMessages(conversationId: string | undefined) {
       if (error) throw new Error(error.message);
       return Array.isArray(data) ? data : data ? [data] : [];
     },
-    enabled: !!conversationId,
+    enabled: authReady && !!conversationId,
   });
 }
 
 export function useContacts(filters?: { search?: string; channel?: string }) {
+  const authReady = useAuthReady();
   return useQuery({
     queryKey: queryKeys.contacts(filters),
     queryFn: async () => {
@@ -132,10 +149,12 @@ export function useContacts(filters?: { search?: string; channel?: string }) {
       if (error) throw new Error(error.message);
       return Array.isArray(data) ? data : [];
     },
+    enabled: authReady,
   });
 }
 
 export function useContact(contactId: string | null) {
+  const authReady = useAuthReady();
   return useQuery({
     queryKey: queryKeys.contact(contactId ?? ''),
     queryFn: async () => {
@@ -149,11 +168,12 @@ export function useContact(contactId: string | null) {
       const rows = Array.isArray(data) ? data : data ? [data] : [];
       return (rows[0] as { id: string; name: string | null; email: string | null; phone: string | null }) ?? null;
     },
-    enabled: !!contactId,
+    enabled: authReady && !!contactId,
   });
 }
 
 export function useAiDecision(conversationId: string | undefined) {
+  const authReady = useAuthReady();
   return useQuery({
     queryKey: queryKeys.aiDecision(conversationId ?? ''),
     queryFn: async () => {
@@ -168,26 +188,30 @@ export function useAiDecision(conversationId: string | undefined) {
       const rows = Array.isArray(data) ? data : data ? [data] : [];
       return rows[0] ?? null;
     },
-    enabled: !!conversationId,
+    enabled: authReady && !!conversationId,
   });
 }
 
 export function useKnowledgeDocs() {
+  const authReady = useAuthReady();
   return useQuery({
     queryKey: queryKeys.knowledgeDocs(),
     queryFn: async () => {
       const { data, error } = await insforge.database
         .from('knowledge_documents')
-        .select()
+        .select('*')
         .order('created_at', { ascending: false });
 
       if (error) throw new Error(error.message);
       return Array.isArray(data) ? data : [];
     },
+    enabled: authReady,
+    staleTime: 0,
   });
 }
 
 export function useTeamMembers() {
+  const authReady = useAuthReady();
   return useQuery({
     queryKey: queryKeys.teamMembers(),
     queryFn: async () => {
@@ -199,5 +223,24 @@ export function useTeamMembers() {
       if (error) throw new Error(error.message);
       return Array.isArray(data) ? data : [];
     },
+    enabled: authReady,
+  });
+}
+
+export function useKnowledgeDoc(docId: string | undefined) {
+  const authReady = useAuthReady();
+  return useQuery({
+    queryKey: queryKeys.knowledgeDoc(docId ?? ''),
+    queryFn: async () => {
+      const { data, error } = await insforge.database
+        .from('knowledge_documents')
+        .select('*')
+        .eq('id', docId!)
+        .single();
+
+      if (error) throw new Error(error.message);
+      return data;
+    },
+    enabled: authReady && !!docId,
   });
 }

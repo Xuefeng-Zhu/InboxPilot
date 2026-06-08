@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { StatusBadge } from '@/components/ui';
 import { type KnowledgeDocument, mapStatusToBadge, formatDate } from './types';
 
@@ -45,9 +46,12 @@ export function KnowledgeTable({ documents, totalCount, onDelete }: KnowledgeTab
                 className="grid grid-cols-[2fr_1fr_1fr_1.2fr_7rem] gap-4 px-4 py-3 border-b border-surface-border/50 hover:bg-gray-50 transition-colors items-center group"
               >
                 <div className="min-w-0">
-                  <span className="text-body-md font-medium text-gray-900 truncate block">
+                  <Link
+                    href={`/knowledge/${doc.id}`}
+                    className="text-body-md font-medium text-gray-900 truncate block hover:text-primary transition-colors"
+                  >
                     {doc.title}
-                  </span>
+                  </Link>
                   {doc.file_name && (
                     <span className="inline-flex items-center gap-1 mt-0.5 text-label-sm text-gray-500">
                       <svg

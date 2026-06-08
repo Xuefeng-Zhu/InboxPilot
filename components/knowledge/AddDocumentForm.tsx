@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui';
 import { SOURCE_TYPES, ACCEPTED_FILE_TYPES, MAX_FILE_SIZE_MB } from './types';
+import { MarkdownEditor } from './MarkdownEditor';
 
 type InputMode = 'text' | 'file';
 
@@ -158,17 +159,10 @@ export function AddDocumentForm({ onSubmit, onClose, adding }: AddDocumentFormPr
           {/* Text mode */}
           {mode === 'text' && (
             <div>
-              <label htmlFor="doc-body" className="block text-label-md text-gray-700">
+              <label className="block text-label-md text-gray-700 mb-1">
                 Content
               </label>
-              <textarea
-                id="doc-body"
-                rows={6}
-                value={body}
-                onChange={(e) => setBody(e.target.value)}
-                placeholder="Enter the document content…"
-                className="mt-1 block w-full rounded border border-surface-border px-3 py-2 text-body-md placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-              />
+              <MarkdownEditor value={body} onChange={setBody} rows={8} />
             </div>
           )}
 

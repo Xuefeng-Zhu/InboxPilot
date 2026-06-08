@@ -22,6 +22,7 @@ import { AiDecisionRepository } from '../../../packages/support-core/src/reposit
 import { AuditLogRepository } from '../../../packages/support-core/src/repositories/audit-log-repository.js';
 import { AiAgentService } from '../../../packages/support-core/src/services/ai-agent-service.js';
 import { KnowledgeIngestionService } from '../../../packages/support-core/src/services/knowledge-ingestion-service.js';
+import { createFileContentFetcher } from '../../../packages/support-core/src/utils/file-content-fetcher.js';
 import { createDefaultEscalationEngine } from '../../../packages/support-core/src/services/escalation-rules.js';
 import type { AiClient } from '../../../packages/support-core/src/interfaces/ai-client.js';
 import type { Job, JobType } from '../../../packages/support-core/src/types/index.js';
@@ -145,9 +146,10 @@ function buildJobHandlers(
 
       const knowledgeRepo = new KnowledgeRepository(db);
       const auditLogRepo = new AuditLogRepository(db);
+      const fileFetcher = createFileContentFetcher();
 
       const ingestionService = new KnowledgeIngestionService(
-        knowledgeRepo, aiClient, auditLogRepo,
+        knowledgeRepo, aiClient, auditLogRepo, fileFetcher,
       );
 
       await ingestionService.processDocument(documentId);

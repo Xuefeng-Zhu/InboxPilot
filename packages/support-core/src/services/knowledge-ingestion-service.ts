@@ -4,12 +4,13 @@
  * Flow:
  * 1. Load the document by ID
  * 2. Set status to "processing"
- * 3. Split body into chunks (paragraph-based, ~500 chars max)
- * 4. Generate embedding for each chunk via AiClient.createEmbedding
- * 5. Store chunks with embeddings
- * 6. Set status to "ready" on success
- * 7. On error: clean up partial chunks, set status to "failed" with error message
- * 8. Record audit log entry
+ * 3. Gather text content: body text + file content (if file_url is present)
+ * 4. Split combined content into chunks (paragraph-based, ~500 chars max)
+ * 5. Generate embedding for each chunk via AiClient.createEmbedding
+ * 6. Store chunks with embeddings
+ * 7. Set status to "ready" on success
+ * 8. On error: clean up partial chunks, set status to "failed" with error message
+ * 9. Record audit log entry
  */
 
 import type { KnowledgeRepository } from '../repositories/knowledge-repository.js';
@@ -18,11 +19,25 @@ import type { AuditLogRepository } from '../repositories/audit-log-repository.js
 import type { CreateChunkInput } from '../types/index.js';
 import { splitIntoChunks } from '../utils/chunking.js';
 
+/**
+ * Interface for fetching file content from a URL.
+ * Injected to keep the service portable (no direct HTTP dependency).
+ */
+export interface FileContentFetcher {
+  /**
+   * Fetch the text content of a file at the given URL.
+   * Implementations should handle PDF, TXT, MD, CSV, and DOCX extraction.
+   * Returns the extracted plain text.
+   */
+  fetchTextContent(url: string, fileName: string): Promise<string>;
+}
+
 export class KnowledgeIngestionService {
   constructor(
     private knowledgeRepo: KnowledgeRepository,
     private aiClient: AiClient,
     private auditLog: AuditLogRepository,
+    private fileFetcher?: FileContentFetcher,
   ) {}
 
   /**
@@ -41,8 +56,35 @@ export class KnowledgeIngestionService {
       // 2. Set status to "processing"
       await this.knowledgeRepo.updateDocument(documentId, { status: 'processing' });
 
-      // 3. Split body into chunks
-      const textChunks = splitIntoChunks(document.body);
+      // 3. Gather text content: body + file content
+      let fullText = document.body ?? '';
+
+      if (document.fileUrl && document.fileName && this.fileFetcher) {
+        try {
+          const fileContent = await this.fileFetcher.fetchTextContent(
+            document.fileUrl,
+            document.fileName,
+          );
+          if (fileContent.trim()) {
+            // Append file content after body, separated by double newline
+            fullText = fullText.trim()
+              ? `${fullText.trim()}\n\n${fileContent.trim()}`
+              : fileContent.trim();
+          }
+        } catch (fileErr) {
+          // If file extraction fails, proceed with body text only.
+          // If there's no body text either, re-throw to mark as failed.
+          if (!fullText.trim()) {
+            throw new Error(
+              `File extraction failed and no body text available: ${fileErr instanceof Error ? fileErr.message : 'Unknown error'}`,
+            );
+          }
+          // Otherwise continue with body text only — partial processing is better than none
+        }
+      }
+
+      // 4. Split into chunks
+      const textChunks = splitIntoChunks(fullText);
 
       if (textChunks.length === 0) {
         throw new Error('Document body produced no chunks after splitting');

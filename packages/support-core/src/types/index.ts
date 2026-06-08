@@ -215,6 +215,8 @@ export interface KnowledgeDocument {
   body: string;
   status: KnowledgeDocumentStatus;
   errorMessage: string | null;
+  fileUrl: string | null;
+  fileName: string | null;
   createdAt: Date;
   updatedAt: Date;
 }

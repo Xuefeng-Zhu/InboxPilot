@@ -23,6 +23,8 @@ interface DocumentRow {
   body: string;
   status: KnowledgeDocumentStatus;
   error_message: string | null;
+  file_url: string | null;
+  file_name: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -57,6 +59,8 @@ function toDocument(row: DocumentRow): KnowledgeDocument {
     body: row.body,
     status: row.status,
     errorMessage: row.error_message,
+    fileUrl: row.file_url,
+    fileName: row.file_name,
     createdAt: new Date(row.created_at),
     updatedAt: new Date(row.updated_at),
   };

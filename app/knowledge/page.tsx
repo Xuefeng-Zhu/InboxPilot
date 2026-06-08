@@ -1,8 +1,9 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth-context';
-import { useRealtime } from '@/lib/use-realtime';
+import { useKnowledgeDocs, queryKeys } from '@/lib/queries';
 import { insforge } from '@/lib/insforge';
 import { AppShell } from '@/components/layout';
 import { Button, Card, StatusBadge } from '@/components/ui';
@@ -58,9 +59,9 @@ function formatDate(iso: string): string {
 
 export default function KnowledgePage() {
   const { user, loading: authLoading } = useAuth();
+  const queryClient = useQueryClient();
 
-  const [documents, setDocuments] = useState<KnowledgeDocument[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data: documents = [], isLoading: loading, error: queryError } = useKnowledgeDocs();
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
@@ -74,41 +75,7 @@ export default function KnowledgePage() {
   // Delete confirmation
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  // Fetch documents
-  const fetchDocuments = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const { data, error: fetchError } = await insforge.database
-        .from('knowledge_documents')
-        .select()
-        .order('created_at', { ascending: false });
-
-      if (fetchError) {
-        setError(fetchError.message);
-        return;
-      }
-      setDocuments(Array.isArray(data) ? (data as KnowledgeDocument[]) : []);
-    } catch {
-      setError('Failed to load documents');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!authLoading && user) {
-      fetchDocuments();
-    } else if (!authLoading && !user) {
-      setLoading(false);
-    }
-  }, [authLoading, user, fetchDocuments]);
-
-  // Poll for knowledge document status updates every 5 seconds
-  useRealtime({
-    onKnowledgeDocumentUpdated: fetchDocuments,
-    enabled: !authLoading && !!user,
-  });
+  const refetchDocs = () => queryClient.invalidateQueries({ queryKey: queryKeys.knowledgeDocs() });
 
   // Add document
   const handleAddDocument = async () => {
@@ -155,7 +122,7 @@ export default function KnowledgePage() {
       setNewTitle('');
       setNewSourceType('faq');
       setNewBody('');
-      await fetchDocuments();
+      refetchDocs();
     } catch {
       setError('Failed to add document');
     } finally {
@@ -203,7 +170,7 @@ export default function KnowledgePage() {
       setSuccess('Document deleted');
       setTimeout(() => setSuccess(null), 3000);
       setDeletingId(null);
-      await fetchDocuments();
+      refetchDocs();
     } catch {
       setError('Failed to delete document');
     }
@@ -253,9 +220,9 @@ export default function KnowledgePage() {
         </div>
 
         {/* Status messages */}
-        {error && (
+        {(error || queryError) && (
           <div className="mt-4 rounded-md bg-red-50 p-3" role="alert">
-            <p className="text-body-md text-red-700">{error}</p>
+            <p className="text-body-md text-red-700">{error || queryError?.message}</p>
           </div>
         )}
         {success && (

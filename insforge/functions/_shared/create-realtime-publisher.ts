@@ -8,7 +8,7 @@
  * This avoids needing a WebSocket connection from within a serverless function.
  */
 
-import type { RealtimePublisher } from '../../../packages/support-core/src/interfaces/realtime-publisher.js';
+import type { RealtimePublisher } from '../../../packages/support-core/src/interfaces/realtime-publisher.ts';
 
 /**
  * Create a RealtimePublisher that broadcasts events via the InsForge REST API.

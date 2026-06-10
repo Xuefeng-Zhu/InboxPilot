@@ -12,7 +12,7 @@ const nextConfig = {
     return [
       {
         source: '/functions/v1/:path*',
-        destination: `${INSFORGE_FUNCTIONS_URL}/functions/v1/:path*`,
+        destination: `${INSFORGE_FUNCTIONS_URL}/:path*`,
       },
     ];
   },

@@ -13,7 +13,7 @@ import type {
   QueryBuilder,
   QueryResult,
   QueryError,
-} from '../../../packages/support-core/src/interfaces/database-client.js';
+} from '../../../packages/support-core/src/interfaces/database-client.ts';
 
 interface PostgRestQueryState {
   table: string;

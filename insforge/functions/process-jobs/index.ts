@@ -20,6 +20,8 @@ import { KnowledgeRepository } from '../../../packages/support-core/src/reposito
 import { AiSettingsRepository } from '../../../packages/support-core/src/repositories/ai-settings-repository.ts';
 import { AiDecisionRepository } from '../../../packages/support-core/src/repositories/ai-decision-repository.ts';
 import { AuditLogRepository } from '../../../packages/support-core/src/repositories/audit-log-repository.ts';
+import { ContactRepository } from '../../../packages/support-core/src/repositories/contact-repository.ts';
+import { WebchatThreadRepository } from '../../../packages/support-core/src/repositories/webchat-thread-repository.ts';
 import { AiAgentService } from '../../../packages/support-core/src/services/ai-agent-service.ts';
 import { KnowledgeIngestionService } from '../../../packages/support-core/src/services/knowledge-ingestion-service.ts';
 import { createFileContentFetcher } from '../../../packages/support-core/src/utils/file-content-fetcher.ts';
@@ -160,11 +162,96 @@ function buildJobHandlers(
       });
     },
 
-    async send_outbound_message(_job: Job) {
-      // Outbound messages are sent synchronously by OutboundMessageService
-      // when called from send-reply or approve-ai-draft. This job type is
-      // reserved for async sends triggered by auto-reply mode.
-      // TODO: Wire OutboundMessageService for async auto-reply sends.
+    async send_outbound_message(job: Job) {
+      // AI-generated auto-reply send. Triggered by the AI agent in auto_reply
+      // mode (see AiAgentService). Job payload: conversation_id, body,
+      // sender_type: 'ai', ai_decision_id.
+      const conversationId = (job.payload.conversation_id ?? job.payload.conversationId) as string;
+      const body = (job.payload.body as string) ?? '';
+      const aiDecisionId = (job.payload.ai_decision_id as string) ?? null;
+      if (!conversationId || !body) {
+        throw new Error('send_outbound_message: missing conversation_id or body');
+      }
+
+      const conversationRepo = new ConversationRepository(db);
+      const messageRepo = new MessageRepository(db);
+      const contactRepo = new ContactRepository(db);
+      const webchatThreadRepo = new WebchatThreadRepository(db);
+      const auditLogRepo = new AuditLogRepository(db);
+      const aiDecisionRepo = new AiDecisionRepository(db);
+
+      const conversation = await conversationRepo.findById(conversationId);
+      if (!conversation) {
+        throw new Error(`Conversation not found: ${conversationId}`);
+      }
+      const contact = await contactRepo.findById(conversation.contactId);
+      if (!contact) {
+        throw new Error(`Contact not found: ${conversation.contactId}`);
+      }
+
+      const externalMessageId = `ai_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      const message = await messageRepo.create({
+        conversationId: conversation.id,
+        senderType: 'ai',
+        senderId: null,
+        direction: 'outbound',
+        channel: conversation.channel,
+        body,
+        provider: conversation.channel === 'webchat' ? 'webchat' : null,
+        providerAccountId: null,
+        externalMessageId,
+        deliveryStatus: 'sent',
+      } as unknown as Parameters<typeof messageRepo.create>[0]);
+
+      await conversationRepo.update(conversation.id, { lastMessageAt: new Date() });
+
+      // Webchat: publish to the visitor's widget channel so the iframe
+      // receives the AI reply in real time. The iframe subscribes to
+      // widget:{widgetId}:{jti}.
+      if (conversation.channel === 'webchat') {
+        const thread = await webchatThreadRepo.findByConversationId(conversation.id);
+        if (thread) {
+          await realtime.publish(
+            `widget:${thread.widgetId}:${thread.visitorTokenJti}`,
+            'new_message',
+            {
+              id: message.id,
+              body: message.body,
+              sender_type: 'ai',
+              conversation_id: conversation.id,
+            },
+          );
+        }
+      }
+
+      // Also notify the agent inbox via the org channel.
+      await realtime.publish(`org:${conversation.organizationId}`, 'new_message', {
+        message,
+        conversationId: conversation.id,
+      });
+
+      // Mark the AI decision as auto-sent (best-effort).
+      if (aiDecisionId) {
+        try {
+          await aiDecisionRepo.update(aiDecisionId, {
+            metadata: { autoSent: true, sentAt: new Date().toISOString() },
+          });
+        } catch { /* non-critical */ }
+      }
+
+      await auditLogRepo.create({
+        organizationId: conversation.organizationId,
+        actorType: 'ai',
+        actorId: null,
+        action: 'message_sent',
+        resourceType: 'message',
+        resourceId: message.id,
+        metadata: {
+          conversationId: conversation.id,
+          channel: conversation.channel,
+          trigger: 'auto_reply',
+        },
+      } as unknown as Parameters<typeof auditLogRepo.create>[0]);
     },
 
     async process_delivery_status(_job: Job) {

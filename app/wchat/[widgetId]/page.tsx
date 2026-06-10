@@ -26,7 +26,7 @@ interface ChatMessage {
 // ---------------------------------------------------------------------------
 
 function useRealtimeSubscription(
-  baseUrl: string,
+  wsBaseUrl: string,
   visitorToken: string,
   onMessage: (msg: ChatMessage) => void,
 ) {
@@ -34,7 +34,7 @@ function useRealtimeSubscription(
   const reconnectTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const connect = useCallback(() => {
-    if (!baseUrl || !visitorToken) return;
+    if (!wsBaseUrl || !visitorToken) return;
 
     // Extract jti from token for channel subscription
     let jti = '';
@@ -50,7 +50,7 @@ function useRealtimeSubscription(
 
     if (!jti || !widgetId) return;
 
-    const wsUrl = baseUrl.replace(/^http/, 'ws') + '/realtime/v1/websocket';
+    const wsUrl = wsBaseUrl.replace(/^http/, 'ws') + '/realtime/v1/websocket';
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
 
@@ -89,7 +89,7 @@ function useRealtimeSubscription(
     ws.onerror = () => {
       ws.close();
     };
-  }, [baseUrl, visitorToken, onMessage]);
+  }, [wsBaseUrl, visitorToken, onMessage]);
 
   useEffect(() => {
     connect();
@@ -118,14 +118,14 @@ function PreChatForm({ color, onSubmit }: {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="prechat-form">
-      <p className="prechat-title">Before we start, tell us about yourself:</p>
+    <form onSubmit={handleSubmit} className="wchat-prechat-form">
+      <p className="wchat-prechat-title">Before we start, tell us about yourself:</p>
       <input
         type="text"
         value={name}
         onChange={(e) => setName(e.target.value)}
         placeholder="Your name"
-        className="prechat-input"
+        className="wchat-prechat-input"
         aria-label="Your name"
       />
       <input
@@ -134,10 +134,10 @@ function PreChatForm({ color, onSubmit }: {
         onChange={(e) => setEmail(e.target.value)}
         placeholder="Your email *"
         required
-        className="prechat-input"
+        className="wchat-prechat-input"
         aria-label="Your email"
       />
-      <button type="submit" className="prechat-btn" style={{ background: color }}>
+      <button type="submit" className="wchat-prechat-btn" style={{ background: color }}>
         Start Chat
       </button>
     </form>
@@ -165,7 +165,7 @@ export default function WidgetChatPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messageIdsRef = useRef(new Set<string>());
 
-  const baseUrl = process.env.NEXT_PUBLIC_INSFORGE_URL ?? '';
+  const wsBaseUrl = process.env.NEXT_PUBLIC_INSFORGE_URL ?? '';
 
   // Deduplicated message handler for realtime
   const handleRealtimeMessage = useCallback((msg: ChatMessage) => {
@@ -175,7 +175,7 @@ export default function WidgetChatPage() {
   }, []);
 
   // Subscribe to realtime WebSocket
-  useRealtimeSubscription(baseUrl, visitorToken, handleRealtimeMessage);
+  useRealtimeSubscription(wsBaseUrl, visitorToken, handleRealtimeMessage);
 
   // Fetch session info on mount
   useEffect(() => {
@@ -183,7 +183,7 @@ export default function WidgetChatPage() {
 
     async function loadSession() {
       try {
-        const res = await fetch(`${baseUrl}/functions/v1/webchat-session-info`, {
+        const res = await fetch(`/functions/v1/webchat-session-info`, {
           method: 'GET',
           headers: { Authorization: `Bearer ${visitorToken}` },
           credentials: 'omit',
@@ -216,7 +216,7 @@ export default function WidgetChatPage() {
     }
 
     loadSession();
-  }, [visitorToken, baseUrl, searchParams]);
+  }, [visitorToken, wsBaseUrl, searchParams]);
 
   // Read color from URL
   useEffect(() => {
@@ -232,7 +232,7 @@ export default function WidgetChatPage() {
   // Pre-chat submit — identify the visitor
   const handlePreChatSubmit = async (data: { name: string; email: string }) => {
     try {
-      const res = await fetch(`${baseUrl}/functions/v1/webchat-identify`, {
+      const res = await fetch(`/functions/v1/webchat-identify`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -278,7 +278,7 @@ export default function WidgetChatPage() {
       let pageUrl: string | undefined;
       try { pageUrl = window.parent?.location?.href; } catch { /* cross-origin */ }
 
-      const res = await fetch(`${baseUrl}/functions/v1/webchat-inbound`, {
+      const res = await fetch(`/functions/v1/webchat-inbound`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -309,56 +309,51 @@ export default function WidgetChatPage() {
   };
 
   return (
-    <html lang="en">
-      <head>
-        <meta charSet="utf-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <title>Chat</title>
-        <style>{`
-          * { margin: 0; padding: 0; box-sizing: border-box; }
-          body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; height: 100vh; display: flex; flex-direction: column; background: #fff; }
-          .header { padding: 12px 16px; border-bottom: 1px solid #e5e7eb; display: flex; align-items: center; gap: 8px; }
-          .header-dot { width: 8px; height: 8px; border-radius: 50%; }
-          .header-title { font-size: 14px; font-weight: 600; color: #111827; }
-          .messages { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
-          .msg { max-width: 80%; padding: 8px 12px; border-radius: 12px; font-size: 14px; line-height: 1.4; word-wrap: break-word; }
-          .msg-contact { align-self: flex-end; background: var(--color); color: white; border-bottom-right-radius: 4px; }
-          .msg-other { align-self: flex-start; background: #f3f4f6; color: #374151; border-bottom-left-radius: 4px; }
-          .msg-system { align-self: center; background: transparent; color: #9ca3af; font-size: 12px; font-style: italic; }
-          .composer { padding: 12px 16px; border-top: 1px solid #e5e7eb; display: flex; gap: 8px; }
-          .composer input { flex: 1; border: 1px solid #e5e7eb; border-radius: 20px; padding: 8px 16px; font-size: 14px; outline: none; }
-          .composer input:focus { border-color: var(--color); box-shadow: 0 0 0 2px color-mix(in srgb, var(--color) 20%, transparent); }
-          .composer button { background: var(--color); color: white; border: none; border-radius: 50%; width: 36px; height: 36px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
-          .composer button:disabled { opacity: 0.5; cursor: not-allowed; }
-          .error { padding: 8px 16px; background: #fef2f2; color: #b91c1c; font-size: 12px; text-align: center; }
-          .prechat-form { display: flex; flex-direction: column; gap: 12px; padding: 24px 16px; flex: 1; justify-content: center; }
-          .prechat-title { font-size: 14px; font-weight: 500; color: #374151; text-align: center; margin-bottom: 4px; }
-          .prechat-input { border: 1px solid #e5e7eb; border-radius: 8px; padding: 10px 14px; font-size: 14px; outline: none; }
-          .prechat-input:focus { border-color: var(--color); box-shadow: 0 0 0 2px color-mix(in srgb, var(--color) 20%, transparent); }
-          .prechat-btn { border: none; border-radius: 8px; padding: 10px 16px; font-size: 14px; font-weight: 500; color: white; cursor: pointer; }
-          .prechat-btn:hover { opacity: 0.9; }
-        `}</style>
-      </head>
-      <body style={{ '--color': color } as React.CSSProperties}>
-        <div className="header">
-          <span className="header-dot" style={{ backgroundColor: color }} />
-          <span className="header-title">Chat with us</span>
+    <>
+      <style>{`
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        .wchat-root { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; height: 100vh; display: flex; flex-direction: column; background: #fff; }
+        .wchat-header { padding: 12px 16px; border-bottom: 1px solid #e5e7eb; display: flex; align-items: center; gap: 8px; }
+        .wchat-header-dot { width: 8px; height: 8px; border-radius: 50%; }
+        .wchat-header-title { font-size: 14px; font-weight: 600; color: #111827; }
+        .wchat-messages { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+        .wchat-msg { max-width: 80%; padding: 8px 12px; border-radius: 12px; font-size: 14px; line-height: 1.4; word-wrap: break-word; }
+        .wchat-msg-contact { align-self: flex-end; background: var(--wchat-color); color: white; border-bottom-right-radius: 4px; }
+        .wchat-msg-other { align-self: flex-start; background: #f3f4f6; color: #374151; border-bottom-left-radius: 4px; }
+        .wchat-msg-system { align-self: center; background: transparent; color: #9ca3af; font-size: 12px; font-style: italic; }
+        .wchat-composer { padding: 12px 16px; border-top: 1px solid #e5e7eb; display: flex; gap: 8px; }
+        .wchat-composer input { flex: 1; border: 1px solid #e5e7eb; border-radius: 20px; padding: 8px 16px; font-size: 14px; outline: none; }
+        .wchat-composer input:focus { border-color: var(--wchat-color); box-shadow: 0 0 0 2px color-mix(in srgb, var(--wchat-color) 20%, transparent); }
+        .wchat-composer button { background: var(--wchat-color); color: white; border: none; border-radius: 50%; width: 36px; height: 36px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+        .wchat-composer button:disabled { opacity: 0.5; cursor: not-allowed; }
+        .wchat-error { padding: 8px 16px; background: #fef2f2; color: #b91c1c; font-size: 12px; text-align: center; }
+        .wchat-prechat-form { display: flex; flex-direction: column; gap: 12px; padding: 24px 16px; flex: 1; justify-content: center; }
+        .wchat-prechat-title { font-size: 14px; font-weight: 500; color: #374151; text-align: center; margin-bottom: 4px; }
+        .wchat-prechat-input { border: 1px solid #e5e7eb; border-radius: 8px; padding: 10px 14px; font-size: 14px; outline: none; }
+        .wchat-prechat-input:focus { border-color: var(--wchat-color); box-shadow: 0 0 0 2px color-mix(in srgb, var(--wchat-color) 20%, transparent); }
+        .wchat-prechat-btn { border: none; border-radius: 8px; padding: 10px 16px; font-size: 14px; font-weight: 500; color: white; cursor: pointer; }
+        .wchat-prechat-btn:hover { opacity: 0.9; }
+      `}</style>
+      <div className="wchat-root" style={{ '--wchat-color': color } as React.CSSProperties}>
+        <div className="wchat-header">
+          <span className="wchat-header-dot" style={{ backgroundColor: color }} />
+          <span className="wchat-header-title">Chat with us</span>
         </div>
 
         {showPreChat ? (
           <PreChatForm color={color} onSubmit={handlePreChatSubmit} />
         ) : (
           <>
-            <div className="messages">
+            <div className="wchat-messages">
               {messages.map((msg) => (
                 <div
                   key={msg.id}
-                  className={`msg ${
+                  className={`wchat-msg ${
                     msg.sender_type === 'contact'
-                      ? 'msg-contact'
+                      ? 'wchat-msg-contact'
                       : msg.sender_type === 'system'
-                        ? 'msg-system'
-                        : 'msg-other'
+                        ? 'wchat-msg-system'
+                        : 'wchat-msg-other'
                   }`}
                 >
                   {msg.body}
@@ -367,9 +362,9 @@ export default function WidgetChatPage() {
               <div ref={messagesEndRef} />
             </div>
 
-            {error && <div className="error">{error}</div>}
+            {error && <div className="wchat-error">{error}</div>}
 
-            <div className="composer">
+            <div className="wchat-composer">
               <input
                 type="text"
                 value={input}
@@ -387,7 +382,7 @@ export default function WidgetChatPage() {
             </div>
           </>
         )}
-      </body>
-    </html>
+      </div>
+    </>
   );
 }

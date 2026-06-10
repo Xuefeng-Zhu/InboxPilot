@@ -74,6 +74,29 @@ export class AiDecisionRepository {
     return toAiDecision(data as AiDecisionRow);
   }
 
+  /** Update an existing AI decision by ID (partial update). */
+  async update(id: string, fields: Partial<Pick<AiDecision, 'reasoningSummary' | 'responseText' | 'tags' | 'requiresHuman'>> & { metadata?: Record<string, unknown> }): Promise<AiDecision> {
+    const row: Record<string, unknown> = {};
+    if (fields.reasoningSummary !== undefined) row.reasoning_summary = fields.reasoningSummary;
+    if (fields.responseText !== undefined) row.response_text = fields.responseText;
+    if (fields.tags !== undefined) row.tags = fields.tags;
+    if (fields.requiresHuman !== undefined) row.requires_human = fields.requiresHuman;
+    if (fields.metadata !== undefined) row.raw_response = fields.metadata;
+
+    const { data, error } = await this.db
+      .from('ai_decisions')
+      .update(row)
+      .eq('id', id)
+      .select('*')
+      .single();
+
+    if (error) {
+      throw new Error(`AiDecisionRepository.update failed: ${error.message}`);
+    }
+
+    return toAiDecision(data as AiDecisionRow);
+  }
+
   /** Find the latest AI decision for a conversation, ordered by created_at DESC. */
   async findLatestByConversation(conversationId: string): Promise<AiDecision | null> {
     const { data, error } = await this.db

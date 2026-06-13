@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>InboxPilot &middot; M03 Symphony &mdash; Inbox River</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  /* ============================================================
+     CHROME &mdash; review meta only
+     ============================================================ */
+  body { margin:0; padding:0; background:#1a1a1a; font-family:Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif; color:#e8e8e8; -webkit-font-smoothing:antialiased; }
+  .meta { padding:18px 24px; border-bottom:1px solid #2a2a2a; position:sticky; top:0; background:#1a1a1a; z-index:100; }
+  .meta h1 { margin:0 0 4px; font-size:12px; font-weight:600; letter-spacing:0.04em; text-transform:uppercase; }
+  .meta p { margin:0; font-size:11px; color:#888; }
+  .meta .nav { margin-top:10px; display:flex; gap:6px; flex-wrap:wrap; }
+  .meta .nav a { display:inline-block; padding:4px 10px; font-size:10px; font-weight:500; color:#e8e8e8; background:#222; border:1px solid #2e2e2e; border-radius:3px; text-decoration:none; }
+  .meta .nav a:hover { background:#2a2a2a; }
+  .meta .nav a.cur { background:#5a8cff; color:white; border-color:#5a8cff; }
+  .meta .nav .sep { color:#555; padding:0 4px; }
+  .shell { padding:24px; }
+  .shell-inner { max-width:1400px; margin:0 auto; border-radius:8px; overflow:hidden; box-shadow:0 20px 60px rgba(0,0,0,0.4); }
+
+  /* ============================================================
+     M03 SYMPHONY &mdash; Vercel monochrome
+     Re-skinned from the warm-amber original. Same layout (horizontal
+     river, active card centered, mini-map at bottom), but every
+     surface is black/white with green as the only status color.
+     ============================================================ */
+  .m03 {
+    --bg:#ffffff; --fg:#000000; --fg-2:#666666; --fg-3:#999999; --fg-4:#cccccc;
+    --line:#eaeaea; --line-2:#f5f5f5;
+    --green:#00aa55; --red:#ee0000; --orange:#ff8800; --blue:#0070f3;
+    --font:'Inter', system-ui, -apple-system, sans-serif;
+    --font-mono:'JetBrains Mono', ui-monospace, monospace;
+    background:var(--bg); color:var(--fg); font-family:var(--font);
+    display:flex; flex-direction:column; height:880px;
+  }
+  .m03 a { color:inherit; text-decoration:none; }
+
+  /* ----- Topbar (M03 pattern, matching inbox) ----- */
+  .m03 .topbar {
+    background:var(--bg); border-bottom:1px solid var(--line);
+    display:flex; align-items:center; padding:0 24px; height:56px; gap:24px;
+  }
+  .m03 .logo {
+    font-weight:500; font-size:14px; letter-spacing:-0.02em;
+    display:flex; align-items:center; gap:8px;
+  }
+  .m03 .logo::before { content:'\25B2'; font-size:11px; color:var(--fg); }
+  .m03 .topbar-spacer { flex:1; }
+  .m03 .topbar-stats {
+    display:flex; gap:20px; font-size:11px;
+    color:var(--fg-2); font-family:var(--font-mono);
+  }
+  .m03 .topbar-stats .stat strong {
+    color:var(--fg); font-weight:500;
+    margin-right:4px; font-variant-numeric:tabular-nums;
+  }
+  .m03 .topbar-stats .stat.hot strong { color:var(--green); }
+  .m03 .topbar-search {
+    background:var(--line-2); border:1px solid transparent;
+    color:var(--fg-2); font-size:13px; padding:6px 12px;
+    border-radius:6px; width:240px;
+  }
+  .m03 .topbar-avatar {
+    width:28px; height:28px; border-radius:50%;
+    background:var(--fg); color:var(--bg);
+    display:flex; align-items:center; justify-content:center;
+    font-size:11px; font-weight:600;
+  }
+
+  /* ----- Controls bar (zoom + view + arrows) ----- */
+  .m03 .controls {
+    display:flex; align-items:center;
+    padding:10px 24px; gap:14px;
+    border-bottom:1px solid var(--line);
+  }
+  .m03 .zoom {
+    display:flex; border:1px solid var(--line);
+    border-radius:6px; padding:2px;
+  }
+  .m03 .zoom a {
+    padding:4px 12px; font-size:11px; font-weight:500;
+    color:var(--fg-2); border-radius:4px; text-decoration:none;
+  }
+  .m03 .zoom a.active { background:var(--fg); color:var(--bg); }
+  .m03 .view-label {
+    font-family:var(--font-mono); font-size:11px;
+    color:var(--fg-2); margin-left:8px;
+  }
+  .m03 .view-range {
+    font-family:var(--font-mono); font-size:11px; color:var(--fg);
+    margin-left:4px;
+  }
+  .m03 .nav-arrows { margin-left:auto; display:flex; gap:4px; }
+  .m03 .nav-arrows button {
+    width:30px; height:30px;
+    background:var(--bg); border:1px solid var(--line);
+    border-radius:5px; color:var(--fg-2); cursor:pointer; font-size:13px;
+    font-family:inherit;
+  }
+  .m03 .nav-arrows button:hover { background:var(--line-2); }
+  .m03 .nav-arrows button.active { background:var(--fg); color:var(--bg); border-color:var(--fg); }
+
+  /* ----- Time axis ----- */
+  .m03 .axis {
+    position:relative; padding:8px 24px 16px;
+    border-bottom:1px solid var(--line);
+    display:flex; justify-content:space-between;
+    font-family:var(--font-mono); font-size:10px;
+    color:var(--fg-3); text-transform:uppercase; letter-spacing:0.08em;
+  }
+  .m03 .axis::before {
+    content:''; position:absolute;
+    left:50%; bottom:5px; transform:translateX(-50%);
+    width:1px; height:8px; background:var(--fg);
+  }
+  .m03 .axis .now {
+    position:absolute; top:-6px; left:50%;
+    transform:translateX(-50%);
+    background:var(--fg); color:var(--bg);
+    padding:2px 8px; border-radius:3px;
+    font-weight:600; font-size:9px; letter-spacing:0.16em;
+  }
+
+  /* ----- The river ----- */
+  .m03 .river-wrap {
+    flex:1; overflow:hidden; display:flex; flex-direction:column; min-height:0;
+  }
+  .m03 .river {
+    flex:1; overflow-x:auto; overflow-y:hidden;
+    padding:48px 24px 24px;
+    display:flex; align-items:center; gap:14px;
+  }
+  .m03 .river::-webkit-scrollbar { height:8px; }
+  .m03 .river::-webkit-scrollbar-track { background:var(--line-2); border-radius:4px; }
+  .m03 .river::-webkit-scrollbar-thumb { background:var(--fg-4); border-radius:4px; }
+  .m03 .river::-webkit-scrollbar-thumb:hover { background:var(--fg-3); }
+
+  /* ----- River card (M03 treatment) ----- */
+  .m03 .river-card {
+    flex:0 0 220px; min-height:280px;
+    background:var(--bg);
+    border:1px solid var(--line);
+    border-radius:8px;
+    padding:16px;
+    display:flex; flex-direction:column; gap:8px;
+    cursor:pointer;
+    position:relative;
+    transition:transform .2s ease, border-color .2s ease;
+    opacity:.55;
+  }
+  .m03 .river-card:hover {
+    opacity:.85;
+    transform:translateY(-2px);
+  }
+  .m03 .river-card.active {
+    flex:0 0 380px; min-height:440px;
+    border:1px solid var(--fg);
+    opacity:1;
+    transform:scale(1.01);
+    z-index:2;
+  }
+  .m03 .river-card::after {
+    content:''; position:absolute;
+    top:50%; right:-14px; width:14px; height:1px;
+    background:var(--line);
+  }
+  .m03 .river-card:last-child::after { display:none; }
+  .m03 .rc-head { display:flex; align-items:center; gap:8px; }
+  .m03 .rc-avatar {
+    width:30px; height:30px; border-radius:50%;
+    background:var(--line-2); color:var(--fg);
+    display:flex; align-items:center; justify-content:center;
+    font-size:11px; font-weight:600;
+    flex-shrink:0;
+    border:1px solid var(--line);
+  }
+  .m03 .rc-name {
+    font-size:13px; font-weight:600; color:var(--fg); line-height:1.2;
+  }
+  .m03 .rc-channel {
+    font-family:var(--font-mono); font-size:9px;
+    text-transform:uppercase; letter-spacing:0.08em;
+    color:var(--fg-3); margin-top:2px;
+  }
+  .m03 .rc-time {
+    margin-left:auto; font-family:var(--font-mono);
+    font-size:10px; color:var(--fg-3);
+  }
+  .m03 .rc-preview {
+    font-size:12px; line-height:1.5; color:var(--fg-2);
+    display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical;
+    overflow:hidden;
+  }
+  .m03 .river-card.active .rc-preview { -webkit-line-clamp:unset; }
+
+  /* ----- State pill (on each card) ----- */
+  .m03 .rc-state {
+    margin-top:auto;
+    display:inline-flex; align-items:center; gap:6px;
+    padding:4px 8px; border:1px solid var(--line);
+    border-radius:4px; align-self:flex-start;
+    font-family:var(--font-mono); font-size:9px;
+    text-transform:uppercase; letter-spacing:0.08em;
+    color:var(--fg-2);
+  }
+  .m03 .rc-state .dot { width:6px; height:6px; border-radius:50%; background:var(--fg-3); }
+  .m03 .rc-state.sent { border-color:var(--green); color:var(--green); }
+  .m03 .rc-state.sent .dot { background:var(--green); }
+  .m03 .rc-state.drafting { border-color:var(--orange); color:var(--orange); }
+  .m03 .rc-state.drafting .dot { background:var(--orange); }
+  .m03 .rc-state.thinking { border-color:var(--blue); color:var(--blue); }
+  .m03 .rc-state.thinking .dot {
+    background:var(--blue);
+    animation:blink 1.4s infinite;
+  }
+  .m03 .rc-state.escalated { border-color:var(--red); color:var(--red); }
+  .m03 .rc-state.escalated .dot { background:var(--red); }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+  /* ----- Expanded view inside active card ----- */
+  .m03 .rc-expanded {
+    display:none; flex-direction:column; gap:10px; flex:1; min-height:0;
+  }
+  .m03 .river-card.active .rc-expanded { display:flex; }
+  .m03 .rc-bubble {
+    background:var(--line-2); border:1px solid var(--line);
+    border-radius:6px; padding:10px 12px;
+    font-size:12px; line-height:1.5; color:var(--fg);
+  }
+  .m03 .rc-bubble-meta {
+    font-family:var(--font-mono); font-size:9px;
+    color:var(--fg-3); text-transform:uppercase; letter-spacing:0.08em;
+    margin-top:4px;
+  }
+  .m03 .rc-bubble.ai { border-color:var(--fg); border-left-width:2px; }
+  .m03 .rc-ai-row {
+    display:flex; align-items:center; gap:8px;
+    font-size:11px; color:var(--fg-2);
+    padding:8px 10px; background:var(--line-2);
+    border:1px solid var(--line); border-radius:5px;
+    font-family:var(--font-mono);
+  }
+  .m03 .rc-ai-row .conf {
+    margin-left:auto; color:var(--green);
+    font-weight:600; font-variant-numeric:tabular-nums;
+  }
+  .m03 .rc-actions { display:flex; gap:6px; }
+  .m03 .rc-btn {
+    flex:1; padding:8px;
+    background:var(--fg); color:var(--bg);
+    border:1px solid var(--fg);
+    border-radius:5px; font-weight:600;
+    font-size:12px; cursor:pointer;
+    font-family:inherit;
+  }
+  .m03 .rc-btn.ghost {
+    background:transparent; color:var(--fg-2); border:1px solid var(--line);
+  }
+  .m03 .rc-btn:hover:not(.ghost) { background:var(--fg-2); }
+
+  /* ----- Mini-map at the bottom ----- */
+  .m03 .minimap {
+    padding:14px 24px 18px; background:var(--bg);
+    border-top:1px solid var(--line);
+  }
+  .m03 .minimap-track {
+    position:relative; height:28px;
+    background:var(--line-2);
+    border-radius:14px; overflow:hidden;
+  }
+  .m03 .minimap-bar {
+    position:absolute; top:4px; bottom:4px;
+    border-radius:6px; background:var(--bg);
+    border:1px solid var(--line);
+  }
+  .m03 .minimap-bar.escalated { background:rgba(238,0,0,0.12); border-color:var(--red); }
+  .m03 .minimap-bar.drafting  { background:rgba(255,136,0,0.12); border-color:var(--orange); }
+  .m03 .minimap-bar.sent      { background:rgba(0,170,85,0.10); border-color:var(--green); }
+  .m03 .minimap-bar.active {
+    background:var(--fg); border-color:var(--fg);
+    box-shadow:0 0 0 2px var(--bg), 0 0 0 3px var(--fg);
+  }
+  .m03 .minimap-labels {
+    display:flex; justify-content:space-between;
+    margin-top:8px; font-family:var(--font-mono); font-size:9px;
+    color:var(--fg-3); text-transform:uppercase; letter-spacing:0.08em;
+  }
+  .m03 .minimap-labels strong { color:var(--fg); font-weight:500; }
+</style>
+</head>
+<body>
+
+<div class="meta">
+  <h1>InboxPilot &mdash; M03 &middot; Symphony &middot; Inbox River</h1>
+  <p>Horizontal river of conversation cards. Re-skinned to match the M03 Vercel-monochrome aesthetic. Same layout, M03 palette + chrome.</p>
+  <div class="nav">
+    <a href="m03-landing.html">Landing</a>
+    <a href="m03-login.html">Login</a>
+    <a href="m03-knowledge.html">Knowledge</a>
+    <a href="m03-knowledge-detail.html">Knowledge detail</a>
+    <a href="m03-analytics.html">Analytics</a>
+    <a href="m03-settings.html">Settings</a>
+    <a href="design-mock-3.html">Inbox</a>
+    <span class="sep">|</span>
+    <a class="cur" href="concept-04-symphony.html">Symphony</a>
+  </div>
+</div>
+
+<div class="shell">
+<div class="shell-inner">
+<div class="m03">
+
+  <!-- ===== TOPBAR ===== -->
+  <header class="topbar">
+    <div class="logo">InboxPilot</div>
+    <div class="topbar-spacer"></div>
+    <div class="topbar-stats">
+      <span class="stat"><strong>147</strong>STREAM</span>
+      <span class="stat hot"><strong>4</strong>DRAFTING</span>
+      <span class="stat"><strong>3</strong>ESCALATED</span>
+    </div>
+    <input class="topbar-search" placeholder="Search messages, contacts&hellip;" />
+    <div class="topbar-avatar">SL</div>
+  </header>
+
+  <!-- ===== CONTROLS ===== -->
+  <div class="controls">
+    <div class="zoom">
+      <a href="#">Today</a>
+      <a href="#" class="active">This week</a>
+      <a href="#">Month</a>
+      <a href="#">All</a>
+    </div>
+    <span class="view-label">A week in your inbox</span>
+    <span class="view-range">Jun 7 &mdash; Jun 13 &middot; 147 conversations</span>
+    <div class="nav-arrows">
+      <button>&larr;</button>
+      <button class="active">&bull;</button>
+      <button>&rarr;</button>
+    </div>
+  </div>
+
+  <!-- ===== TIME AXIS ===== -->
+  <div class="axis">
+    <span>Jun 7 &middot; 6am</span>
+    <span>Jun 8 &middot; 12pm</span>
+    <span>Jun 9 &middot; 6pm</span>
+    <span>Jun 10 &middot; 12am</span>
+    <span>Jun 11 &middot; 6am</span>
+    <span>Jun 12 &middot; 12pm</span>
+    <span class="now">NOW &middot; Jun 13 11:44</span>
+    <span>Jun 13 &middot; 6pm</span>
+  </div>
+
+  <!-- ===== THE RIVER ===== -->
+  <div class="river-wrap">
+    <div class="river">
+
+      <div class="river-card">
+        <div class="rc-head">
+          <div class="rc-avatar">R</div>
+          <div>
+            <div class="rc-name">Rohan Mehta</div>
+            <div class="rc-channel">sms &middot; 2 days ago</div>
+          </div>
+          <div class="rc-time">11:22</div>
+        </div>
+        <div class="rc-preview">&ldquo;Just wanted to say the AI replies on the new app are actually useful &mdash; solved my issue in 30 seconds.&rdquo;</div>
+        <div class="rc-state sent"><span class="dot"></span> sent &middot; auto</div>
+      </div>
+
+      <div class="river-card">
+        <div class="rc-head">
+          <div class="rc-avatar">B</div>
+          <div>
+            <div class="rc-name">Beatrice Cole</div>
+            <div class="rc-channel">email &middot; 1 day ago</div>
+          </div>
+          <div class="rc-time">14:08</div>
+        </div>
+        <div class="rc-preview">&ldquo;My invoice is missing line items 3 and 4 &mdash; could you re-send?&rdquo;</div>
+        <div class="rc-state sent"><span class="dot"></span> sent</div>
+      </div>
+
+      <div class="river-card">
+        <div class="rc-head">
+          <div class="rc-avatar">A</div>
+          <div>
+            <div class="rc-name">Aiden Park</div>
+            <div class="rc-channel">webchat &middot; 1 day ago</div>
+          </div>
+          <div class="rc-time">16:42</div>
+        </div>
+        <div class="rc-preview">&ldquo;How do I export my conversation history?&rdquo;</div>
+        <div class="rc-state sent"><span class="dot"></span> sent</div>
+      </div>
+
+      <div class="river-card">
+        <div class="rc-head">
+          <div class="rc-avatar">Y</div>
+          <div>
+            <div class="rc-name">Yui Tanaka</div>
+            <div class="rc-channel">email &middot; 1 day ago</div>
+          </div>
+          <div class="rc-time">09:17</div>
+        </div>
+        <div class="rc-preview">&ldquo;Need to add 3 users to our team plan &mdash; what&rsquo;s the cheapest way?&rdquo;</div>
+        <div class="rc-state sent"><span class="dot"></span> sent</div>
+      </div>
+
+      <div class="river-card">
+        <div class="rc-head">
+          <div class="rc-avatar">C</div>
+          <div>
+            <div class="rc-name">Carlos Mendes</div>
+            <div class="rc-channel">webchat &middot; 19h ago</div>
+          </div>
+          <div class="rc-time">17:01</div>
+        </div>
+        <div class="rc-preview">&ldquo;Do you support SSO with Okta? Sales said you do but I can&rsquo;t find the setting.&rdquo;</div>
+        <div class="rc-state sent"><span class="dot"></span> sent</div>
+      </div>
+
+      <div class="river-card">
+        <div class="rc-head">
+          <div class="rc-avatar">D</div>
+          <div>
+            <div class="rc-name">Diego Romero</div>
+            <div class="rc-channel">sms &middot; 3h ago</div>
+          </div>
+          <div class="rc-time">08:34</div>
+        </div>
+        <div class="rc-preview">&ldquo;Order #44521 &mdash; package marked delivered but I never got it.&rdquo;</div>
+        <div class="rc-state sent"><span class="dot"></span> sent &middot; auto</div>
+      </div>
+
+      <div class="river-card">
+        <div class="rc-head">
+          <div class="rc-avatar">S</div>
+          <div>
+            <div class="rc-name">Sarah Liang</div>
+            <div class="rc-channel">email &middot; 2h ago</div>
+          </div>
+          <div class="rc-time">09:52</div>
+        </div>
+        <div class="rc-preview">&ldquo;I need to update the billing email on my team plan to our finance lead&rsquo;s address.&rdquo;</div>
+        <div class="rc-state drafting"><span class="dot"></span> drafting</div>
+      </div>
+
+      <div class="river-card">
+        <div class="rc-head">
+          <div class="rc-avatar">L</div>
+          <div>
+            <div class="rc-name">Lukas Berg</div>
+            <div class="rc-channel">sms &middot; 1h ago</div>
+          </div>
+          <div class="rc-time">10:48</div>
+        </div>
+        <div class="rc-preview">&ldquo;My promo code SAVE15 isn&rsquo;t applying at checkout.&rdquo;</div>
+        <div class="rc-state drafting"><span class="dot"></span> drafting</div>
+      </div>
+
+      <div class="river-card">
+        <div class="rc-head">
+          <div class="rc-avatar">J</div>
+          <div>
+            <div class="rc-name">James Okafor</div>
+            <div class="rc-channel">email &middot; 14m ago</div>
+          </div>
+          <div class="rc-time">11:30</div>
+        </div>
+        <div class="rc-preview">&ldquo;Thanks for the shipping update &mdash; quick follow-up on the warranty claim. Photo attached.&rdquo;</div>
+        <div class="rc-state thinking"><span class="dot"></span> thinking</div>
+      </div>
+
+      <div class="river-card">
+        <div class="rc-head">
+          <div class="rc-avatar">P</div>
+          <div>
+            <div class="rc-name">Priya Subramaniam</div>
+            <div class="rc-channel">webchat &middot; 38m ago</div>
+          </div>
+          <div class="rc-time">11:06</div>
+        </div>
+        <div class="rc-preview">&ldquo;Can someone walk me through the cancellation policy?&rdquo;</div>
+        <div class="rc-state drafting"><span class="dot"></span> drafting</div>
+      </div>
+
+      <!-- ===== THE ACTIVE CARD ===== -->
+      <div class="river-card active">
+        <div class="rc-head">
+          <div class="rc-avatar">M</div>
+          <div>
+            <div class="rc-name">Maya Chen</div>
+            <div class="rc-channel">sms &middot; 2m ago</div>
+          </div>
+          <div class="rc-time">11:42</div>
+        </div>
+        <div class="rc-preview">&ldquo;I haven&rsquo;t received my refund yet &mdash; it&rsquo;s been 5 business days and I&rsquo;m getting concerned.&rdquo;</div>
+
+        <div class="rc-expanded">
+          <div class="rc-bubble">
+            Hi! I was charged on the 14th and the support team said the refund would land in 3&ndash;5 business days. It&rsquo;s now day 6 and nothing. I&rsquo;m honestly a bit worried &mdash; this is a meaningful amount for me.
+            <div class="rc-bubble-meta">MAYA &middot; 11:42 AM</div>
+          </div>
+
+          <div class="rc-bubble ai">
+            I understand the urgency. I checked your account and the refund was issued on the 15th &mdash; it should appear in 1&ndash;2 more business days depending on your bank. If it doesn&rsquo;t land by Friday I&rsquo;ll personally escalate to our payments team and send you a written confirmation.
+            <div class="rc-bubble-meta">AI &middot; 11:44 &middot; awaiting approval</div>
+          </div>
+
+          <div class="rc-ai-row">
+            <span>REASONING: RefundRule fires when refund + delay mentioned</span>
+            <span class="conf">92%</span>
+          </div>
+
+          <div class="rc-actions">
+            <button class="rc-btn">Approve &amp; send</button>
+            <button class="rc-btn ghost">Edit</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="river-card">
+        <div class="rc-head">
+          <div class="rc-avatar">E</div>
+          <div>
+            <div class="rc-name">Eleanor Whitaker</div>
+            <div class="rc-channel">email &middot; incoming</div>
+          </div>
+          <div class="rc-time">now</div>
+        </div>
+        <div class="rc-preview" style="color:var(--fg-3); font-style:italic">streaming in&hellip;</div>
+        <div class="rc-state thinking"><span class="dot"></span> listening</div>
+      </div>
+
+      <div class="river-card">
+        <div class="rc-head">
+          <div class="rc-avatar">T</div>
+          <div>
+            <div class="rc-name">Tom&aacute;s Reyes</div>
+            <div class="rc-channel">sms &middot; upcoming</div>
+          </div>
+          <div class="rc-time">+1h</div>
+        </div>
+        <div class="rc-preview" style="color:var(--fg-3); font-style:italic">scheduled follow-up</div>
+        <div class="rc-state"><span class="dot" style="background:var(--fg-3)"></span> scheduled</div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ===== MINI-MAP ===== -->
+  <div class="minimap">
+    <div class="minimap-track">
+      <div class="minimap-bar sent"      style="left:3%;  width:1.5%"></div>
+      <div class="minimap-bar"           style="left:6%;  width:1.5%"></div>
+      <div class="minimap-bar sent"      style="left:9%;  width:1.8%"></div>
+      <div class="minimap-bar sent"      style="left:12%; width:1.4%"></div>
+      <div class="minimap-bar"           style="left:15%; width:2.2%"></div>
+      <div class="minimap-bar"           style="left:19%; width:1.6%"></div>
+      <div class="minimap-bar escalated" style="left:22%; width:1.8%"></div>
+      <div class="minimap-bar"           style="left:25%; width:1.2%"></div>
+      <div class="minimap-bar"           style="left:28%; width:2.0%"></div>
+      <div class="minimap-bar sent"      style="left:32%; width:1.5%"></div>
+      <div class="minimap-bar"           style="left:36%; width:1.4%"></div>
+      <div class="minimap-bar drafting"  style="left:42%; width:1.8%"></div>
+      <div class="minimap-bar"           style="left:46%; width:1.6%"></div>
+      <div class="minimap-bar"           style="left:49%; width:1.4%"></div>
+      <div class="minimap-bar escalated" style="left:52%; width:1.6%"></div>
+      <div class="minimap-bar drafting"  style="left:55%; width:1.8%"></div>
+      <div class="minimap-bar"           style="left:58%; width:1.4%"></div>
+      <div class="minimap-bar drafting"  style="left:62%; width:1.6%"></div>
+      <div class="minimap-bar active"    style="left:68%; width:2.2%"></div>
+      <div class="minimap-bar drafting"  style="left:72%; width:1.6%"></div>
+      <div class="minimap-bar"           style="left:75%; width:1.4%"></div>
+      <div class="minimap-bar"           style="left:78%; width:1.8%"></div>
+      <div class="minimap-bar"           style="left:82%; width:1.5%"></div>
+      <div class="minimap-bar"           style="left:85%; width:1.7%"></div>
+      <div class="minimap-bar"           style="left:88%; width:1.4%"></div>
+      <div class="minimap-bar"           style="left:91%; width:1.8%"></div>
+      <div class="minimap-bar"           style="left:94%; width:1.5%"></div>
+    </div>
+    <div class="minimap-labels">
+      <span>Jun 7 &middot; 06:00</span>
+      <span><strong>147 conversations</strong> &middot; 89 auto-replied &middot; 14 awaiting you</span>
+      <span>Jun 13 &middot; 18:00</span>
+    </div>
+  </div>
+
+</div>
+</div>
+</div>
+</body>
+</html>

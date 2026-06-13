@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>InboxPilot &middot; M03 &mdash; Landing</title>
+<style>
+  body { margin:0; padding:0; background:#1a1a1a; font-family:Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif; color:#e8e8e8; -webkit-font-smoothing:antialiased; }
+  .meta { padding:20px 24px; border-bottom:1px solid #2a2a2a; position:sticky; top:0; background:#1a1a1a; z-index:50; }
+  .meta h1 { margin:0 0 4px; font-size:13px; font-weight:600; letter-spacing:0.04em; text-transform:uppercase; }
+  .meta p { margin:0; font-size:12px; color:#888; }
+  .meta .nav { margin-top:10px; display:flex; gap:6px; flex-wrap:wrap; }
+  .meta .nav a { display:inline-block; padding:4px 10px; font-size:11px; font-weight:500; color:#e8e8e8; background:#222; border:1px solid #2e2e2e; border-radius:4px; text-decoration:none; }
+  .meta .nav a:hover { background:#2a2a2a; }
+  .meta .nav a.cur { background:#ff5722; color:white; border-color:#ff5722; }
+  .meta .nav .sep { color:#555; padding:0 2px; }
+  .shell { padding:24px; }
+  .shell-inner { border:1px solid #2e2e2e; border-radius:8px; overflow:hidden; box-shadow:0 20px 60px rgba(0,0,0,0.4); min-height:760px; }
+  .m03 {
+    --bg:#ffffff; --fg:#000000; --fg-2:#666666; --fg-3:#999999; --fg-4:#cccccc;
+    --line:#eaeaea; --line-2:#f5f5f5;
+    --green:#00aa55; --red:#ee0000; --orange:#ff8800; --signal:#0070f3;
+    --font:'Inter', system-ui, -apple-system, sans-serif;
+    --font-mono:'JetBrains Mono', ui-monospace, monospace;
+    background:var(--bg); color:var(--fg); font-family:var(--font);
+    min-height:760px; display:flex; flex-direction:column;
+  }
+  .m03 a { color:inherit; text-decoration:none; }
+  .m03 .topbar { background:var(--bg); border-bottom:1px solid var(--line); display:flex; align-items:center; padding:0 24px; height:56px; gap:24px; }
+  .m03 .logo { font-weight:500; font-size:14px; letter-spacing:-0.02em; display:flex; align-items:center; gap:8px; }
+  .m03 .logo::before { content:'\25B2'; font-size:11px; color:var(--fg); }
+  .m03 .topbar-nav { display:flex; gap:16px; }
+  .m03 .topbar-nav a { color:var(--fg-2); font-size:13px; }
+  .m03 .topbar-nav a:hover { color:var(--fg); }
+  .m03 .topbar-spacer { flex:1; }
+  .m03 .topbar-cta { display:flex; gap:8px; align-items:center; }
+  .m03 .btn-ghost { font-size:13px; font-weight:500; color:var(--fg-2); padding:6px 12px; border-radius:6px; }
+  .m03 .btn-ghost:hover { background:var(--line-2); color:var(--fg); }
+  .m03 .btn-primary { font-size:13px; font-weight:500; color:var(--bg); padding:6px 14px; border-radius:6px; background:var(--fg); }
+  .m03 .btn-primary:hover { background:var(--fg-2); }
+  .m03 .hero { padding:88px 24px 64px; max-width:920px; margin:0 auto; text-align:center; }
+  .m03 .hero-eyebrow { display:inline-flex; align-items:center; gap:6px; padding:4px 10px; background:var(--line-2); border:1px solid var(--line); border-radius:9999px; font-size:11px; font-weight:500; color:var(--fg-2); margin-bottom:24px; }
+  .m03 .hero-eyebrow .dot { width:6px; height:6px; border-radius:50%; background:var(--green); }
+  .m03 .hero h1 { font-size:64px; line-height:1.0; letter-spacing:-0.04em; font-weight:500; color:var(--fg); margin:0 0 18px; }
+  .m03 .hero p { font-size:18px; line-height:1.55; color:var(--fg-2); max-width:600px; margin:0 auto 32px; }
+  .m03 .hero-cta { display:flex; gap:10px; justify-content:center; }
+  .m03 .hero-cta .btn-primary { font-size:14px; padding:10px 20px; }
+  .m03 .hero-cta .btn-ghost { font-size:14px; padding:10px 20px; border:1px solid var(--line); }
+  .m03 .hero-trust { display:flex; gap:32px; justify-content:center; margin-top:48px; color:var(--fg-3); font-size:11px; font-family:var(--font-mono); text-transform:uppercase; letter-spacing:0.08em; }
+  .m03 .hero-trust strong { color:var(--fg); font-weight:500; }
+  .m03 .preview-wrap { padding:0 24px 80px; }
+  .m03 .preview { max-width:1100px; margin:0 auto; background:var(--bg); border:1px solid var(--line); border-radius:8px; overflow:hidden; box-shadow:0 30px 80px rgba(0,0,0,0.08); }
+  .m03 .preview-bar { background:var(--line-2); border-bottom:1px solid var(--line); padding:10px 16px; display:flex; align-items:center; gap:8px; }
+  .m03 .preview-bar .dots { display:flex; gap:5px; }
+  .m03 .preview-bar .dots span { width:10px; height:10px; border-radius:50%; background:var(--line); }
+  .m03 .preview-bar .url { flex:1; text-align:center; font-size:11px; color:var(--fg-2); font-family:var(--font-mono); padding:4px 12px; background:var(--bg); border-radius:5px; max-width:320px; margin:0 auto; }
+  .m03 .preview-body { display:grid; grid-template-columns:200px 1fr; min-height:420px; }
+  .m03 .preview-side { background:var(--line-2); border-right:1px solid var(--line); padding:14px 8px; }
+  .m03 .preview-side .row { display:flex; align-items:center; gap:8px; padding:6px 10px; color:var(--fg-2); font-size:12px; border-radius:4px; }
+  .m03 .preview-side .row.active { background:var(--fg); color:var(--bg); }
+  .m03 .preview-side .row .ic { color:var(--fg-3); }
+  .m03 .preview-side .row.active .ic { color:var(--bg); }
+  .m03 .preview-side .row .badge { margin-left:auto; font-size:10px; color:var(--green); font-family:var(--font-mono); }
+  .m03 .preview-side .row.active .badge { color:var(--bg); }
+  .m03 .preview-side .label { color:var(--fg-3); font-size:10px; text-transform:uppercase; letter-spacing:0.04em; font-weight:500; padding:12px 10px 4px; }
+  .m03 .preview-main { padding:18px; display:flex; flex-direction:column; gap:8px; background:var(--bg); }
+  .m03 .preview-main .msg { max-width:60%; padding:8px 12px; border-radius:8px; font-size:12px; line-height:1.5; }
+  .m03 .preview-main .msg.in { background:var(--line-2); color:var(--fg); align-self:flex-start; }
+  .m03 .preview-main .msg.out { background:var(--fg); color:var(--bg); align-self:flex-end; }
+  .m03 .preview-main .msg.ai { background:var(--bg); border:1px solid var(--green); align-self:flex-start; }
+  .m03 .preview-main .msg.ai::before { content:'AI \2022 92% conf'; display:block; font-size:9px; color:var(--green); font-weight:600; letter-spacing:0.04em; margin-bottom:3px; font-family:var(--font-mono); }
+  .m03 .features { padding:64px 24px; max-width:1100px; margin:0 auto; }
+  .m03 .features h2 { font-size:40px; letter-spacing:-0.03em; font-weight:500; text-align:center; margin:0 0 48px; }
+  .m03 .feature-grid { display:grid; grid-template-columns:repeat(3, 1fr); gap:12px; }
+  .m03 .feature { background:var(--bg); border:1px solid var(--line); border-radius:8px; padding:24px; }
+  .m03 .feature-icon { width:32px; height:32px; border-radius:6px; background:var(--line-2); color:var(--fg); display:flex; align-items:center; justify-content:center; font-size:14px; font-weight:600; margin-bottom:16px; }
+  .m03 .feature h3 { font-size:14px; font-weight:600; margin:0 0 6px; }
+  .m03 .feature p { font-size:12px; color:var(--fg-2); line-height:1.6; margin:0; }
+  .m03 .footer { border-top:1px solid var(--line); padding:32px 24px; display:flex; justify-content:space-between; color:var(--fg-3); font-size:12px; }
+  .m03 .footer a { color:var(--fg-2); text-decoration:none; margin-left:20px; }
+  .m03 .footer a:hover { color:var(--fg); }
+</style>
+</head>
+<body>
+<div class="meta">
+  <h1>InboxPilot &mdash; M03 &middot; Landing page</h1>
+  <p>Marketing surface &mdash; full-bleed hero, product preview, feature grid. Vercel-monochrome aesthetic.</p>
+  <div class="nav">
+    <a class="cur" href="m03-landing.html">Landing</a>
+    <a href="m03-login.html">Login</a>
+    <a href="m03-knowledge.html">Knowledge</a>
+    <a href="m03-knowledge-detail.html">Knowledge detail</a>
+    <a href="m03-analytics.html">Analytics</a>
+    <a href="m03-settings.html">Settings</a>
+    <span class="sep">|</span>
+    <a href="design-mock-3.html">M03 Inbox</a>
+    <a href="concept-04-symphony.html">Symphony</a>
+  </div>
+</div>
+<div class="shell">
+  <div class="shell-inner">
+    <div class="m03">
+
+      <header class="topbar">
+        <div class="logo">InboxPilot</div>
+        <nav class="topbar-nav"><a href="#">Product</a><a href="#">Channels</a><a href="#">Pricing</a><a href="#">Docs</a><a href="#">Changelog</a></nav>
+        <div class="topbar-spacer"></div>
+        <div class="topbar-cta">
+          <a class="btn-ghost" href="#">Sign in</a>
+          <a class="btn-primary" href="#">Start free</a>
+        </div>
+      </header>
+
+      <section class="hero">
+        <span class="hero-eyebrow"><span class="dot"></span> Now with webchat channels</span>
+        <h1>The shared inbox<br/>that actually replies.</h1>
+        <p>InboxPilot drafts, sends, and escalates customer messages across SMS, email, and webchat &mdash; with a knowledge base that grounds every AI reply in your real policies.</p>
+        <div class="hero-cta">
+          <a class="btn-primary" href="#">Start free &rarr;</a>
+          <a class="btn-ghost" href="#">Watch demo</a>
+        </div>
+        <div class="hero-trust">
+          <span><strong>10k+</strong> conversations/day</span>
+          <span>&middot;</span>
+          <span><strong>92%</strong> AI accuracy</span>
+          <span>&middot;</span>
+          <span><strong>&lt;2s</strong> p95 reply</span>
+        </div>
+      </section>
+
+      <div class="preview-wrap">
+        <div class="preview">
+          <div class="preview-bar">
+            <div class="dots"><span></span><span></span><span></span></div>
+            <div class="url">app.inboxpilot.com/inbox</div>
+          </div>
+          <div class="preview-body">
+            <div class="preview-side">
+              <div class="label">Workspace</div>
+              <div class="row active"><span class="ic">&#9654;</span> Inbox <span class="badge">24</span></div>
+              <div class="row"><span class="ic">&#9733;</span> Mentions</div>
+              <div class="row"><span class="ic">&#9201;</span> Snoozed</div>
+              <div class="row"><span class="ic">&#10003;</span> Done</div>
+              <div class="label">Channels</div>
+              <div class="row"><span class="ic">&#9632;</span> SMS</div>
+              <div class="row"><span class="ic">&#9632;</span> Email</div>
+              <div class="row"><span class="ic">&#9632;</span> Webchat</div>
+            </div>
+            <div class="preview-main">
+              <div class="msg in">Hi, I was charged on the 14th and the refund was supposed to land in 3&ndash;5 business days. It&rsquo;s day 6.</div>
+              <div class="msg ai">I checked your account and the refund was issued on the 15th &mdash; it should appear in 1&ndash;2 more business days. If it doesn&rsquo;t land by Friday I&rsquo;ll personally escalate.</div>
+              <div class="msg out">Thanks for following up so fast.</div>
+              <div class="msg in">That worked, it just landed. Lifesaver.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <section class="features">
+        <h2>Built for support teams that ship</h2>
+        <div class="feature-grid">
+          <div class="feature"><div class="feature-icon">M</div><h3>Multi-channel inbox</h3><p>SMS, email, and webchat in one place. Provider-neutral adapters mean no lock-in to Twilio or Postmark.</p></div>
+          <div class="feature"><div class="feature-icon">A</div><h3>Grounded AI replies</h3><p>Every draft cites your knowledge base. No invented policies, no chain-of-thought in production logs.</p></div>
+          <div class="feature"><div class="feature-icon">E</div><h3>Deterministic escalation</h3><p>Profanity, legal threats, refunds, billing errors &mdash; caught by rules before any LLM call. Cost down, safety up.</p></div>
+          <div class="feature"><div class="feature-icon">D</div><h3>Postgres job queue</h3><p>No Redis, no BullMQ. SELECT FOR UPDATE SKIP LOCKED does the work, with exponential backoff and dead-lettering.</p></div>
+          <div class="feature"><div class="feature-icon">S</div><h3>Row-level security</h3><p>Tenants can&rsquo;t see each other&rsquo;s data. Ever. The platform&rsquo;s RLS policies are unit-tested with a real probe matrix.</p></div>
+          <div class="feature"><div class="feature-icon">A</div><h3>Audit logs by default</h3><p>Every AI decision, every escalation, every credential change &mdash; append-only and exportable for compliance.</p></div>
+        </div>
+      </section>
+
+      <footer class="footer">
+        <span>&copy; 2026 InboxPilot</span>
+        <div>
+          <a href="#">Privacy</a><a href="#">Security</a><a href="#">Status</a><a href="#">Contact</a>
+        </div>
+      </footer>
+    </div>
+  </div>
+</div>
+</body>
+</html>

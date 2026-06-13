@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>InboxPilot · M03 — Inbox (faithful to live product)</title>
+<style>
+  /* ============================================================
+     CHROME — review meta only, not part of the design
+     ============================================================ */
+  body { margin:0; padding:0; background:#1a1a1a; font-family:Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif; color:#e8e8e8; -webkit-font-smoothing:antialiased; }
+  .meta { padding:18px 24px; border-bottom:1px solid #2a2a2a; position:sticky; top:0; background:#1a1a1a; z-index:100; }
+  .meta h1 { margin:0 0 4px; font-size:12px; font-weight:600; letter-spacing:0.04em; text-transform:uppercase; }
+  .meta p { margin:0; font-size:11px; color:#888; }
+  .meta .nav { margin-top:10px; display:flex; gap:6px; flex-wrap:wrap; }
+  .meta .nav a { display:inline-block; padding:4px 10px; font-size:10px; font-weight:500; color:#e8e8e8; background:#222; border:1px solid #2e2e2e; border-radius:3px; text-decoration:none; }
+  .meta .nav a:hover { background:#2a2a2a; }
+  .meta .nav a.cur { background:#5a8cff; color:white; border-color:#5a8cff; }
+  .meta .nav .sep { color:#555; padding:0 4px; }
+  .meta .neighbors { margin-left:12px; padding-left:12px; border-left:1px solid #2a2a2a; }
+  .shell { padding:24px; }
+  .shell-inner { max-width:1400px; margin:0 auto; border-radius:8px; overflow:hidden; box-shadow:0 20px 60px rgba(0,0,0,0.4); }
+
+  /* ============================================================
+     M03 INBOX — Vercel monochrome
+     Faithful to the live product's 10 components:
+       InboxFilters, ConversationList, ConversationItem, StatusBadge,
+       MessageThread, MessageBubble, ReplyComposer, AiDraftPanel,
+       ContactDetails, AppShell (sidebar+topbar inlined here)
+     ============================================================ */
+  .m03 {
+    --bg:#ffffff; --fg:#000000; --fg-2:#666666; --fg-3:#999999; --fg-4:#cccccc;
+    --line:#eaeaea; --line-2:#f5f5f5;
+    --green:#00aa55; --red:#ee0000; --orange:#ff8800; --blue:#0070f3;
+    --font:'Inter', system-ui, -apple-system, sans-serif;
+    --font-mono:'JetBrains Mono', ui-monospace, monospace;
+    background:var(--bg); color:var(--fg); font-family:var(--font);
+    display:flex; flex-direction:column; min-height:860px;
+  }
+  .m03 a { color:inherit; text-decoration:none; }
+
+  /* ----- Topbar (from AppShell) ----- */
+  .m03 .topbar {
+    background:var(--bg); border-bottom:1px solid var(--line);
+    display:flex; align-items:center; padding:0 24px; height:56px; gap:24px;
+  }
+  .m03 .logo {
+    font-weight:500; font-size:14px; letter-spacing:-0.02em;
+    display:flex; align-items:center; gap:8px;
+  }
+  .m03 .logo::before { content:'\25B2'; font-size:11px; color:var(--fg); }
+  .m03 .topbar-spacer { flex:1; }
+  .m03 .topbar-search {
+    background:var(--line-2); border:1px solid transparent;
+    color:var(--fg-2); font-size:13px; padding:6px 12px;
+    border-radius:6px; width:280px;
+  }
+  .m03 .topbar-avatar {
+    width:28px; height:28px; border-radius:50%;
+    background:var(--fg); color:var(--bg);
+    display:flex; align-items:center; justify-content:center;
+    font-size:11px; font-weight:600;
+  }
+
+  /* ----- Body grid: sidebar + list + thread + AI panel ----- */
+  .m03 .body {
+    display:grid;
+    grid-template-columns:220px 340px 1fr 320px;
+    flex:1; min-height:0;
+  }
+
+  /* ----- Sidebar (from AppShell + Sidebar.tsx) ----- */
+  .m03 .sidebar {
+    background:var(--bg); border-right:1px solid var(--line);
+    padding:14px 8px; font-size:13px;
+  }
+  .m03 .sidebar-section {
+    color:var(--fg-3); font-size:11px; text-transform:uppercase;
+    letter-spacing:0.04em; font-weight:500;
+    padding:12px 12px 6px;
+  }
+  .m03 .sidebar a {
+    display:flex; align-items:center; gap:10px;
+    padding:6px 10px; color:var(--fg-2); border-radius:4px;
+    text-decoration:none;
+  }
+  .m03 .sidebar a.active { background:var(--fg); color:var(--bg); }
+  .m03 .sidebar a:hover:not(.active) { background:var(--line-2); }
+  .m03 .sidebar a .ic { width:14px; font-size:11px; }
+  .m03 .sidebar a .badge {
+    margin-left:auto; font-size:10px; color:var(--fg-3); font-family:var(--font-mono);
+  }
+  .m03 .sidebar a.active .badge { color:var(--bg); opacity:0.7; }
+
+  /* ----- Conversation list (from ConversationList.tsx + InboxFilters.tsx) ----- */
+  .m03 .list {
+    background:var(--bg); border-right:1px solid var(--line);
+    display:flex; flex-direction:column; min-height:0;
+  }
+  .m03 .list-filters {
+    padding:12px 16px;
+    border-bottom:1px solid var(--line);
+  }
+  .m03 .list-filters h1 {
+    margin:0 0 4px; font-size:14px; font-weight:600; letter-spacing:-0.01em;
+  }
+  .m03 .list-filters .sub {
+    font-size:11px; color:var(--fg-3);
+    font-family:var(--font-mono);
+    margin-bottom:10px;
+  }
+  .m03 .filter-row { display:flex; gap:4px; flex-wrap:wrap; margin-bottom:6px; }
+  .m03 .filter-row:last-child { margin-bottom:0; }
+  .m03 .filter-search {
+    width:100%; background:var(--bg);
+    border:1px solid var(--line); color:var(--fg);
+    font-size:12px; padding:6px 10px; border-radius:5px;
+    font-family:inherit;
+  }
+  .m03 .pill {
+    font-size:11px; color:var(--fg-2);
+    padding:3px 8px; border-radius:3px;
+    background:transparent; border:1px solid var(--line);
+    font-family:inherit; cursor:pointer;
+  }
+  .m03 .pill.active { background:var(--fg); color:var(--bg); border-color:var(--fg); }
+
+  .m03 .list-items { flex:1; overflow-y:auto; }
+
+  /* ----- ConversationItem (from ConversationItem.tsx) ----- */
+  .m03 .conv {
+    padding:12px 16px;
+    border-bottom:1px solid var(--line);
+    cursor:pointer;
+  }
+  .m03 .conv:hover { background:var(--line-2); }
+  .m03 .conv.active { background:var(--line-2); border-left:2px solid var(--fg); padding-left:14px; }
+  .m03 .conv-head {
+    display:flex; align-items:baseline; gap:8px; margin-bottom:4px;
+  }
+  .m03 .conv-name {
+    font-size:13px; font-weight:600; color:var(--fg);
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:180px;
+  }
+  .m03 .conv-time {
+    color:var(--fg-3); font-size:10px;
+    font-family:var(--font-mono); margin-left:auto;
+  }
+  .m03 .conv-preview {
+    font-size:12px; color:var(--fg-2); line-height:1.4;
+    display:-webkit-box; -webkit-line-clamp:1; -webkit-box-orient:vertical; overflow:hidden;
+    margin-bottom:6px;
+  }
+  .m03 .conv-meta { display:flex; gap:6px; align-items:center; }
+
+  /* ----- StatusBadge (from StatusBadge.tsx) ----- */
+  .m03 .status-badge {
+    font-size:9px; font-weight:600;
+    padding:1px 6px; border-radius:3px;
+    text-transform:uppercase; letter-spacing:0.04em;
+    font-family:var(--font-mono);
+  }
+  .m03 .status-open { background:var(--bg); color:var(--fg-2); border:1px solid var(--line); }
+  .m03 .status-pending { background:#fff7ed; color:var(--orange); border:1px solid #fed7aa; }
+  .m03 .status-resolved { background:#f0fdf4; color:var(--green); border:1px solid #bbf7d0; }
+  .m03 .status-escalated { background:#fef2f2; color:var(--red); border:1px solid #fecaca; }
+
+  .m03 .channel {
+    font-size:9px; color:var(--fg-3);
+    text-transform:uppercase; letter-spacing:0.04em;
+    font-family:var(--font-mono);
+  }
+  .m03 .ai-badge {
+    font-size:9px; color:var(--orange);
+    text-transform:uppercase; letter-spacing:0.04em;
+    font-family:var(--font-mono);
+  }
+
+  /* ----- MessageThread + MessageBubble ----- */
+  .m03 .thread {
+    background:var(--bg); display:flex; flex-direction:column; min-height:0;
+  }
+  .m03 .thread-head {
+    padding:12px 24px;
+    border-bottom:1px solid var(--line);
+    display:flex; align-items:center; gap:12px;
+  }
+  .m03 .thread-subject {
+    font-size:14px; font-weight:600; letter-spacing:-0.01em;
+  }
+  .m03 .thread-meta {
+    margin-left:auto; display:flex; gap:14px;
+    font-size:11px; font-family:var(--font-mono); color:var(--fg-3);
+  }
+  .m03 .thread-body {
+    flex:1; overflow-y:auto;
+    padding:20px 24px;
+    display:flex; flex-direction:column; gap:10px;
+    background:var(--bg);
+  }
+  .m03 .bubble {
+    max-width:72%; padding:10px 14px;
+    border-radius:8px; font-size:13px; line-height:1.55;
+  }
+  .m03 .bubble.in {
+    background:var(--line-2); color:var(--fg);
+    align-self:flex-start;
+  }
+  .m03 .bubble.out {
+    background:var(--fg); color:var(--bg);
+    align-self:flex-end;
+  }
+  .m03 .bubble.ai {
+    background:var(--bg); color:var(--fg);
+    align-self:flex-start; border:1px solid var(--orange);
+  }
+  .m03 .bubble-meta {
+    font-size:10px; color:var(--fg-3);
+    font-family:var(--font-mono);
+    text-transform:uppercase; letter-spacing:0.04em;
+    margin-top:4px;
+  }
+  .m03 .bubble .sender {
+    font-weight:600; color:var(--fg); font-size:11px;
+    text-transform:uppercase; letter-spacing:0.04em;
+    margin-bottom:2px;
+  }
+  .m03 .bubble.ai .sender { color:var(--orange); }
+  .m03 .ai-state-pill {
+    display:inline-flex; align-items:center; gap:4px;
+    font-size:10px; padding:1px 6px;
+    background:#fff7ed; color:var(--orange);
+    border:1px solid #fed7aa; border-radius:3px;
+    font-family:var(--font-mono);
+    text-transform:uppercase; letter-spacing:0.04em;
+  }
+  .m03 .ai-state-pill::before {
+    content:''; width:6px; height:6px; border-radius:50%;
+    background:var(--orange);
+  }
+
+  /* ----- ReplyComposer (from ReplyComposer.tsx) ----- */
+  .m03 .composer {
+    border-top:1px solid var(--line);
+    padding:14px 24px 16px; background:var(--bg);
+  }
+  .m03 .composer-input {
+    width:100%; background:var(--bg);
+    border:1px solid var(--line); color:var(--fg);
+    font-size:13px; line-height:1.55;
+    padding:10px 12px; border-radius:6px;
+    font-family:inherit; resize:none; min-height:60px;
+  }
+  .m03 .composer-input:focus { outline:1px solid var(--fg); border-color:var(--fg); }
+  .m03 .composer-actions {
+    display:flex; gap:8px; margin-top:10px; align-items:center;
+  }
+  .m03 .btn {
+    font-size:12px; font-weight:500;
+    padding:6px 12px; border-radius:5px;
+    border:1px solid var(--line);
+    background:var(--bg); color:var(--fg);
+    cursor:pointer; font-family:inherit;
+  }
+  .m03 .btn:hover { background:var(--line-2); }
+  .m03 .btn-primary {
+    background:var(--fg); color:var(--bg); border-color:var(--fg); font-weight:600;
+  }
+  .m03 .btn-primary:hover { background:var(--fg-2); }
+  .m03 .send-meta {
+    margin-left:auto; font-size:10px; color:var(--fg-3); font-family:var(--font-mono);
+  }
+  .m03 .send-meta kbd {
+    background:var(--line-2); border:1px solid var(--line);
+    border-radius:3px; padding:1px 5px; font-family:inherit; font-size:10px;
+  }
+
+  /* ----- AI Draft Panel (from AiDraftPanel.tsx) ----- */
+  .m03 .ai-panel {
+    background:var(--bg); border-left:1px solid var(--line);
+    padding:16px; display:flex; flex-direction:column; gap:14px;
+    overflow-y:auto;
+  }
+  .m03 .ai-section-h {
+    font-size:10px; font-weight:600;
+    text-transform:uppercase; letter-spacing:0.16em;
+    color:var(--fg-3);
+    margin:0 0 4px;
+  }
+  .m03 .ai-card {
+    background:var(--bg);
+    border:1px solid var(--line);
+    border-radius:6px;
+    padding:12px;
+  }
+  .m03 .ai-card-label {
+    font-size:9px; font-weight:600;
+    text-transform:uppercase; letter-spacing:0.12em;
+    color:var(--fg-3); margin-bottom:6px;
+    font-family:var(--font-mono);
+  }
+  .m03 .ai-draft {
+    font-size:12px; line-height:1.55; color:var(--fg);
+  }
+  .m03 .confidence {
+    display:flex; align-items:center; gap:8px; margin-top:10px;
+  }
+  .m03 .conf-num {
+    font-size:18px; font-weight:600; color:var(--fg);
+    font-variant-numeric:tabular-nums;
+  }
+  .m03 .conf-bar {
+    flex:1; height:3px; background:var(--line-2);
+    border-radius:2px; overflow:hidden;
+  }
+  .m03 .conf-bar .fill { height:100%; background:var(--fg); border-radius:2px; }
+  .m03 .reasoning {
+    font-size:11px; line-height:1.5; color:var(--fg-2);
+    background:var(--line-2); padding:8px 10px;
+    border-radius:5px; margin-top:8px;
+  }
+  .m03 .reasoning-label {
+    font-size:9px; color:var(--fg-3);
+    text-transform:uppercase; letter-spacing:0.1em;
+    font-family:var(--font-mono); font-weight:600;
+    margin-bottom:4px;
+  }
+  .m03 .tags { display:flex; gap:4px; flex-wrap:wrap; margin-top:6px; }
+  .m03 .ai-tag {
+    font-size:9px; padding:1px 6px;
+    border:1px solid var(--line); border-radius:3px;
+    color:var(--fg-2);
+    text-transform:uppercase; letter-spacing:0.04em;
+    font-family:var(--font-mono);
+  }
+  .m03 .ai-actions { display:flex; gap:6px; margin-top:10px; }
+  .m03 .ai-actions .btn { flex:1; }
+  .m03 .empty-ai {
+    font-size:12px; color:var(--fg-3);
+    text-align:center; padding:24px 0;
+  }
+
+  /* ----- ContactDetails (from ContactDetails.tsx) ----- */
+  .m03 .contact { display:flex; flex-direction:column; gap:6px; }
+  .m03 .contact-row {
+    display:flex; justify-content:space-between;
+    font-size:12px; padding:4px 0;
+  }
+  .m03 .contact-row .label { color:var(--fg-3); }
+  .m03 .contact-row .val { color:var(--fg); font-family:var(--font-mono); font-size:11px; }
+  .m03 .contact-avatar {
+    width:48px; height:48px; border-radius:50%;
+    background:var(--fg); color:var(--bg);
+    display:flex; align-items:center; justify-content:center;
+    font-size:18px; font-weight:600; margin:0 auto 12px;
+  }
+  .m03 .contact-name { text-align:center; font-size:14px; font-weight:600; margin-bottom:4px; }
+  .m03 .contact-sub  { text-align:center; font-size:11px; color:var(--fg-3); margin-bottom:14px; font-family:var(--font-mono); }
+
+  /* ----- Status / AI state — color coding for quick scanning ----- */
+  .m03 .badge-count {
+    display:inline-flex; align-items:center; justify-content:center;
+    min-width:18px; height:18px; padding:0 5px;
+    border-radius:9px; background:var(--fg); color:var(--bg);
+    font-size:10px; font-weight:600;
+    font-family:var(--font-mono);
+  }
+  .m03 .sidebar a .badge.escalated { background:var(--red); }
+  .m03 .sidebar a.active .badge.escalated { background:var(--bg); color:var(--red); }
+</style>
+</head>
+<body>
+
+<div class="meta">
+  <h1>InboxPilot — M03 · Inbox (faithful to live product)</h1>
+  <p>Mock represents the 10 live inbox components: InboxFilters, ConversationList, ConversationItem, StatusBadge, MessageThread, MessageBubble, ReplyComposer, AiDraftPanel, ContactDetails, AppShell.</p>
+  <div class="nav">
+    <a class="cur" href="design-mock-3.html">Inbox</a>
+    <a href="m03-landing.html">Landing</a>
+    <a href="m03-login.html">Login</a>
+    <a href="m03-knowledge.html">Knowledge</a>
+    <a href="m03-knowledge-detail.html">Knowledge detail</a>
+    <a href="m03-analytics.html">Analytics</a>
+    <a href="m03-settings.html">Settings</a>
+    <span class="sep">|</span>
+    <a href="concept-04-symphony.html">Symphony</a>
+  </div>
+</div>
+
+<div class="shell">
+<div class="shell-inner">
+<div class="m03">
+
+  <!-- ===== TOPBAR (from AppShell.tsx) ===== -->
+  <header class="topbar">
+    <div class="logo">InboxPilot</div>
+    <div class="topbar-spacer"></div>
+    <input class="topbar-search" placeholder="Search messages, contacts…" />
+    <div class="topbar-avatar">SL</div>
+  </header>
+
+  <!-- ===== BODY ===== -->
+  <div class="body">
+
+    <!-- ===== SIDEBAR (from Sidebar.tsx, condensed) ===== -->
+    <aside class="sidebar">
+      <div class="sidebar-section">Workspace</div>
+      <a href="#" class="active"><span class="ic">&#9654;</span> Inbox <span class="badge">24</span></a>
+      <a href="#"><span class="ic">&#9733;</span> Mentions</a>
+      <a href="#"><span class="ic">&#9201;</span> Snoozed</a>
+      <a href="#"><span class="ic">&#10003;</span> Done</a>
+      <div class="sidebar-section">Views</div>
+      <a href="#">Mine</a>
+      <a href="#">Unassigned</a>
+      <a href="#">Escalated <span class="badge escalated">3</span></a>
+      <div class="sidebar-section">Channels</div>
+      <a href="#">SMS</a>
+      <a href="#">Email</a>
+      <a href="#">Webchat</a>
+    </aside>
+
+    <!-- ===== CONVERSATION LIST (InboxFilters + ConversationList + ConversationItem + StatusBadge) ===== -->
+    <div class="list">
+      <div class="list-filters">
+        <h1>Knowledge</h1>
+        <div class="sub">14 articles &middot; 4 processing &middot; 8 ready</div>
+        <input class="filter-search" placeholder="Search articles…" />
+        <div class="filter-row" style="margin-top:8px">
+          <span class="pill active">All 14</span>
+          <span class="pill">Manual 9</span>
+          <span class="pill">URL 3</span>
+          <span class="pill">File 2</span>
+        </div>
+      </div>
+      <div class="list-items">
+
+        <div class="conv active">
+          <div class="conv-head">
+            <span class="conv-name">Maya Chen</span>
+            <span class="conv-time">2m</span>
+          </div>
+          <div class="conv-preview">"I haven't received my refund yet, it's been 5 business days and I'm getting concerned."</div>
+          <div class="conv-meta">
+            <span class="status-badge status-escalated">Escalated</span>
+            <span class="channel">SMS</span>
+          </div>
+        </div>
+
+        <div class="conv">
+          <div class="conv-head">
+            <span class="conv-name">James Okafor</span>
+            <span class="conv-time">14m</span>
+          </div>
+          <div class="conv-preview">"Thanks for the shipping update — quick follow-up on the warranty claim."</div>
+          <div class="conv-meta">
+            <span class="status-badge status-open">Open</span>
+            <span class="channel">Email</span>
+          </div>
+        </div>
+
+        <div class="conv">
+          <div class="conv-head">
+            <span class="conv-name">Priya Subramaniam</span>
+            <span class="conv-time">38m</span>
+          </div>
+          <div class="conv-preview">"Can someone walk me through the cancellation policy?"</div>
+          <div class="conv-meta">
+            <span class="status-badge status-open">Open</span>
+            <span class="channel">Webchat</span>
+            <span class="ai-badge">AI draft</span>
+          </div>
+        </div>
+
+        <div class="conv">
+          <div class="conv-head">
+            <span class="conv-name">Lukas Berg</span>
+            <span class="conv-time">1h</span>
+          </div>
+          <div class="conv-preview">"My promo code SAVE15 isn't applying at checkout. Tried three times."</div>
+          <div class="conv-meta">
+            <span class="status-badge status-open">Open</span>
+            <span class="channel">SMS</span>
+          </div>
+        </div>
+
+        <div class="conv">
+          <div class="conv-head">
+            <span class="conv-name">Sarah Liang</span>
+            <span class="conv-time">2h</span>
+          </div>
+          <div class="conv-preview">"I need to update the billing email on my team plan to our finance lead's address."</div>
+          <div class="conv-meta">
+            <span class="status-badge status-open">Open</span>
+            <span class="channel">Email</span>
+          </div>
+        </div>
+
+        <div class="conv">
+          <div class="conv-head">
+            <span class="conv-name">Diego Romero</span>
+            <span class="conv-time">3h</span>
+          </div>
+          <div class="conv-preview">"Order #44521 — package marked delivered but I never got it."</div>
+          <div class="conv-meta">
+            <span class="status-badge status-resolved">Resolved</span>
+            <span class="channel">SMS</span>
+          </div>
+        </div>
+
+        <div class="conv">
+          <div class="conv-head">
+            <span class="conv-name">Carlos Mendes</span>
+            <span class="conv-time">5h</span>
+          </div>
+          <div class="conv-preview">"SSO with Okta — sales said it's supported but I can't find the setting."</div>
+          <div class="conv-meta">
+            <span class="status-badge status-pending">Pending</span>
+            <span class="channel">Webchat</span>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ===== MESSAGE THREAD (MessageThread + MessageBubble) ===== -->
+    <div class="thread">
+      <div class="thread-head">
+        <div class="thread-subject">Refund timing — escalated</div>
+        <div class="thread-meta">
+          <span>SMS &middot; +1 555-0142</span>
+          <span>3 messages</span>
+          <span class="ai-state-pill">Drafted</span>
+        </div>
+      </div>
+      <div class="thread-body">
+
+        <div class="bubble in">
+          <div class="sender">Maya Chen &middot; Customer</div>
+          Hi! I was charged on the 14th and the support team said the refund would land in 3&ndash;5 business days. It's now day 6 and nothing. I'm honestly a bit worried &mdash; this is a meaningful amount for me.
+          <div class="bubble-meta">2026-06-13T11:42:08Z</div>
+        </div>
+
+        <div class="bubble ai">
+          <div class="sender">AI Agent</div>
+          I understand the urgency. I checked your account and the refund was issued on the 15th &mdash; it should appear in 1&ndash;2 more business days depending on your bank. If it doesn't land by Friday I'll personally escalate to our payments team and send you a written confirmation.
+          <div class="bubble-meta">2026-06-13T11:44:22Z &middot; awaiting approval</div>
+        </div>
+
+        <div class="bubble in">
+          <div class="sender">Maya Chen &middot; Customer</div>
+          Okay thank you, that helps. One more thing &mdash; can you also tell me why I was charged $14.99 instead of $9.99? My plan was supposed to be the basic one.
+          <div class="bubble-meta">2026-06-13T11:46:15Z</div>
+        </div>
+
+      </div>
+
+      <!-- ===== REPLY COMPOSER (ReplyComposer.tsx) ===== -->
+      <div class="composer">
+        <textarea class="composer-input" placeholder="Reply to Maya, or edit the AI draft above…">Hi Maya &mdash; I checked your subscription and you were charged $14.99 because of an add-on you opted into during signup (priority support). You can see the breakdown in Settings → Billing. Want me to remove it for next month?</textarea>
+        <div class="composer-actions">
+          <button class="btn">Save draft</button>
+          <button class="btn">Internal note</button>
+          <button class="btn">Escalate</button>
+          <span class="send-meta"><kbd>Enter</kbd> to send &middot; <kbd>Shift+Enter</kbd> newline</span>
+          <button class="btn btn-primary">Send</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== RIGHT PANEL: AI Draft Panel (AiDraftPanel.tsx) + Contact Details (ContactDetails.tsx) ===== -->
+    <aside class="ai-panel">
+
+      <!-- ===== Conversation / Contact ===== -->
+      <h3 class="ai-section-h">Contact</h3>
+      <div class="ai-card">
+        <div class="contact-avatar">M</div>
+        <div class="contact-name">Maya Chen</div>
+        <div class="contact-sub">Pro plan &middot; since 2026-05-30</div>
+        <div class="contact">
+          <div class="contact-row"><span class="label">Phone</span><span class="val">+1 555-0142</span></div>
+          <div class="contact-row"><span class="label">Email</span><span class="val">maya@acmecorp.io</span></div>
+          <div class="contact-row"><span class="label">Customer ID</span><span class="val">cust_8f2a1c</span></div>
+          <div class="contact-row"><span class="label">First seen</span><span class="val">14d ago</span></div>
+        </div>
+      </div>
+
+      <!-- ===== AI Draft ===== -->
+      <h3 class="ai-section-h">AI Draft &middot; awaiting approval</h3>
+      <div class="ai-card">
+        <div class="ai-card-label">Decision</div>
+        <div class="ai-draft">
+          I understand the urgency. I checked your account and the refund was issued on the 15th &mdash; it should appear in 1&ndash;2 more business days depending on your bank. If it doesn't land by Friday I'll personally escalate to our payments team and send you a written confirmation.
+        </div>
+        <div class="confidence">
+          <span class="conf-num">0.92</span>
+          <div class="conf-bar"><div class="fill" style="width:92%"></div></div>
+        </div>
+        <div class="tags">
+          <span class="ai-tag">billing</span>
+          <span class="ai-tag">refund</span>
+        </div>
+        <div class="reasoning">
+          <div class="reasoning-label">Reasoning</div>
+          Customer asks about refund timing. No escalation keywords matched (refund keyword alone is informational, not a trigger). KB retrieval confidence sufficient.
+        </div>
+        <div class="ai-actions">
+          <button class="btn">Regenerate</button>
+          <button class="btn btn-primary">Approve &amp; send</button>
+        </div>
+      </div>
+
+      <!-- ===== Activity ===== -->
+      <h3 class="ai-section-h">Activity</h3>
+      <div class="ai-card">
+        <div class="contact">
+          <div class="contact-row"><span class="label">Status</span><span class="val">escalated</span></div>
+          <div class="contact-row"><span class="label">AI state</span><span class="val">drafted</span></div>
+          <div class="contact-row"><span class="label">Last msg</span><span class="val">2m ago</span></div>
+          <div class="contact-row"><span class="label">Prior tickets</span><span class="val">2</span></div>
+        </div>
+      </div>
+
+    </aside>
+
+  </div><!-- /body -->
+</div><!-- /m03 -->
+</div><!-- /shell-inner -->
+</div><!-- /shell -->
+</body>
+</html>

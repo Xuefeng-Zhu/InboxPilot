@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>InboxPilot &middot; M03 &mdash; Knowledge detail</title>
+<style>
+
+  body { margin:0; padding:0; background:#1a1a1a; font-family:Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif; color:#e8e8e8; -webkit-font-smoothing:antialiased; }
+  .meta { padding:20px 24px; border-bottom:1px solid #2a2a2a; position:sticky; top:0; background:#1a1a1a; z-index:50; }
+  .meta h1 { margin:0 0 4px; font-size:13px; font-weight:600; letter-spacing:0.04em; text-transform:uppercase; }
+  .meta p { margin:0; font-size:12px; color:#888; }
+  .meta .nav { margin-top:10px; display:flex; gap:6px; flex-wrap:wrap; }
+  .meta .nav a { display:inline-block; padding:4px 10px; font-size:11px; font-weight:500; color:#e8e8e8; background:#222; border:1px solid #2e2e2e; border-radius:4px; text-decoration:none; }
+  .meta .nav a:hover { background:#2a2a2a; }
+  .meta .nav a.cur { background:#ff5722; color:white; border-color:#ff5722; }
+  .meta .nav .sep { color:#555; padding:0 2px; }
+  .shell { padding:24px; }
+  .shell-inner { border:1px solid #2e2e2e; border-radius:8px; overflow:hidden; box-shadow:0 20px 60px rgba(0,0,0,0.4); min-height:760px; }
+
+  .m03 {
+    --bg:#ffffff; --fg:#000000; --fg-2:#666666; --fg-3:#999999; --fg-4:#cccccc;
+    --line:#eaeaea; --line-2:#f5f5f5;
+    --green:#00aa55; --red:#ee0000; --orange:#ff8800; --signal:#0070f3;
+    --font:'Inter', system-ui, -apple-system, sans-serif;
+    --font-mono:'JetBrains Mono', ui-monospace, monospace;
+    background:var(--bg); color:var(--fg); font-family:var(--font);
+    min-height:760px; display:flex; flex-direction:column;
+  }
+  .m03 a { color:inherit; text-decoration:none; }
+  .m03 .topbar { background:var(--bg); border-bottom:1px solid var(--line); display:flex; align-items:center; padding:0 24px; height:56px; gap:24px; }
+  .m03 .logo { font-weight:500; font-size:14px; letter-spacing:-0.02em; display:flex; align-items:center; gap:8px; }
+  .m03 .logo::before { content:'\25B2'; font-size:11px; color:var(--fg); }
+  .m03 .topbar-nav { display:flex; gap:16px; }
+  .m03 .topbar-nav a { color:var(--fg-2); font-size:13px; }
+  .m03 .topbar-nav a:hover { color:var(--fg); }
+  .m03 .topbar-spacer { flex:1; }
+  .m03 .topbar-cta { display:flex; gap:8px; align-items:center; }
+  .m03 .btn-ghost { font-size:13px; font-weight:500; color:var(--fg-2); padding:6px 12px; border-radius:6px; }
+  .m03 .btn-ghost:hover { background:var(--line-2); color:var(--fg); }
+  .m03 .btn-primary { font-size:13px; font-weight:500; color:var(--bg); padding:6px 14px; border-radius:6px; background:var(--fg); }
+  .m03 .btn-primary:hover { background:var(--fg-2); }
+  .m03 .sidebar { background:var(--bg); border-right:1px solid var(--line); padding:14px 8px; font-size:13px; min-width:220px; }
+  .m03 .sidebar-section { color:var(--fg-3); font-size:11px; text-transform:uppercase; letter-spacing:0.04em; font-weight:500; padding:12px 12px 6px; }
+  .m03 .sidebar a { display:flex; align-items:center; gap:10px; padding:6px 10px; color:var(--fg-2); border-radius:4px; }
+  .m03 .sidebar a.active { background:var(--fg); color:var(--bg); }
+  .m03 .sidebar a:hover:not(.active) { background:var(--line-2); }
+  .m03 .sidebar a .ic { width:14px; }
+  .m03 .sidebar a .badge { margin-left:auto; font-size:10px; color:var(--fg-3); font-family:var(--font-mono); }
+  .m03 .sidebar a.active .badge { color:var(--bg); opacity:0.7; }
+  .m03 .page { flex:1; background:var(--bg); padding:32px 40px; overflow:auto; }
+  .m03 .page h1 { font-size:24px; font-weight:500; letter-spacing:-0.02em; margin:0 0 4px; }
+  .m03 .page .sub { color:var(--fg-2); font-size:13px; margin-bottom:24px; }
+  .m03 .card { background:var(--bg); border:1px solid var(--line); border-radius:8px; padding:18px; }
+  .m03 .card-h { display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; }
+  .m03 .card-h h2 { font-size:14px; font-weight:600; margin:0; }
+  .m03 .card-h a { color:var(--fg-2); font-size:12px; }
+  .m03 .card-h a:hover { color:var(--fg); }
+  .m03 .btn { font-size:13px; font-weight:500; padding:6px 12px; border-radius:6px; border:1px solid var(--line); background:var(--bg); color:var(--fg); cursor:pointer; font-family:inherit; }
+  .m03 .btn:hover { background:var(--line-2); }
+  .m03 .btn-primary { background:var(--fg); color:var(--bg); border-color:var(--fg); }
+  .m03 .btn-primary:hover { background:var(--fg-2); }
+  .m03 .input { background:var(--bg); border:1px solid var(--line); color:var(--fg); font-size:13px; padding:8px 12px; border-radius:6px; font-family:inherit; width:100%; box-sizing:border-box; }
+  .m03 .label { font-size:11px; font-weight:500; color:var(--fg-2); text-transform:uppercase; letter-spacing:0.04em; }
+  .m03 .row { display:flex; align-items:center; gap:10px; }
+  .m03 .stat-num { font-size:32px; font-weight:500; letter-spacing:-0.03em; color:var(--fg); font-variant-numeric:tabular-nums; line-height:1; }
+  .m03 .stat-delta { font-size:11px; color:var(--green); font-family:var(--font-mono); }
+  .m03 .stat-delta.down { color:var(--red); }
+  .m03 .pill { font-size:12px; color:var(--fg-2); padding:4px 10px; border-radius:9999px; border:1px solid var(--line); background:transparent; }
+  .m03 .pill.active { background:var(--fg); color:var(--bg); border-color:var(--fg); }
+  .m03 table { width:100%; border-collapse:collapse; font-size:13px; }
+  .m03 th { text-align:left; font-size:11px; font-weight:500; color:var(--fg-2); text-transform:uppercase; letter-spacing:0.04em; padding:10px 12px; border-bottom:1px solid var(--line); }
+  .m03 td { padding:12px; border-bottom:1px solid var(--line); }
+  .m03 tr:hover td { background:var(--line-2); }
+  .m03 .tag { font-size:10px; font-weight:500; padding:2px 6px; border-radius:3px; font-family:var(--font-mono); text-transform:uppercase; letter-spacing:0.04em; }
+  .m03 .tag-ready { background:var(--green); color:white; }
+  .m03 .tag-processing { background:var(--orange); color:white; }
+  .m03 .tag-draft { background:var(--line-2); color:var(--fg-2); }
+  .m03 .tag-failed { background:var(--red); color:white; }
+
+</style>
+</head>
+<body>
+<div class="meta">
+  <h1>InboxPilot &mdash; M03 &middot; Knowledge detail</h1>
+  <p>Article reader + side metadata (chunks, embedding model, linked conversations).</p>
+  <div class="nav"><a class="cur" href="m03-landing.html">Landing</a>
+    <a href="m03-login.html">Login</a>
+    <a href="m03-knowledge.html">Knowledge</a>
+    <a href="m03-knowledge-detail.html">Knowledge detail</a>
+    <a href="m03-analytics.html">Analytics</a>
+    <a href="m03-settings.html">Settings</a>
+    <span class="sep">|</span>
+    <a href="design-mock-3.html">M03 Inbox</a>
+    <a href="concept-04-symphony.html">Symphony</a></div>
+</div>
+<div class="shell">
+  <div class="shell-inner">
+<div class="m03">
+  <header class="topbar">
+    <div class="logo">InboxPilot</div>
+    <div class="topbar-spacer"></div>
+    <div class="topbar-cta">
+      <a class="btn-ghost" href="#">Docs</a>
+      <a class="btn-ghost" href="#">SL</a>
+      <a class="btn-primary" href="#">+ Compose</a>
+    </div>
+  </header>
+  <div class="row" style="flex:1; align-items:stretch">
+    <aside class="sidebar">
+      <div class="sidebar-section">Workspace</div>
+      <a href="#"><span class="ic">&#9654;</span> Inbox <span class="badge">24</span></a>
+      <a href="#"><span class="ic">&#9733;</span> Mentions</a>
+      <a href="#"><span class="ic">&#9201;</span> Snoozed</a>
+      <a href="#"><span class="ic">&#10003;</span> Done</a>
+      <div class="sidebar-section">Views</div>
+      <a href="#">Mine</a>
+      <a href="#">Unassigned</a>
+      <a href="#">Escalated <span class="badge">3</span></a>
+      <div class="sidebar-section">Manage</div>
+      <a href="#">Knowledge</a>
+      <a href="#">Customers</a>
+      <a href="#">Analytics</a>
+      <a href="#">Team</a>
+      <a href="#">Settings</a>
+    </aside>
+<main class="page">
+  <div class="row" style="gap:8px; margin-bottom:8px; color:var(--fg-2); font-size:12px">
+    <a href="#" style="color:var(--fg-2)">Knowledge</a>
+    <span>/</span>
+    <span style="color:var(--fg)">Refund policy v2</span>
+  </div>
+  <div class="row" style="justify-content:space-between; margin-bottom:16px">
+    <div>
+      <h1>Refund policy v2</h1>
+      <p class="sub">Manual &middot; last updated 2h ago by Maya Chen &middot; 14 chunks &middot; <span class="tag tag-ready">Ready</span></p>
+    </div>
+    <div class="row" style="gap:8px">
+      <button class="btn">Reprocess</button>
+      <button class="btn">Delete</button>
+      <button class="btn btn-primary">Edit</button>
+    </div>
+  </div>
+  <div style="display:grid; grid-template-columns:1fr 280px; gap:16px; align-items:start">
+    <article class="card" style="line-height:1.65; font-size:14px; color:var(--fg-2)">
+      <h2 style="font-size:18px; font-weight:500; color:var(--fg); margin:0 0 12px">Overview</h2>
+      <p>This document is the canonical refund policy for all paid plans on InboxPilot. It supersedes refund policy v1 (2024-09-12) and is the single source of truth for AI drafts and human replies.</p>
+      <h2 style="font-size:18px; font-weight:500; color:var(--fg); margin:24px 0 12px">Eligibility</h2>
+      <p>Refunds are available within 30 days of the original charge, regardless of plan tier. After 30 days, refunds require approval from the payments team and are evaluated case-by-case.</p>
+      <h2 style="font-size:18px; font-weight:500; color:var(--fg); margin:24px 0 12px">Processing time</h2>
+      <p>Approved refunds typically appear on the customer's statement within 3&ndash;5 business days, though some banks may take up to 10 business days. If a refund has not appeared after 7 business days, escalate to the payments team.</p>
+      <h2 style="font-size:18px; font-weight:500; color:var(--fg); margin:24px 0 12px">How to issue</h2>
+      <p>Use the payments dashboard &rarr; search by email &rarr; "Refund" action. The system will issue a Stripe refund and trigger a confirmation email within 60 seconds.</p>
+    </article>
+    <aside style="display:flex; flex-direction:column; gap:12px">
+      <div class="card">
+        <h3 class="label" style="margin:0 0 10px">Metadata</h3>
+        <div style="display:flex; flex-direction:column; gap:6px; font-size:12px">
+          <div class="row" style="justify-content:space-between"><span style="color:var(--fg-2)">Source type</span><span style="color:var(--fg)">Manual</span></div>
+          <div class="row" style="justify-content:space-between"><span style="color:var(--fg-2)">Chunks</span><span style="color:var(--fg)">14</span></div>
+          <div class="row" style="justify-content:space-between"><span style="color:var(--fg-2)">Embedding model</span><span style="color:var(--fg); font-family:var(--font-mono); font-size:11px">text-embed-3</span></div>
+          <div class="row" style="justify-content:space-between"><span style="color:var(--fg-2)">Avg chunk size</span><span style="color:var(--fg)">412 tok</span></div>
+        </div>
+      </div>
+      <div class="card">
+        <h3 class="label" style="margin:0 0 10px">Linked conversations</h3>
+        <div style="font-size:12px; display:flex; flex-direction:column; gap:6px">
+          <a href="#" style="color:var(--fg)">CONV_0241 &middot; Maya Chen &middot; 2h ago</a>
+          <a href="#" style="color:var(--fg)">CONV_0228 &middot; James Okafor &middot; 1d</a>
+          <a href="#" style="color:var(--fg)">CONV_0204 &middot; Priya S. &middot; 2d</a>
+        </div>
+      </div>
+    </aside>
+  </div>
+</main>  </div>
+</div>
+  </div>
+</div>
+</body>
+</html>

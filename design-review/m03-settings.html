@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>InboxPilot &middot; M03 &mdash; Settings &mdash; AI</title>
+<style>
+
+  body { margin:0; padding:0; background:#1a1a1a; font-family:Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif; color:#e8e8e8; -webkit-font-smoothing:antialiased; }
+  .meta { padding:20px 24px; border-bottom:1px solid #2a2a2a; position:sticky; top:0; background:#1a1a1a; z-index:50; }
+  .meta h1 { margin:0 0 4px; font-size:13px; font-weight:600; letter-spacing:0.04em; text-transform:uppercase; }
+  .meta p { margin:0; font-size:12px; color:#888; }
+  .meta .nav { margin-top:10px; display:flex; gap:6px; flex-wrap:wrap; }
+  .meta .nav a { display:inline-block; padding:4px 10px; font-size:11px; font-weight:500; color:#e8e8e8; background:#222; border:1px solid #2e2e2e; border-radius:4px; text-decoration:none; }
+  .meta .nav a:hover { background:#2a2a2a; }
+  .meta .nav a.cur { background:#ff5722; color:white; border-color:#ff5722; }
+  .meta .nav .sep { color:#555; padding:0 2px; }
+  .shell { padding:24px; }
+  .shell-inner { border:1px solid #2e2e2e; border-radius:8px; overflow:hidden; box-shadow:0 20px 60px rgba(0,0,0,0.4); min-height:760px; }
+
+  .m03 {
+    --bg:#ffffff; --fg:#000000; --fg-2:#666666; --fg-3:#999999; --fg-4:#cccccc;
+    --line:#eaeaea; --line-2:#f5f5f5;
+    --green:#00aa55; --red:#ee0000; --orange:#ff8800; --signal:#0070f3;
+    --font:'Inter', system-ui, -apple-system, sans-serif;
+    --font-mono:'JetBrains Mono', ui-monospace, monospace;
+    background:var(--bg); color:var(--fg); font-family:var(--font);
+    min-height:760px; display:flex; flex-direction:column;
+  }
+  .m03 a { color:inherit; text-decoration:none; }
+  .m03 .topbar { background:var(--bg); border-bottom:1px solid var(--line); display:flex; align-items:center; padding:0 24px; height:56px; gap:24px; }
+  .m03 .logo { font-weight:500; font-size:14px; letter-spacing:-0.02em; display:flex; align-items:center; gap:8px; }
+  .m03 .logo::before { content:'\25B2'; font-size:11px; color:var(--fg); }
+  .m03 .topbar-nav { display:flex; gap:16px; }
+  .m03 .topbar-nav a { color:var(--fg-2); font-size:13px; }
+  .m03 .topbar-nav a:hover { color:var(--fg); }
+  .m03 .topbar-spacer { flex:1; }
+  .m03 .topbar-cta { display:flex; gap:8px; align-items:center; }
+  .m03 .btn-ghost { font-size:13px; font-weight:500; color:var(--fg-2); padding:6px 12px; border-radius:6px; }
+  .m03 .btn-ghost:hover { background:var(--line-2); color:var(--fg); }
+  .m03 .btn-primary { font-size:13px; font-weight:500; color:var(--bg); padding:6px 14px; border-radius:6px; background:var(--fg); }
+  .m03 .btn-primary:hover { background:var(--fg-2); }
+  .m03 .sidebar { background:var(--bg); border-right:1px solid var(--line); padding:14px 8px; font-size:13px; min-width:220px; }
+  .m03 .sidebar-section { color:var(--fg-3); font-size:11px; text-transform:uppercase; letter-spacing:0.04em; font-weight:500; padding:12px 12px 6px; }
+  .m03 .sidebar a { display:flex; align-items:center; gap:10px; padding:6px 10px; color:var(--fg-2); border-radius:4px; }
+  .m03 .sidebar a.active { background:var(--fg); color:var(--bg); }
+  .m03 .sidebar a:hover:not(.active) { background:var(--line-2); }
+  .m03 .sidebar a .ic { width:14px; }
+  .m03 .sidebar a .badge { margin-left:auto; font-size:10px; color:var(--fg-3); font-family:var(--font-mono); }
+  .m03 .sidebar a.active .badge { color:var(--bg); opacity:0.7; }
+  .m03 .page { flex:1; background:var(--bg); padding:32px 40px; overflow:auto; }
+  .m03 .page h1 { font-size:24px; font-weight:500; letter-spacing:-0.02em; margin:0 0 4px; }
+  .m03 .page .sub { color:var(--fg-2); font-size:13px; margin-bottom:24px; }
+  .m03 .card { background:var(--bg); border:1px solid var(--line); border-radius:8px; padding:18px; }
+  .m03 .card-h { display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; }
+  .m03 .card-h h2 { font-size:14px; font-weight:600; margin:0; }
+  .m03 .card-h a { color:var(--fg-2); font-size:12px; }
+  .m03 .card-h a:hover { color:var(--fg); }
+  .m03 .btn { font-size:13px; font-weight:500; padding:6px 12px; border-radius:6px; border:1px solid var(--line); background:var(--bg); color:var(--fg); cursor:pointer; font-family:inherit; }
+  .m03 .btn:hover { background:var(--line-2); }
+  .m03 .btn-primary { background:var(--fg); color:var(--bg); border-color:var(--fg); }
+  .m03 .btn-primary:hover { background:var(--fg-2); }
+  .m03 .input { background:var(--bg); border:1px solid var(--line); color:var(--fg); font-size:13px; padding:8px 12px; border-radius:6px; font-family:inherit; width:100%; box-sizing:border-box; }
+  .m03 .label { font-size:11px; font-weight:500; color:var(--fg-2); text-transform:uppercase; letter-spacing:0.04em; }
+  .m03 .row { display:flex; align-items:center; gap:10px; }
+  .m03 .stat-num { font-size:32px; font-weight:500; letter-spacing:-0.03em; color:var(--fg); font-variant-numeric:tabular-nums; line-height:1; }
+  .m03 .stat-delta { font-size:11px; color:var(--green); font-family:var(--font-mono); }
+  .m03 .stat-delta.down { color:var(--red); }
+  .m03 .pill { font-size:12px; color:var(--fg-2); padding:4px 10px; border-radius:9999px; border:1px solid var(--line); background:transparent; }
+  .m03 .pill.active { background:var(--fg); color:var(--bg); border-color:var(--fg); }
+  .m03 table { width:100%; border-collapse:collapse; font-size:13px; }
+  .m03 th { text-align:left; font-size:11px; font-weight:500; color:var(--fg-2); text-transform:uppercase; letter-spacing:0.04em; padding:10px 12px; border-bottom:1px solid var(--line); }
+  .m03 td { padding:12px; border-bottom:1px solid var(--line); }
+  .m03 tr:hover td { background:var(--line-2); }
+  .m03 .tag { font-size:10px; font-weight:500; padding:2px 6px; border-radius:3px; font-family:var(--font-mono); text-transform:uppercase; letter-spacing:0.04em; }
+  .m03 .tag-ready { background:var(--green); color:white; }
+  .m03 .tag-processing { background:var(--orange); color:white; }
+  .m03 .tag-draft { background:var(--line-2); color:var(--fg-2); }
+  .m03 .tag-failed { background:var(--red); color:white; }
+
+</style>
+</head>
+<body>
+<div class="meta">
+  <h1>InboxPilot &mdash; M03 &middot; Settings &mdash; AI</h1>
+  <p>Tabbed nav (left) + form sections (right). AI behavior, keywords, model.</p>
+  <div class="nav"><a class="cur" href="m03-landing.html">Landing</a>
+    <a href="m03-login.html">Login</a>
+    <a href="m03-knowledge.html">Knowledge</a>
+    <a href="m03-knowledge-detail.html">Knowledge detail</a>
+    <a href="m03-analytics.html">Analytics</a>
+    <a href="m03-settings.html">Settings</a>
+    <span class="sep">|</span>
+    <a href="design-mock-3.html">M03 Inbox</a>
+    <a href="concept-04-symphony.html">Symphony</a></div>
+</div>
+<div class="shell">
+  <div class="shell-inner">
+<div class="m03">
+  <header class="topbar">
+    <div class="logo">InboxPilot</div>
+    <div class="topbar-spacer"></div>
+    <div class="topbar-cta">
+      <a class="btn-ghost" href="#">Docs</a>
+      <a class="btn-ghost" href="#">SL</a>
+      <a class="btn-primary" href="#">+ Compose</a>
+    </div>
+  </header>
+  <div class="row" style="flex:1; align-items:stretch">
+    <aside class="sidebar">
+      <div class="sidebar-section">Workspace</div>
+      <a href="#"><span class="ic">&#9654;</span> Inbox <span class="badge">24</span></a>
+      <a href="#"><span class="ic">&#9733;</span> Mentions</a>
+      <a href="#"><span class="ic">&#9201;</span> Snoozed</a>
+      <a href="#"><span class="ic">&#10003;</span> Done</a>
+      <div class="sidebar-section">Views</div>
+      <a href="#">Mine</a>
+      <a href="#">Unassigned</a>
+      <a href="#">Escalated <span class="badge">3</span></a>
+      <div class="sidebar-section">Manage</div>
+      <a href="#">Knowledge</a>
+      <a href="#">Customers</a>
+      <a href="#">Analytics</a>
+      <a href="#">Team</a>
+      <a href="#">Settings</a>
+    </aside>
+<main class="page">
+  <div style="margin-bottom:20px"><h1>Settings</h1><p class="sub">Workspace &middot; Acme Support</p></div>
+  <div style="display:grid; grid-template-columns:200px 1fr; gap:16px; align-items:start">
+    <nav class="card" style="padding:8px"><a href="#" style="display:block; padding:8px 12px; border-radius:4px; color:var(--fg-2); font-size:13px">General</a>
+<a href="#" style="display:block; padding:8px 12px; border-radius:4px; background:var(--fg); color:var(--bg); font-size:13px; font-weight:500">AI</a>
+<a href="#" style="display:block; padding:8px 12px; border-radius:4px; color:var(--fg-2); font-size:13px">SMS channels</a>
+<a href="#" style="display:block; padding:8px 12px; border-radius:4px; color:var(--fg-2); font-size:13px">Email channels</a>
+<a href="#" style="display:block; padding:8px 12px; border-radius:4px; color:var(--fg-2); font-size:13px">Webchat</a>
+<a href="#" style="display:block; padding:8px 12px; border-radius:4px; color:var(--fg-2); font-size:13px">Team</a>
+<a href="#" style="display:block; padding:8px 12px; border-radius:4px; color:var(--fg-2); font-size:13px">Billing</a>
+<a href="#" style="display:block; padding:8px 12px; border-radius:4px; color:var(--fg-2); font-size:13px">Audit log</a></nav>
+    <div style="display:flex; flex-direction:column; gap:16px">
+      <div class="card">
+        <div class="card-h"><h2>AI behavior</h2></div>
+        <div style="display:grid; grid-template-columns:200px 1fr; gap:14px 18px; align-items:center">
+          <div class="label">Mode</div>
+          <div class="row" style="gap:6px">
+            <span class="pill">Off</span>
+            <span class="pill active">Draft only</span>
+            <span class="pill">Auto-reply</span>
+          </div>
+          <div class="label">Business name</div>
+          <input class="input" value="Acme Support" />
+          <div class="label">Business description</div>
+          <textarea class="input" rows="2">Friendly US-based support for Acme's Pro and Team plans. Tone is direct, kind, and technical when needed.</textarea>
+          <div class="label">Support persona</div>
+          <input class="input" value="Maya, a senior support specialist at Acme" />
+          <div class="label">Auto-reply threshold</div>
+          <div class="row" style="gap:10px"><input class="input" value="0.85" style="max-width:100px" /><span style="color:var(--fg-2); font-size:12px">Send automatically when confidence &ge; threshold and no escalation rule fires</span></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-h"><h2>Escalation keywords</h2><a href="#">+ Add keyword</a></div>
+        <div style="display:flex; flex-wrap:wrap; gap:6px">
+          <span class="pill" style="background:var(--red); color:white; border-color:transparent">refund <span style="opacity:0.6; margin-left:4px">&times;</span></span>
+          <span class="pill" style="background:var(--red); color:white; border-color:transparent">chargeback <span style="opacity:0.6; margin-left:4px">&times;</span></span>
+          <span class="pill" style="background:var(--red); color:white; border-color:transparent">cancel <span style="opacity:0.6; margin-left:4px">&times;</span></span>
+          <span class="pill" style="background:var(--red); color:white; border-color:transparent">lawyer <span style="opacity:0.6; margin-left:4px">&times;</span></span>
+          <span class="pill" style="background:var(--red); color:white; border-color:transparent">sue <span style="opacity:0.6; margin-left:4px">&times;</span></span>
+          <span class="pill" style="background:var(--red); color:white; border-color:transparent">fraud <span style="opacity:0.6; margin-left:4px">&times;</span></span>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-h"><h2>Model</h2></div>
+        <div style="display:grid; grid-template-columns:200px 1fr; gap:14px 18px; align-items:center">
+          <div class="label">Chat model</div>
+          <input class="input" value="openai/gpt-4o-mini" />
+          <div class="label">Embedding model</div>
+          <input class="input" value="openai/text-embedding-3-small" />
+        </div>
+      </div>
+      <div class="row" style="justify-content:flex-end; gap:8px">
+        <button class="btn">Cancel</button>
+        <button class="btn btn-primary">Save changes</button>
+      </div>
+    </div>
+  </div>
+</main>  </div>
+</div>
+  </div>
+</div>
+</body>
+</html>

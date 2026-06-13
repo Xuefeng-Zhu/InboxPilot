@@ -129,6 +129,9 @@ export class ConversationRepository {
     if (input.status !== undefined) row.status = input.status;
     if (input.aiState !== undefined) row.ai_state = input.aiState;
     if (input.subject !== undefined) row.subject = input.subject;
+    if (input.lastMessageAt !== undefined) {
+      row.last_message_at = input.lastMessageAt ? input.lastMessageAt.toISOString() : null;
+    }
 
     const { data, error } = await this.db
       .from('conversations')

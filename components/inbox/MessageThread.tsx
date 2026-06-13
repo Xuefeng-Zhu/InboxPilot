@@ -3,7 +3,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth-context';
-import { useConversation, useMessages, useAiDecision, queryKeys } from '@/lib/queries';
+import {
+  MESSAGE_PAGE_SIZE,
+  useConversation,
+  useInfiniteMessages,
+  useAiDecision,
+  queryKeys,
+} from '@/lib/queries';
 import { useRealtime } from '@/lib/use-realtime';
 import { MessageBubble, type MessageRow } from './MessageBubble';
 import { ReplyComposer } from './ReplyComposer';
@@ -25,24 +31,107 @@ export function MessageThread({ conversationId }: MessageThreadProps) {
   const queryClient = useQueryClient();
   const [rightTab, setRightTab] = useState<'insight' | 'customer' | 'audit'>('insight');
   const scrollRef = useRef<HTMLDivElement>(null);
+  const topSentinelRef = useRef<HTMLDivElement>(null);
+  const hasInitialScrollRef = useRef(false);
+  const isPrependingRef = useRef(false);
+  const nearBottomRef = useRef(true);
+  const previousScrollHeightRef = useRef(0);
+  const previousScrollTopRef = useRef(0);
 
   const { data: conversationData, isLoading: convoLoading, error: convoError } = useConversation(conversationId);
-  const { data: messagesData, isLoading: msgsLoading } = useMessages(conversationId);
+  const {
+    items: messagesData,
+    isInitialLoading: msgsLoading,
+    isFetchingNextPage,
+    isFetchNextPageError,
+    hasNextPage,
+    fetchNextPage,
+    error: msgsError,
+  } = useInfiniteMessages(conversationId);
 
   const conversation = conversationData as ConversationRow | undefined;
-  const messages = (messagesData ?? []) as MessageRow[];
+  const messages = (messagesData ?? []) as unknown as MessageRow[];
 
-  // Scroll to bottom when messages change
   useEffect(() => {
+    hasInitialScrollRef.current = false;
+    isPrependingRef.current = false;
+    nearBottomRef.current = true;
+    previousScrollHeightRef.current = 0;
+    previousScrollTopRef.current = 0;
+  }, [conversationId]);
+
+  function isNearBottom(element: HTMLDivElement) {
+    return element.scrollHeight - element.scrollTop - element.clientHeight < 96;
+  }
+
+  function handleScroll() {
     if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+      nearBottomRef.current = isNearBottom(scrollRef.current);
     }
-  }, [messages]);
+  }
+
+  useEffect(() => {
+    const scrollRoot = scrollRef.current;
+    const sentinel = topSentinelRef.current;
+    if (
+      !scrollRoot ||
+      !sentinel ||
+      !hasNextPage ||
+      isFetchNextPageError ||
+      typeof IntersectionObserver === 'undefined'
+    ) {
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry?.isIntersecting && hasNextPage && !isFetchingNextPage) {
+          previousScrollHeightRef.current = scrollRoot.scrollHeight;
+          previousScrollTopRef.current = scrollRoot.scrollTop;
+          isPrependingRef.current = true;
+          void fetchNextPage();
+        }
+      },
+      { root: scrollRoot, rootMargin: '160px 0px 0px' },
+    );
+
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [fetchNextPage, hasNextPage, isFetchNextPageError, isFetchingNextPage]);
+
+  // Preserve top position when older messages prepend, otherwise keep the user
+  // at the bottom only on first load or when they were already near the bottom.
+  useEffect(() => {
+    if (msgsLoading || !scrollRef.current) return;
+
+    const scrollRoot = scrollRef.current;
+
+    if (isPrependingRef.current) {
+      requestAnimationFrame(() => {
+        const heightDelta = scrollRoot.scrollHeight - previousScrollHeightRef.current;
+        scrollRoot.scrollTop = previousScrollTopRef.current + heightDelta;
+        nearBottomRef.current = isNearBottom(scrollRoot);
+        isPrependingRef.current = false;
+      });
+      return;
+    }
+
+    if (!hasInitialScrollRef.current || nearBottomRef.current) {
+      requestAnimationFrame(() => {
+        scrollRoot.scrollTop = scrollRoot.scrollHeight;
+        nearBottomRef.current = true;
+        hasInitialScrollRef.current = true;
+      });
+    }
+  }, [conversationId, messages.length, msgsLoading]);
 
   // Realtime: invalidate queries on new messages
   useRealtime({
     onNewMessage: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.messages(conversationId) });
+      if (scrollRef.current) {
+        nearBottomRef.current = isNearBottom(scrollRef.current);
+      }
+      queryClient.invalidateQueries({ queryKey: queryKeys.messagesInfinite(conversationId, MESSAGE_PAGE_SIZE) });
       queryClient.invalidateQueries({ queryKey: queryKeys.conversation(conversationId) });
       queryClient.invalidateQueries({ queryKey: queryKeys.aiDecision(conversationId) });
     },
@@ -66,11 +155,11 @@ export function MessageThread({ conversationId }: MessageThreadProps) {
     );
   }
 
-  if (convoError) {
+  if (convoError || (msgsError && messages.length === 0)) {
     return (
       <div className="flex flex-1 items-center justify-center p-8">
         <div role="alert" className="rounded bg-red-50 p-4 text-body-sm text-red-700">
-          {convoError.message}
+          {convoError?.message ?? msgsError?.message}
         </div>
       </div>
     );
@@ -121,13 +210,49 @@ export function MessageThread({ conversationId }: MessageThreadProps) {
         </header>
 
         {/* Messages */}
-        <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-4 bg-surface-background" role="log" aria-label="Message history" aria-live="polite">
+        <div
+          ref={scrollRef}
+          onScroll={handleScroll}
+          className="flex-1 overflow-y-auto px-4 py-4 bg-surface-background"
+          role="log"
+          aria-label="Message history"
+          aria-live="polite"
+        >
           {messages.length === 0 ? (
             <div className="flex h-full items-center justify-center">
               <p className="text-body-sm text-gray-400">No messages yet.</p>
             </div>
           ) : (
             <div className="space-y-4">
+              {hasNextPage && <div ref={topSentinelRef} className="h-1" aria-hidden="true" />}
+              {isFetchingNextPage && (
+                <div className="flex items-center justify-center gap-2 rounded border border-surface-border bg-white px-3 py-2 text-body-sm text-gray-500">
+                  <svg className="h-4 w-4 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                  Loading older messages…
+                </div>
+              )}
+              {isFetchNextPageError && (
+                <div className="rounded border border-red-100 bg-red-50 px-3 py-2 text-center text-body-sm">
+                  <p role="alert" className="mb-2 text-red-700">{msgsError?.message ?? 'Could not load older messages.'}</p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (scrollRef.current) {
+                        previousScrollHeightRef.current = scrollRef.current.scrollHeight;
+                        previousScrollTopRef.current = scrollRef.current.scrollTop;
+                        isPrependingRef.current = true;
+                      }
+                      void fetchNextPage();
+                    }}
+                    className="rounded border border-red-200 bg-white px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-50"
+                  >
+                    Retry
+                  </button>
+                </div>
+              )}
               {messages.map((msg) => <MessageBubble key={msg.id} message={msg} />)}
             </div>
           )}

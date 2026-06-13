@@ -79,7 +79,7 @@ function InboxContent() {
             onClearAll={handleClearAll}
           />
 
-          <div className="flex-1 overflow-y-auto">
+          <div className="flex-1 overflow-hidden">
             <ConversationList
               selectedId={selectedConversationId}
               onSelect={setSelectedConversationId}

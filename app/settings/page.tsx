@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useMemo } from 'react';
+import { Suspense, useCallback, useMemo } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { AppShell } from '@/components/layout';
 import AiSettingsPanel from './_components/AiSettingsPanel';
@@ -21,7 +21,7 @@ type TabId = (typeof tabs)[number]['id'];
 const DEFAULT_TAB: TabId = 'ai';
 const TAB_IDS = new Set<string>(tabs.map((t) => t.id));
 
-export default function SettingsPage() {
+function SettingsTabs() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -41,6 +41,49 @@ export default function SettingsPage() {
   );
 
   return (
+    <>
+      {/* Tabs navigation */}
+      <nav className="mt-6 border-b border-surface-border" aria-label="Settings tabs">
+        <div className="-mb-px flex gap-6" role="tablist">
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              role="tab"
+              aria-selected={activeTab === tab.id}
+              aria-controls={`panel-${tab.id}`}
+              id={`tab-${tab.id}`}
+              onClick={() => handleTabClick(tab.id)}
+              className={`whitespace-nowrap border-b-2 px-1 pb-3 text-body-md font-medium transition-colors ${
+                activeTab === tab.id
+                  ? 'border-primary text-primary'
+                  : 'border-transparent text-gray-500 hover:border-surface-border hover:text-gray-700'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      </nav>
+
+      {/* Tab panels */}
+      <div className="mt-6">
+        <div
+          role="tabpanel"
+          id={`panel-${activeTab}`}
+          aria-labelledby={`tab-${activeTab}`}
+        >
+          {activeTab === 'ai' && <AiSettingsPanel />}
+          {activeTab === 'email' && <EmailSettingsPanel />}
+          {activeTab === 'sms' && <SmsSettingsPanel />}
+          {activeTab === 'webchat' && <WebchatSettingsPanel />}
+        </div>
+      </div>
+    </>
+  );
+}
+
+export default function SettingsPage() {
+  return (
     <AppShell>
       <div className="p-container-margin">
         <div className="mx-auto max-w-3xl">
@@ -51,42 +94,9 @@ export default function SettingsPage() {
             </p>
           </header>
 
-          {/* Tabs navigation */}
-          <nav className="mt-6 border-b border-surface-border" aria-label="Settings tabs">
-            <div className="-mb-px flex gap-6" role="tablist">
-              {tabs.map((tab) => (
-                <button
-                  key={tab.id}
-                  role="tab"
-                  aria-selected={activeTab === tab.id}
-                  aria-controls={`panel-${tab.id}`}
-                  id={`tab-${tab.id}`}
-                  onClick={() => handleTabClick(tab.id)}
-                  className={`whitespace-nowrap border-b-2 px-1 pb-3 text-body-md font-medium transition-colors ${
-                    activeTab === tab.id
-                      ? 'border-primary text-primary'
-                      : 'border-transparent text-gray-500 hover:border-surface-border hover:text-gray-700'
-                  }`}
-                >
-                  {tab.label}
-                </button>
-              ))}
-            </div>
-          </nav>
-
-          {/* Tab panels */}
-          <div className="mt-6">
-            <div
-              role="tabpanel"
-              id={`panel-${activeTab}`}
-              aria-labelledby={`tab-${activeTab}`}
-            >
-              {activeTab === 'ai' && <AiSettingsPanel />}
-              {activeTab === 'email' && <EmailSettingsPanel />}
-              {activeTab === 'sms' && <SmsSettingsPanel />}
-              {activeTab === 'webchat' && <WebchatSettingsPanel />}
-            </div>
-          </div>
+          <Suspense fallback={null}>
+            <SettingsTabs />
+          </Suspense>
         </div>
       </div>
     </AppShell>

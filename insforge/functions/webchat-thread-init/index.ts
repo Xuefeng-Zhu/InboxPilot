@@ -151,6 +151,7 @@ export default async function (req: Request): Promise<Response> {
 
     // 10. If widget has a greeting and no messages exist, insert greeting as system message
     if (widget.greeting && history.length === 0) {
+      const greetingCreatedAt = new Date().toISOString();
       await db.from('messages').insert({
         conversation_id: result.conversation.id,
         sender_type: 'system',
@@ -160,13 +161,22 @@ export default async function (req: Request): Promise<Response> {
         provider: 'webchat',
         external_message_id: `wc_greeting_${result.thread.id}`,
         delivery_status: 'sent',
+        created_at: greetingCreatedAt,
       });
+
+      await db
+        .from('conversations')
+        .update({
+          last_message_at: greetingCreatedAt,
+          updated_at: greetingCreatedAt,
+        })
+        .eq('id', result.conversation.id);
 
       history.push({
         id: 'greeting',
         body: widget.greeting,
         sender_type: 'system',
-        created_at: new Date().toISOString(),
+        created_at: greetingCreatedAt,
       });
     }
 

@@ -75,6 +75,10 @@ function getConversationPreview(conversation: ConversationRow): string {
   return 'No messages yet';
 }
 
+function getConversationTimestamp(conversation: ConversationRow): string | null {
+  return conversation.last_message_at ?? conversation.latest_message?.created_at ?? conversation.created_at;
+}
+
 function formatTimestamp(dateStr: string | null): string {
   if (!dateStr) return '';
   const date = new Date(dateStr);
@@ -117,6 +121,7 @@ export function ConversationItem({
   const displayName = getContactDisplayName(conversation);
   const title = getConversationTitle(conversation);
   const preview = getConversationPreview(conversation);
+  const timestamp = getConversationTimestamp(conversation);
 
   return (
     <button
@@ -152,7 +157,7 @@ export function ConversationItem({
               {displayName}
             </span>
             <span className="shrink-0 text-label-sm text-gray-400">
-              {formatTimestamp(conversation.last_message_at)}
+              {formatTimestamp(timestamp)}
             </span>
           </div>
 

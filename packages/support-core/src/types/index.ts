@@ -375,6 +375,7 @@ export interface CreateConversationInput {
   status?: ConversationStatus;
   aiState?: AiState;
   subject?: string | null;
+  lastMessageAt?: Date | null;
 }
 
 export interface CreateMessageInput {

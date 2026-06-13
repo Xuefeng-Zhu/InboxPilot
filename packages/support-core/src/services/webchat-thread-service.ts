@@ -90,12 +90,14 @@ export class WebchatThreadService {
     }
 
     // 2. Create conversation
+    const now = new Date();
     const conversation = await this.conversationRepo.create({
       organizationId,
       contactId: contact.id,
       channel: 'webchat',
       status: 'open',
       aiState: 'idle',
+      lastMessageAt: now,
     });
 
     // 3. Generate visitor token JTI

@@ -144,7 +144,7 @@ describe('Feature: stitch-ui-implementation, Property 7: Conversation item infor
       ai_state: 'auto_replied',
       subject: null,
       assigned_to: null,
-      last_message_at: new Date().toISOString(),
+      last_message_at: null,
       metadata: {},
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
@@ -175,6 +175,7 @@ describe('Feature: stitch-ui-implementation, Property 7: Conversation item infor
     );
 
     expect(getByText('Visitor #44444444')).toBeTruthy();
+    expect(getByText('Just now')).toBeTruthy();
     expect(getByText('Web chat conversation')).toBeTruthy();
     expect(getByText('order status')).toBeTruthy();
     expect(queryByText('No subject')).toBeNull();

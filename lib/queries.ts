@@ -89,7 +89,42 @@ export function useConversations(
 
       const { data, error } = await query;
       if (error) throw new Error(error.message);
-      return Array.isArray(data) ? data : data ? [data] : [];
+      const conversations = Array.isArray(data) ? data : data ? [data] : [];
+      const conversationIds = conversations
+        .map((conversation) => (conversation as { id?: unknown }).id)
+        .filter((id): id is string => typeof id === 'string');
+
+      if (conversationIds.length === 0) {
+        return conversations;
+      }
+
+      const { data: messages, error: messagesError } = await insforge.database
+        .from('messages')
+        .select('conversation_id,body,subject,created_at')
+        .in('conversation_id', conversationIds)
+        .order('created_at', { ascending: false });
+
+      if (messagesError) throw new Error(messagesError.message);
+
+      const latestByConversation = new Map<string, unknown>();
+      const messageRows = Array.isArray(messages) ? messages : messages ? [messages] : [];
+      for (const message of messageRows) {
+        const conversationId = (message as { conversation_id?: unknown }).conversation_id;
+        if (typeof conversationId === 'string' && !latestByConversation.has(conversationId)) {
+          latestByConversation.set(conversationId, message);
+        }
+      }
+
+      return conversations.map((conversation) => {
+        const conversationId = (conversation as { id?: unknown }).id;
+        return {
+          ...(conversation as Record<string, unknown>),
+          latest_message:
+            typeof conversationId === 'string'
+              ? latestByConversation.get(conversationId) ?? null
+              : null,
+        };
+      });
     },
     enabled: authReady && !!orgId,
   });

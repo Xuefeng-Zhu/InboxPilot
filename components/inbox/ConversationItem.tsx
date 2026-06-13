@@ -22,6 +22,7 @@ export interface ConversationRow {
   created_at: string;
   updated_at: string;
   contacts: ContactRow | null;
+  latest_message?: MessagePreviewRow | null;
 }
 
 export interface ContactRow {
@@ -35,17 +36,43 @@ export interface ContactRow {
   updated_at: string;
 }
 
+export interface MessagePreviewRow {
+  conversation_id: string;
+  body: string;
+  subject: string | null;
+  created_at: string;
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-function getContactDisplayName(contact: ContactRow | null, channel: Channel): string {
+function getShortIdentifier(id: string): string {
+  return id.slice(0, 8);
+}
+
+function getContactDisplayName(conversation: ConversationRow): string {
+  const { contacts: contact, channel } = conversation;
   if (!contact) return 'Unknown Contact';
   if (contact.name) return contact.name;
   if (channel === 'sms' && contact.phone) return contact.phone;
   if (channel === 'email' && contact.email) return contact.email;
-  if (channel === 'webchat') return contact.email ?? contact.name ?? 'Visitor';
+  if (channel === 'webchat') return contact.email ?? `Visitor #${getShortIdentifier(contact.id)}`;
   return contact.phone ?? contact.email ?? 'Unknown Contact';
+}
+
+function getConversationTitle(conversation: ConversationRow): string {
+  const subject = conversation.subject ?? conversation.latest_message?.subject;
+  if (subject?.trim()) return subject.trim();
+  if (conversation.channel === 'webchat') return 'Web chat conversation';
+  if (conversation.channel === 'sms') return 'SMS conversation';
+  return 'Email conversation';
+}
+
+function getConversationPreview(conversation: ConversationRow): string {
+  const body = conversation.latest_message?.body;
+  if (body?.trim()) return body.trim();
+  return 'No messages yet';
 }
 
 function formatTimestamp(dateStr: string | null): string {
@@ -87,7 +114,9 @@ export function ConversationItem({
   isUnread = false,
   onSelect,
 }: ConversationItemProps) {
-  const displayName = getContactDisplayName(conversation.contacts, conversation.channel);
+  const displayName = getContactDisplayName(conversation);
+  const title = getConversationTitle(conversation);
+  const preview = getConversationPreview(conversation);
 
   return (
     <button
@@ -132,12 +161,12 @@ export function ConversationItem({
             'mt-0.5 text-body-sm text-gray-700 truncate',
             isUnread && 'font-medium'
           )}>
-            {conversation.subject ?? 'No subject'}
+            {title}
           </p>
 
           {/* Row 3: Preview text */}
           <p className="mt-0.5 text-body-sm text-gray-500 line-clamp-1">
-            {conversation.subject ? displayName : 'No preview available'}
+            {preview}
           </p>
 
           {/* Row 4: Channel badge + Status badge */}

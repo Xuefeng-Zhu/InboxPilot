@@ -29,7 +29,9 @@ vi.mock('next/link', () => ({
 
 // --- Arbitraries ---
 
-const channelArb = fc.constantFrom('sms', 'email') as fc.Arbitrary<'sms' | 'email'>;
+const channelArb = fc.constantFrom('sms', 'email', 'webchat') as fc.Arbitrary<
+  'sms' | 'email' | 'webchat'
+>;
 
 const statusArb = fc.constantFrom('open', 'pending', 'escalated', 'resolved') as fc.Arbitrary<
   'open' | 'pending' | 'escalated' | 'resolved'
@@ -69,6 +71,15 @@ const conversationArb = fc.record({
     created_at: fc.constant(new Date().toISOString()),
     updated_at: fc.constant(new Date().toISOString()),
   }),
+  latest_message: fc.option(
+    fc.record({
+      conversation_id: fc.uuid(),
+      body: fc.string({ minLength: 1, maxLength: 160 }),
+      subject: fc.option(fc.string({ minLength: 1, maxLength: 50 }), { nil: null }),
+      created_at: fc.constant(new Date().toISOString()),
+    }),
+    { nil: null },
+  ),
 }) as fc.Arbitrary<ConversationRow>;
 
 const isUnreadArb = fc.boolean();
@@ -101,7 +112,7 @@ describe('Feature: stitch-ui-implementation, Property 7: Conversation item infor
     );
   });
 
-  it('renders a channel indicator (Email or SMS) for any valid conversation', () => {
+  it('renders a channel indicator for any valid conversation', () => {
     fc.assert(
       fc.property(conversationArb, isUnreadArb, isSelectedArb, (conversation, isUnread, isSelected) => {
         const onSelect = vi.fn();
@@ -115,11 +126,59 @@ describe('Feature: stitch-ui-implementation, Property 7: Conversation item infor
         );
 
         const textContent = container.textContent ?? '';
-        const hasChannelIndicator = textContent.includes('Email') || textContent.includes('SMS');
+        const hasChannelIndicator =
+          textContent.includes('Email') || textContent.includes('SMS') || textContent.includes('Web');
         expect(hasChannelIndicator).toBe(true);
       }),
       { numRuns: 100 },
     );
+  });
+
+  it('renders useful anonymous webchat fallbacks with a stable visitor id and preview', () => {
+    const conversation: ConversationRow = {
+      id: '11111111-1111-4111-8111-111111111111',
+      organization_id: '22222222-2222-4222-8222-222222222222',
+      contact_id: '33333333-3333-4333-8333-333333333333',
+      channel: 'webchat',
+      status: 'open',
+      ai_state: 'auto_replied',
+      subject: null,
+      assigned_to: null,
+      last_message_at: new Date().toISOString(),
+      metadata: {},
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      contacts: {
+        id: '44444444-4444-4444-8444-444444444444',
+        organization_id: '22222222-2222-4222-8222-222222222222',
+        name: null,
+        email: null,
+        phone: null,
+        metadata: {},
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+      latest_message: {
+        conversation_id: '11111111-1111-4111-8111-111111111111',
+        body: 'order status',
+        subject: null,
+        created_at: new Date().toISOString(),
+      },
+    };
+
+    const { getByText, queryByText } = render(
+      <ConversationItem
+        conversation={conversation}
+        isSelected={false}
+        onSelect={vi.fn()}
+      />,
+    );
+
+    expect(getByText('Visitor #44444444')).toBeTruthy();
+    expect(getByText('Web chat conversation')).toBeTruthy();
+    expect(getByText('order status')).toBeTruthy();
+    expect(queryByText('No subject')).toBeNull();
+    expect(queryByText('No preview available')).toBeNull();
   });
 
   it('renders a status badge for any valid conversation', () => {

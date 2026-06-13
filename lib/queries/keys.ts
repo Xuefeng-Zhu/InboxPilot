@@ -1,0 +1,48 @@
+export const CONVERSATION_PAGE_SIZE = 25;
+export const MESSAGE_PAGE_SIZE = 50;
+
+export type ConversationListRow = Record<string, unknown> & {
+  id?: unknown;
+  last_message_at?: unknown;
+  created_at?: unknown;
+  latest_message?: unknown;
+};
+
+export type ConversationListItem = {
+  id: string;
+  organization_id: string;
+  contact_id: string;
+  channel: string;
+  status: string;
+  ai_state: string;
+  subject: string | null;
+  assigned_to: string | null;
+  last_message_at: string | null;
+  created_at: string;
+  contacts: Record<string, unknown> | null;
+  latest_message?: { conversation_id: string; body: string; subject: string | null; created_at: string } | null;
+};
+
+export type MessageListRow = Record<string, unknown> & {
+  conversation_id?: unknown;
+  created_at?: unknown;
+};
+
+export const queryKeys = {
+  conversations: (orgId: string, filters?: Record<string, unknown>) =>
+    ['conversations', orgId, filters] as const,
+  conversationsInfinite: (orgId: string, filters?: Record<string, unknown>, pageSize = CONVERSATION_PAGE_SIZE) =>
+    ['conversations', 'infinite', orgId, filters, pageSize] as const,
+  messages: (conversationId: string) => ['messages', conversationId] as const,
+  messagesInfinite: (conversationId: string, pageSize = MESSAGE_PAGE_SIZE) =>
+    ['messages', 'infinite', conversationId, pageSize] as const,
+  conversation: (id: string) => ['conversation', id] as const,
+  contacts: (filters?: Record<string, unknown>) => ['contacts', filters] as const,
+  contact: (id: string) => ['contact', id] as const,
+  knowledgeDocs: () => ['knowledge-documents'] as const,
+  knowledgeDoc: (id: string) => ['knowledge-document', id] as const,
+  teamMembers: () => ['team-members'] as const,
+  organization: (orgId: string) => ['organization', orgId] as const,
+  aiDecision: (conversationId: string) => ['ai-decision', conversationId] as const,
+  orgMembership: (userId: string) => ['org-membership', userId] as const,
+};

@@ -10,4 +10,5 @@ export { StatusBadge } from './StatusBadge';
 export { Tooltip } from './Tooltip';
 export { Card } from './Card';
 export { MetricCard } from './MetricCard';
+export { Pill, Tag, type PillTone } from './Chips';
 export { cn } from './cn';

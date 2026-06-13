@@ -51,6 +51,18 @@
   --background: #f9fafb;
   --foreground: #1b1b24;
   --border: #e5e7eb;
+
+  /* ─── Monochrome design tokens (Vercel-grade) ───────────────────────────── */
+  --m03-bg: #ffffff;
+  --m03-fg: #000000;
+  --m03-fg-2: #666666;
+  --m03-fg-3: #999999;
+  --m03-fg-4: #cccccc;
+  --m03-line: #eaeaea;
+  --m03-line-2: #f5f5f5;
+  --m03-green: #00aa55;
+  --m03-red: #ee0000;
+  --m03-orange: #ff8800;
 }
 
 body {

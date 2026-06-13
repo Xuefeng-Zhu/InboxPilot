@@ -1,14 +1,17 @@
 'use client';
 
-import { use, useState } from 'react';
+import { use, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth-context';
 import { useKnowledgeDoc, queryKeys } from '@/lib/queries';
 import { insforge } from '@/lib/insforge';
-import { AppShell } from '@/components/layout';
-import { Button } from '@/components/ui';
-import { DocumentHeader, DocumentContent } from '@/components/knowledge';
+import { DashboardShell } from '@/components/DashboardShell';
+import { Tag } from '@/components/ui';
+import { MarkdownEditor } from '@/components/knowledge/MarkdownEditor';
+import { MarkdownRenderer } from '@/components/knowledge/MarkdownRenderer';
+import { SOURCE_TYPES } from '@/components/knowledge/types';
 
 export default function KnowledgeDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -25,6 +28,59 @@ export default function KnowledgeDetailPage({ params }: { params: Promise<{ id: 
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+
+  const [chunkCount, setChunkCount] = useState<number | null>(null);
+  const [linkedConversations, setLinkedConversations] = useState<
+    Array<{ id: string; customer_name: string; updated_at: string }>
+  >([]);
+
+  useEffect(() => {
+    if (!doc) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data, count } = await insforge.database
+          .from('knowledge_chunks')
+          .select('id', { count: 'exact' })
+          .eq('document_id', doc.id);
+        if (cancelled) return;
+        if (typeof count === 'number') {
+          setChunkCount(count);
+        } else if (Array.isArray(data)) {
+          setChunkCount(data.length);
+        }
+
+        // Linked conversations: ai_decisions that referenced a chunk from this doc
+        const { data: links } = await insforge.database
+          .from('ai_decisions')
+          .select('conversation_id,conversations(id,customer_name,last_message_at)')
+          .limit(50);
+        if (cancelled || !links) return;
+        const seen = new Set<string>();
+        const list: Array<{ id: string; customer_name: string; updated_at: string }> = [];
+        for (const row of links as unknown as Array<{
+          conversation_id: string;
+          conversations: { id: string; customer_name: string; last_message_at: string } | null;
+        }>) {
+          if (!row.conversations) continue;
+          if (seen.has(row.conversations.id)) continue;
+          seen.add(row.conversations.id);
+          list.push({
+            id: row.conversations.id,
+            customer_name: row.conversations.customer_name ?? 'Unknown',
+            updated_at: row.conversations.last_message_at,
+          });
+          if (list.length >= 5) break;
+        }
+        setLinkedConversations(list);
+      } catch {
+        // Non-fatal — sidebar is decorative
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [doc]);
 
   const startEditing = () => {
     if (!doc) return;
@@ -124,83 +180,251 @@ export default function KnowledgeDetailPage({ params }: { params: Promise<{ id: 
     }
   };
 
+  const handleReprocess = async () => {
+    if (!doc) return;
+    try {
+      await insforge.database
+        .from('support_jobs')
+        .insert([{
+          organization_id: doc.organization_id,
+          job_type: 'process_knowledge_document',
+          payload: { documentId: doc.id },
+          status: 'pending',
+          attempts: 0,
+          max_attempts: 3,
+          run_after: new Date().toISOString(),
+        }])
+        .select();
+      setSuccess('Queued for reprocessing');
+      setTimeout(() => setSuccess(null), 3000);
+    } catch {
+      setSaveError('Failed to queue reprocess');
+    }
+  };
+
   if (isLoading) {
     return (
-      <AppShell>
-        <div className="p-container-margin">
-          <p className="text-body-md text-gray-500">Loading document…</p>
-        </div>
-      </AppShell>
+      <DashboardShell>
+        <p className="text-[13px] text-[var(--m03-fg-2)]">Loading document…</p>
+      </DashboardShell>
     );
   }
 
   if (error || !doc) {
     return (
-      <AppShell>
-        <div className="p-container-margin">
-          <p className="text-body-md text-red-600">{error?.message ?? 'Document not found.'}</p>
-          <Button variant="secondary" size="md" onClick={() => router.push('/knowledge')} className="mt-4">
-            ← Back to Knowledge Base
-          </Button>
-        </div>
-      </AppShell>
+      <DashboardShell>
+        <p className="text-[13px] text-red-600">{error?.message ?? 'Document not found.'}</p>
+        <button
+          type="button"
+          onClick={() => router.push('/knowledge')}
+          className="mt-4 cursor-pointer rounded-md border border-[var(--m03-line)] bg-white px-3 py-1.5 text-[13px] text-[var(--m03-fg)] hover:bg-[var(--m03-line-2)]"
+        >
+          ← Back to Knowledge
+        </button>
+      </DashboardShell>
     );
   }
 
   return (
-    <AppShell>
-      <div className="p-container-margin">
+    <DashboardShell>
+      <div
+        style={{
+          fontFamily: 'var(--font-inter), Inter, system-ui, -apple-system, sans-serif',
+        }}
+      >
         {/* Breadcrumb */}
-        <button
-          onClick={() => router.push('/knowledge')}
-          className="text-body-sm text-gray-500 hover:text-primary transition-colors"
-        >
-          ← Back to Knowledge Base
-        </button>
+        <div className="mb-2 flex items-center gap-2 text-[12px] text-[var(--m03-fg-2)]">
+          <Link href="/knowledge" className="text-[var(--m03-fg-2)] hover:text-[var(--m03-fg)]">
+            Knowledge
+          </Link>
+          <span>/</span>
+          <span className="text-[var(--m03-fg)]">{doc.title}</span>
+        </div>
 
-        {/* Header */}
-        <DocumentHeader
-          title={doc.title}
-          status={doc.status}
-          sourceType={doc.source_type}
-          createdAt={doc.created_at}
-          updatedAt={doc.updated_at}
-          editing={editing}
-          editTitle={title}
-          onEditTitleChange={setTitle}
-          saving={saving}
-          onEdit={startEditing}
-          onCancel={cancelEditing}
-          onSave={handleSave}
-          onDelete={handleDelete}
-        />
+        <div className="mb-4 flex items-center justify-between">
+          <div>
+            {editing ? (
+              <input
+                type="text"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                className="block w-full rounded-md border border-[var(--m03-line)] px-3 py-2 text-[20px] font-medium text-[var(--m03-fg)] focus:border-[var(--m03-fg)] focus:outline-none"
+              />
+            ) : (
+              <h1 className="m-0 text-[24px] font-medium tracking-[-0.02em]">{doc.title}</h1>
+            )}
+            <p className="mt-1.5 mb-0 flex items-center gap-2 text-[13px] text-[var(--m03-fg-2)]">
+              <span className="capitalize">{doc.source_type === 'url' || doc.source_type === 'file' ? doc.source_type : 'Manual'}</span>
+              <span>·</span>
+              <span>last updated {relativeTime(doc.updated_at)}</span>
+              <span>·</span>
+              <span>{chunkCount ?? 0} chunks</span>
+              <span>·</span>
+              {doc.status === 'ready' && <Tag status="ready">Ready</Tag>}
+              {doc.status === 'processing' && <Tag status="processing">Processing</Tag>}
+              {doc.status === 'pending' && <Tag status="draft">Pending</Tag>}
+              {doc.status === 'failed' && <Tag status="failed">Failed</Tag>}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            {editing ? (
+              <>
+                <button
+                  type="button"
+                  onClick={cancelEditing}
+                  disabled={saving}
+                  className="cursor-pointer rounded-md border border-[var(--m03-line)] bg-white px-3 py-1.5 text-[13px] text-[var(--m03-fg)] hover:bg-[var(--m03-line-2)]"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSave}
+                  disabled={saving || !title.trim()}
+                  className="cursor-pointer rounded-md border border-[var(--m03-fg)] bg-[var(--m03-fg)] px-3 py-1.5 text-[13px] font-medium text-[var(--m03-bg)] hover:bg-[var(--m03-fg-2)] disabled:opacity-60"
+                >
+                  {saving ? 'Saving…' : 'Save'}
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={handleReprocess}
+                  className="cursor-pointer rounded-md border border-[var(--m03-line)] bg-white px-3 py-1.5 text-[13px] text-[var(--m03-fg)] hover:bg-[var(--m03-line-2)]"
+                >
+                  Reprocess
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDelete}
+                  className="cursor-pointer rounded-md border border-[var(--m03-line)] bg-white px-3 py-1.5 text-[13px] text-[var(--m03-fg)] hover:bg-[var(--m03-line-2)]"
+                >
+                  Delete
+                </button>
+                <button
+                  type="button"
+                  onClick={startEditing}
+                  className="cursor-pointer rounded-md border border-[var(--m03-fg)] bg-[var(--m03-fg)] px-3 py-1.5 text-[13px] font-medium text-[var(--m03-bg)] hover:bg-[var(--m03-fg-2)]"
+                >
+                  Edit
+                </button>
+              </>
+            )}
+          </div>
+        </div>
 
-        {/* Messages */}
         {saveError && (
-          <div className="mt-4 rounded-md bg-red-50 p-3" role="alert">
-            <p className="text-body-sm text-red-700">{saveError}</p>
+          <div className="mb-4 rounded border border-red-200 bg-red-50 p-3 text-[13px] text-red-700">
+            {saveError}
           </div>
         )}
         {success && (
-          <div className="mt-4 rounded-md bg-green-50 p-3" role="status">
-            <p className="text-body-sm text-green-700">{success}</p>
+          <div className="mb-4 rounded border border-green-200 bg-green-50 p-3 text-[13px] text-green-700">
+            {success}
           </div>
         )}
 
-        {/* Content */}
-        <DocumentContent
-          body={doc.body}
-          fileName={doc.file_name}
-          fileUrl={doc.file_url}
-          status={doc.status}
-          errorMessage={doc.error_message}
-          editing={editing}
-          editBody={body}
-          editSourceType={sourceType}
-          onBodyChange={setBody}
-          onSourceTypeChange={setSourceType}
-        />
+        <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[1fr_280px]">
+          <article className="rounded-lg border border-[var(--m03-line)] bg-white p-[18px] text-[14px] leading-[1.65] text-[var(--m03-fg-2)]">
+            {editing ? (
+              <div>
+                <label className="mb-1 block text-[11px] font-medium uppercase tracking-wider text-[var(--m03-fg-2)]">
+                  Source type
+                </label>
+                <select
+                  value={sourceType}
+                  onChange={(e) => setSourceType(e.target.value)}
+                  className="mb-4 block w-full max-w-xs rounded-md border border-[var(--m03-line)] bg-white px-3 py-2 text-[13px] focus:border-[var(--m03-fg)] focus:outline-none"
+                >
+                  {SOURCE_TYPES.map((t) => (
+                    <option key={t} value={t}>
+                      {t.charAt(0).toUpperCase() + t.slice(1)}
+                    </option>
+                  ))}
+                </select>
+                <label className="mb-1 block text-[11px] font-medium uppercase tracking-wider text-[var(--m03-fg-2)]">
+                  Content
+                </label>
+                <MarkdownEditor value={body} onChange={setBody} rows={18} />
+              </div>
+            ) : doc.body ? (
+              <MarkdownRenderer content={doc.body} />
+            ) : (
+              <p className="italic text-[var(--m03-fg-3)]">No text content</p>
+            )}
+
+            {doc.status === 'failed' && doc.error_message && (
+              <div className="mt-4 rounded border border-red-200 bg-red-50 p-3 text-[13px] text-red-700">
+                {doc.error_message}
+              </div>
+            )}
+          </article>
+
+          <aside className="flex flex-col gap-3">
+            <div className="rounded-lg border border-[var(--m03-line)] bg-white p-[18px]">
+              <h3 className="m-0 mb-2.5 text-[11px] font-medium uppercase tracking-wider text-[var(--m03-fg-2)]">
+                Metadata
+              </h3>
+              <div className="flex flex-col gap-1.5 text-[12px]">
+                <MetaRow label="Source type" value={doc.source_type} />
+                <MetaRow label="Chunks" value={String(chunkCount ?? '—')} />
+                <MetaRow label="Embedding model" value="text-embed-3" mono />
+                <MetaRow label="Status" value={doc.status} />
+              </div>
+            </div>
+            <div className="rounded-lg border border-[var(--m03-line)] bg-white p-[18px]">
+              <h3 className="m-0 mb-2.5 text-[11px] font-medium uppercase tracking-wider text-[var(--m03-fg-2)]">
+                Linked conversations
+              </h3>
+              {linkedConversations.length === 0 ? (
+                <p className="text-[12px] text-[var(--m03-fg-3)]">None yet</p>
+              ) : (
+                <div className="flex flex-col gap-1.5 text-[12px]">
+                  {linkedConversations.map((c) => (
+                    <Link
+                      key={c.id}
+                      href={`/inbox?conversation=${c.id}`}
+                      className="text-[var(--m03-fg)] hover:underline"
+                    >
+                      {c.id.slice(0, 12)} · {c.customer_name} · {relativeTime(c.updated_at)}
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </div>
+          </aside>
+        </div>
       </div>
-    </AppShell>
+    </DashboardShell>
   );
+}
+
+function MetaRow({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
+  return (
+    <div className="flex items-center justify-between">
+      <span className="text-[var(--m03-fg-2)]">{label}</span>
+      <span
+        className={`text-[var(--m03-fg)] ${mono ? 'font-mono text-[11px]' : ''} capitalize`}
+      >
+        {value}
+      </span>
+    </div>
+  );
+}
+
+function relativeTime(iso: string): string {
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return '—';
+  const diff = Date.now() - then;
+  const min = Math.floor(diff / 60000);
+  if (min < 1) return 'just now';
+  if (min < 60) return `${min}m ago`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr}h ago`;
+  const d = Math.floor(hr / 24);
+  if (d < 7) return `${d}d ago`;
+  const w = Math.floor(d / 7);
+  if (w < 5) return `${w}w ago`;
+  return new Date(iso).toLocaleDateString();
 }

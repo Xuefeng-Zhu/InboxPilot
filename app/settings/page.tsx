@@ -2,7 +2,9 @@
 
 import { Suspense, useCallback, useMemo } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { AppShell } from '@/components/layout';
+import { DashboardShell } from '@/components/DashboardShell';
+import { useAuth } from '@/lib/auth-context';
+import { useOrgMembership, useOrganization } from '@/lib/queries';
 import AiSettingsPanel from './_components/AiSettingsPanel';
 import EmailSettingsPanel from './_components/EmailSettingsPanel';
 import SmsSettingsPanel from './_components/SmsSettingsPanel';
@@ -12,9 +14,12 @@ export const dynamic = 'force-dynamic';
 
 const tabs = [
   { id: 'ai', label: 'AI' },
-  { id: 'email', label: 'Email' },
-  { id: 'sms', label: 'SMS' },
-  { id: 'webchat', label: 'Web Chat' },
+  { id: 'email', label: 'Email channels' },
+  { id: 'sms', label: 'SMS channels' },
+  { id: 'webchat', label: 'Webchat' },
+  { id: 'team', label: 'Team' },
+  { id: 'billing', label: 'Billing' },
+  { id: 'audit', label: 'Audit log' },
 ] as const;
 
 type TabId = (typeof tabs)[number]['id'];
@@ -41,64 +46,88 @@ function SettingsTabs() {
   );
 
   return (
-    <>
-      {/* Tabs navigation */}
-      <nav className="mt-6 border-b border-surface-border" aria-label="Settings tabs">
-        <div className="-mb-px flex gap-6" role="tablist">
-          {tabs.map((tab) => (
+    <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-[200px_1fr]">
+      <nav className="rounded-lg border border-[var(--m03-line)] bg-white p-2">
+        {tabs.map((tab) => {
+          const active = activeTab === tab.id;
+          return (
             <button
               key={tab.id}
-              role="tab"
-              aria-selected={activeTab === tab.id}
-              aria-controls={`panel-${tab.id}`}
-              id={`tab-${tab.id}`}
+              type="button"
               onClick={() => handleTabClick(tab.id)}
-              className={`whitespace-nowrap border-b-2 px-1 pb-3 text-body-md font-medium transition-colors ${
-                activeTab === tab.id
-                  ? 'border-primary text-primary'
-                  : 'border-transparent text-gray-500 hover:border-surface-border hover:text-gray-700'
+              className={`block w-full cursor-pointer rounded px-3 py-2 text-left text-[13px] ${
+                active
+                  ? 'bg-[var(--m03-fg)] font-medium text-[var(--m03-bg)]'
+                  : 'text-[var(--m03-fg-2)] hover:bg-[var(--m03-line-2)]'
               }`}
+              aria-current={active ? 'page' : undefined}
             >
               {tab.label}
             </button>
-          ))}
-        </div>
+          );
+        })}
       </nav>
 
-      {/* Tab panels */}
-      <div className="mt-6">
-        <div
-          role="tabpanel"
-          id={`panel-${activeTab}`}
-          aria-labelledby={`tab-${activeTab}`}
-        >
-          {activeTab === 'ai' && <AiSettingsPanel />}
-          {activeTab === 'email' && <EmailSettingsPanel />}
-          {activeTab === 'sms' && <SmsSettingsPanel />}
-          {activeTab === 'webchat' && <WebchatSettingsPanel />}
-        </div>
+      <div className="flex flex-col gap-4">
+        {activeTab === 'ai' && <AiSettingsPanel />}
+        {activeTab === 'email' && <EmailSettingsPanel />}
+        {activeTab === 'sms' && <SmsSettingsPanel />}
+        {activeTab === 'webchat' && <WebchatSettingsPanel />}
+        {activeTab === 'team' && (
+          <PlaceholderCard
+            title="Team"
+            body="Invite teammates and assign roles. Coming soon to the redesign — currently available at the original settings page."
+          />
+        )}
+        {activeTab === 'billing' && (
+          <PlaceholderCard
+            title="Billing"
+            body="Plan, usage, and invoices. Coming soon to the redesign."
+          />
+        )}
+        {activeTab === 'audit' && (
+          <PlaceholderCard
+            title="Audit log"
+            body="Append-only record of every AI decision, escalation, and credential change. Coming soon to the redesign."
+          />
+        )}
       </div>
-    </>
+    </div>
+  );
+}
+
+function PlaceholderCard({ title, body }: { title: string; body: string }) {
+  return (
+    <div className="rounded-lg border border-[var(--m03-line)] bg-white p-[18px]">
+      <h2 className="m-0 mb-2 text-[14px] font-semibold">{title}</h2>
+      <p className="m-0 text-[13px] text-[var(--m03-fg-2)]">{body}</p>
+    </div>
   );
 }
 
 export default function SettingsPage() {
-  return (
-    <AppShell>
-      <div className="p-container-margin">
-        <div className="mx-auto max-w-3xl">
-          <header className="pl-12 xl:pl-0">
-            <h1 className="text-headline-sm text-gray-900">Settings</h1>
-            <p className="mt-1 text-body-md text-gray-500">
-              Manage support channels and AI behavior.
-            </p>
-          </header>
+  const { user } = useAuth();
+  const { data: orgId } = useOrgMembership(user?.id);
+  const { data: org } = useOrganization(orgId ?? undefined);
 
-          <Suspense fallback={null}>
-            <SettingsTabs />
-          </Suspense>
+  return (
+    <DashboardShell>
+      <div
+        style={{
+          fontFamily: 'var(--font-inter), Inter, system-ui, -apple-system, sans-serif',
+        }}
+      >
+        <div className="mb-5">
+          <h1 className="m-0 text-[24px] font-medium tracking-[-0.02em]">Settings</h1>
+          <p className="mt-1 mb-0 text-[13px] text-[var(--m03-fg-2)]">
+            {org?.name ? `Workspace · ${org.name}` : 'Workspace'}
+          </p>
         </div>
+
+        <Suspense fallback={<p className="text-[13px] text-[var(--m03-fg-2)]">Loading…</p>}>
+          <SettingsTabs />
+        </Suspense>
       </div>
-    </AppShell>
+    </DashboardShell>
   );
 }

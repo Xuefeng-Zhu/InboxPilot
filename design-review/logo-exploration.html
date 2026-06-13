@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>InboxPilot — Logo mark exploration</title>
+<style>
+  body {
+    margin: 0;
+    padding: 40px;
+    background: #fafafa;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif;
+    color: #111;
+  }
+  h1 {
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    margin: 0 0 6px;
+  }
+  p { margin: 0 0 32px; font-size: 13px; color: #666; max-width: 720px; }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 24px;
+    max-width: 1100px;
+  }
+  .card {
+    background: white;
+    border: 1px solid #eaeaea;
+    border-radius: 12px;
+    padding: 32px 24px 24px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+  }
+  .card .label {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #999;
+  }
+  .card .name {
+    font-size: 15px;
+    font-weight: 500;
+  }
+  .card .desc {
+    font-size: 12px;
+    line-height: 1.5;
+    color: #666;
+    text-align: center;
+  }
+  .row {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    padding: 14px 0;
+  }
+  .row .size {
+    font-size: 11px;
+    color: #999;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    min-width: 40px;
+  }
+  .swatch {
+    display: flex;
+    gap: 8px;
+    margin-top: 6px;
+  }
+  .swatch span {
+    width: 18px;
+    height: 18px;
+    border-radius: 4px;
+    border: 1px solid rgba(0,0,0,0.06);
+  }
+  .dark-strip {
+    background: #0a0a0a;
+    border-radius: 8px;
+    padding: 16px 20px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    width: 100%;
+  }
+  .dark-strip .name { color: #fff; }
+
+  /* ─── Mark A — Inbox tray with rising paper plane ──────────────────── */
+  .mark-a {
+    width: 36px;
+    height: 36px;
+    position: relative;
+  }
+  .mark-a svg { width: 100%; height: 100%; display: block; }
+
+  /* ─── Mark B — Stamped envelope with AI dot ────────────────────────── */
+  .mark-b { width: 36px; height: 36px; }
+  .mark-b svg { width: 100%; height: 100%; display: block; }
+
+  /* ─── Mark C — Origami paper plane with trajectory arc ─────────────── */
+  .mark-c { width: 36px; height: 36px; }
+  .mark-c svg { width: 100%; height: 100%; display: block; }
+</style>
+</head>
+<body>
+  <h1>InboxPilot — Logo mark exploration</h1>
+  <p>Three directions, each rendered at 24/32/40px on light + a dark inverse strip. Pick a winner (or remix).</p>
+
+  <div class="grid">
+
+    <!-- MARK A -->
+    <div class="card">
+      <div class="label">Option A</div>
+      <div class="name">Inbox + rising plane</div>
+      <div class="desc">An open tray with a paper plane lifting out. Reads as "messages going out" — the AI auto-reply action.</div>
+
+      <div class="row">
+        <span class="size">24</span>
+        <div class="mark-a" style="width:24px;height:24px">
+          <svg viewBox="0 0 24 24" fill="none">
+            <path d="M2 8L12 4L22 8L12 12L2 8Z" fill="currentColor"/>
+            <path d="M6 10V16C6 16 8 18 12 18C16 18 18 16 18 16V10" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M22 8V13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+        </div>
+      </div>
+      <div class="row">
+        <span class="size">32</span>
+        <div class="mark-a" style="width:32px;height:32px">
+          <svg viewBox="0 0 24 24" fill="none">
+            <path d="M2 8L12 4L22 8L12 12L2 8Z" fill="currentColor"/>
+            <path d="M6 10V16C6 16 8 18 12 18C16 18 18 16 18 16V10" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M22 8V13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+        </div>
+      </div>
+      <div class="row">
+        <span class="size">40</span>
+        <div class="mark-a" style="width:40px;height:40px">
+          <svg viewBox="0 0 24 24" fill="none">
+            <path d="M2 8L12 4L22 8L12 12L2 8Z" fill="currentColor"/>
+            <path d="M6 10V16C6 16 8 18 12 18C16 18 18 16 18 16V10" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M22 8V13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+        </div>
+      </div>
+
+      <div class="dark-strip">
+        <div class="mark-a" style="width:32px;height:32px;color:#fff">
+          <svg viewBox="0 0 24 24" fill="none">
+            <path d="M2 8L12 4L22 8L12 12L2 8Z" fill="currentColor"/>
+            <path d="M6 10V16C6 16 8 18 12 18C16 18 18 16 18 16V10" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M22 8V13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <div class="name">▲ InboxPilot</div>
+      </div>
+    </div>
+
+    <!-- MARK B -->
+    <div class="card">
+      <div class="label">Option B</div>
+      <div class="name">Sealed envelope, AI dot</div>
+      <div class="desc">A clean stamped envelope with a single accent dot. The dot reads as both the "i" in InboxPilot and a tiny AI cursor.</div>
+
+      <div class="row">
+        <span class="size">24</span>
+        <div class="mark-b" style="width:24px;height:24px">
+          <svg viewBox="0 0 24 24" fill="none">
+            <rect x="2" y="5" width="20" height="14" rx="2" stroke="currentColor" stroke-width="1.5"/>
+            <path d="M2.5 6L12 13L21.5 6" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+            <circle cx="18" cy="6" r="2" fill="currentColor"/>
+          </svg>
+        </div>
+      </div>
+      <div class="row">
+        <span class="size">32</span>
+        <div class="mark-b" style="width:32px;height:32px">
+          <svg viewBox="0 0 24 24" fill="none">
+            <rect x="2" y="5" width="20" height="14" rx="2" stroke="currentColor" stroke-width="1.5"/>
+            <path d="M2.5 6L12 13L21.5 6" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+            <circle cx="18" cy="6" r="2" fill="currentColor"/>
+          </svg>
+        </div>
+      </div>
+      <div class="row">
+        <span class="size">40</span>
+        <div class="mark-b" style="width:40px;height:40px">
+          <svg viewBox="0 0 24 24" fill="none">
+            <rect x="2" y="5" width="20" height="14" rx="2" stroke="currentColor" stroke-width="1.5"/>
+            <path d="M2.5 6L12 13L21.5 6" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+            <circle cx="18" cy="6" r="2" fill="currentColor"/>
+          </svg>
+        </div>
+      </div>
+
+      <div class="dark-strip">
+        <div class="mark-b" style="width:32px;height:32px;color:#fff">
+          <svg viewBox="0 0 24 24" fill="none">
+            <rect x="2" y="5" width="20" height="14" rx="2" stroke="currentColor" stroke-width="1.5"/>
+            <path d="M2.5 6L12 13L21.5 6" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+            <circle cx="18" cy="6" r="2" fill="currentColor"/>
+          </svg>
+        </div>
+        <div class="name">InboxPilot</div>
+      </div>
+    </div>
+
+    <!-- MARK C -->
+    <div class="card">
+      <div class="label">Option C</div>
+      <div class="name">Origami plane on arc</div>
+      <div class="desc">A folded paper plane gliding along a trajectory curve. Most motion-implying; signals "messages in flight across channels."</div>
+
+      <div class="row">
+        <span class="size">24</span>
+        <div class="mark-c" style="width:24px;height:24px">
+          <svg viewBox="0 0 24 24" fill="none">
+            <path d="M2 12L22 4L13 22L11 14L2 12Z" fill="currentColor"/>
+            <path d="M11 14L22 4" stroke="white" stroke-width="1.25"/>
+            <path d="M2 4C7 4 16 6 22 4" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" opacity="0.4"/>
+          </svg>
+        </div>
+      </div>
+      <div class="row">
+        <span class="size">32</span>
+        <div class="mark-c" style="width:32px;height:32px">
+          <svg viewBox="0 0 24 24" fill="none">
+            <path d="M2 12L22 4L13 22L11 14L2 12Z" fill="currentColor"/>
+            <path d="M11 14L22 4" stroke="white" stroke-width="1.25"/>
+            <path d="M2 4C7 4 16 6 22 4" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" opacity="0.4"/>
+          </svg>
+        </div>
+      </div>
+      <div class="row">
+        <span class="size">40</span>
+        <div class="mark-c" style="width:40px;height:40px">
+          <svg viewBox="0 0 24 24" fill="none">
+            <path d="M2 12L22 4L13 22L11 14L2 12Z" fill="currentColor"/>
+            <path d="M11 14L22 4" stroke="white" stroke-width="1.25"/>
+            <path d="M2 4C7 4 16 6 22 4" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" opacity="0.4"/>
+          </svg>
+        </div>
+      </div>
+
+      <div class="dark-strip">
+        <div class="mark-c" style="width:32px;height:32px;color:#fff">
+          <svg viewBox="0 0 24 24" fill="none">
+            <path d="M2 12L22 4L13 22L11 14L2 12Z" fill="currentColor"/>
+            <path d="M11 14L22 4" stroke="#0a0a0a" stroke-width="1.25"/>
+            <path d="M2 4C7 4 16 6 22 4" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" opacity="0.4"/>
+          </svg>
+        </div>
+        <div class="name">InboxPilot</div>
+      </div>
+    </div>
+
+  </div>
+</body>
+</html>

@@ -1,6 +1,6 @@
 # API Reference
 
-> Two parallel surfaces: **9 InsForge Deno Functions** (webhooks + scheduled jobs) and **7 Next.js API Routes** under `/api/functions/*` (JWT-authed, frontend-initiated actions).
+> Two parallel surfaces: **9 InsForge Deno Functions** (webhooks + scheduled jobs) and **7 Next.js API Routes** under `/api/functions/*` (InsForge-verified, RBAC-checked frontend actions).
 
 ## Overview
 
@@ -9,7 +9,7 @@ InboxPilot exposes two distinct HTTP surfaces. The split is deliberate: webhook 
 | Surface | Where | Count | Auth |
 |---|---|---|---|
 | **InsForge Deno Functions** | `insforge/functions/*/index.ts` | 9 | Webhook signature, Visitor JWT, or none (internal) |
-| **Next.js API Routes** | `app/api/functions/*/route.ts` | 7 | Same-origin (JWT via cookie or `Authorization` header) |
+| **Next.js API Routes** | `app/api/functions/*/route.ts` | 7 | InsForge session verification + org RBAC |
 
 All response bodies are JSON. Errors use this shape:
 
@@ -32,7 +32,7 @@ All response bodies are JSON. Errors use this shape:
 
 - **InsForge user JWT** (Deno functions) — `insforge/functions/_shared/verify-jwt.ts` (used by webhook handlers that the frontend invokes indirectly, though currently no Deno function is JWT-authed; the JWT-authed actions live in the Next.js routes).
 - **Visitor JWT** (webchat) — `insforge/functions/_shared/verify-visitor-jwt.ts`. HS256 signed with the widget's `hmac_secret`. Claims: `sub` (contactId), `org`, `widget`, `thread`, `jti`, `iat`, `exp`. Verification also checks the thread's current `visitor_token_jti` matches the JWT's `jti` (rotation enforcement).
-- **Same-origin JWT** (Next.js API routes) — `app/api/functions/_auth.ts` decodes the JWT locally (`payload.sub`); no external auth call. The token comes from the `insforge_access_token` cookie or `Authorization: Bearer` header.
+- **Same-origin JWT** (Next.js API routes) — `app/api/functions/_auth.ts` sends the cookie/header bearer token to InsForge session verification before returning a user id. Routes that mutate org resources also check membership permissions before using the service-role client.
 
 ---
 

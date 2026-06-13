@@ -25,6 +25,8 @@ const SAMPLE_DOCUMENT: KnowledgeDocument = {
   body: 'Items can be returned within 30 days of purchase. Refunds are processed within 5 business days.',
   status: 'pending',
   errorMessage: null,
+  fileUrl: null,
+  fileName: null,
   createdAt: new Date('2024-01-01'),
   updatedAt: new Date('2024-01-01'),
 };

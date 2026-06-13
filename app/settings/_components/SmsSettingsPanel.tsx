@@ -113,13 +113,13 @@ export default function SmsSettingsPanel() {
     try {
       const { error: insertError } = await insforge.database
         .from('sms_provider_accounts')
-        .insert({
+        .insert([{
           provider: newProvider,
           label: newLabel.trim(),
           credentials_secret_id: newCredentialsId.trim(),
           is_active: true,
           metadata: {},
-        })
+        }])
         .select();
 
       if (insertError) {
@@ -131,7 +131,7 @@ export default function SmsSettingsPanel() {
       if (accounts.length > 0) {
         await insforge.database
           .from('audit_logs')
-          .insert({
+          .insert([{
             organization_id: accounts[0].organization_id,
             actor_id: user?.id ?? null,
             actor_type: 'user',
@@ -139,7 +139,7 @@ export default function SmsSettingsPanel() {
             resource_type: 'sms_provider_account',
             resource_id: null,
             metadata: { operation: 'create', provider: newProvider, label: newLabel.trim() },
-          })
+          }])
           .select();
       }
 
@@ -178,7 +178,7 @@ export default function SmsSettingsPanel() {
       if (account) {
         await insforge.database
           .from('audit_logs')
-          .insert({
+          .insert([{
             organization_id: account.organization_id,
             actor_id: user?.id ?? null,
             actor_type: 'user',
@@ -186,7 +186,7 @@ export default function SmsSettingsPanel() {
             resource_type: 'sms_provider_account',
             resource_id: accountId,
             metadata: { operation: 'update', label: editLabel.trim() },
-          })
+          }])
           .select();
       }
 
@@ -221,7 +221,7 @@ export default function SmsSettingsPanel() {
       if (account) {
         await insforge.database
           .from('audit_logs')
-          .insert({
+          .insert([{
             organization_id: account.organization_id,
             actor_id: user?.id ?? null,
             actor_type: 'user',
@@ -229,7 +229,7 @@ export default function SmsSettingsPanel() {
             resource_type: 'sms_provider_account',
             resource_id: accountId,
             metadata: { operation: 'delete', provider: account.provider, label: account.label },
-          })
+          }])
           .select();
       }
 

@@ -26,6 +26,21 @@ interface MessageThreadProps {
   conversationId: string;
 }
 
+function getRealtimeConversationId(payload: Record<string, unknown>): string | null {
+  const nestedMessage = payload.message;
+  const message = nestedMessage && typeof nestedMessage === 'object'
+    ? nestedMessage as Record<string, unknown>
+    : null;
+
+  const candidate =
+    payload.conversation_id ??
+    payload.conversationId ??
+    message?.conversation_id ??
+    message?.conversationId;
+
+  return typeof candidate === 'string' ? candidate : null;
+}
+
 export function MessageThread({ conversationId }: MessageThreadProps) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -127,7 +142,10 @@ export function MessageThread({ conversationId }: MessageThreadProps) {
 
   // Realtime: invalidate queries on new messages
   useRealtime({
-    onNewMessage: () => {
+    onNewMessage: (payload) => {
+      const realtimeConversationId = getRealtimeConversationId(payload);
+      if (realtimeConversationId && realtimeConversationId !== conversationId) return;
+
       if (scrollRef.current) {
         nearBottomRef.current = isNearBottom(scrollRef.current);
       }
@@ -135,8 +153,16 @@ export function MessageThread({ conversationId }: MessageThreadProps) {
       queryClient.invalidateQueries({ queryKey: queryKeys.conversation(conversationId) });
       queryClient.invalidateQueries({ queryKey: queryKeys.aiDecision(conversationId) });
     },
-    messageChannel: `inbox:messages:${conversationId}`,
-    enabled: !!user,
+    onConversationUpdated: (payload) => {
+      const realtimeConversationId = getRealtimeConversationId(payload);
+      if (realtimeConversationId && realtimeConversationId !== conversationId) return;
+
+      queryClient.invalidateQueries({ queryKey: queryKeys.conversation(conversationId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.aiDecision(conversationId) });
+    },
+    messageChannel: conversation ? `org:${conversation.organization_id}` : undefined,
+    conversationChannel: conversation ? `org:${conversation.organization_id}` : undefined,
+    enabled: !!user && !!conversation,
   });
 
   const isLoading = convoLoading || msgsLoading;

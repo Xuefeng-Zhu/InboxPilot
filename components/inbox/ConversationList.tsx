@@ -1,8 +1,16 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth-context';
-import { useOrgMembership, useInfiniteConversations, type ConversationListItem } from '@/lib/queries';
+import {
+  CONVERSATION_PAGE_SIZE,
+  queryKeys,
+  useOrgMembership,
+  useInfiniteConversations,
+  type ConversationListItem,
+} from '@/lib/queries';
+import { useRealtime } from '@/lib/use-realtime';
 import { ConversationItem, type ConversationRow } from './ConversationItem';
 
 // ---------------------------------------------------------------------------
@@ -24,10 +32,17 @@ interface ConversationListProps {
 
 export function ConversationList({ selectedId, onSelect, statusFilter, channelFilter, contactFilter, searchQuery }: ConversationListProps) {
   const { user } = useAuth();
+  const queryClient = useQueryClient();
   const scrollRootRef = useRef<HTMLElement>(null);
   const loadMoreRef = useRef<HTMLDivElement>(null);
 
   const { data: orgId, isLoading: orgLoading } = useOrgMembership(user?.id);
+  const filters = {
+    status: statusFilter,
+    channel: channelFilter,
+    contactId: contactFilter,
+    search: searchQuery,
+  };
 
   const {
     items: conversations,
@@ -39,13 +54,26 @@ export function ConversationList({ selectedId, onSelect, statusFilter, channelFi
     error,
   } = useInfiniteConversations(
     orgId ?? undefined,
-    {
-      status: statusFilter,
-      channel: channelFilter,
-      contactId: contactFilter,
-      search: searchQuery,
-    },
+    filters,
   );
+
+  useRealtime({
+    onNewMessage: () => {
+      if (!orgId) return;
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.conversationsInfinite(orgId, filters, CONVERSATION_PAGE_SIZE),
+      });
+    },
+    onConversationUpdated: () => {
+      if (!orgId) return;
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.conversationsInfinite(orgId, filters, CONVERSATION_PAGE_SIZE),
+      });
+    },
+    messageChannel: orgId ? `org:${orgId}` : undefined,
+    conversationChannel: orgId ? `org:${orgId}` : undefined,
+    enabled: !!user && !!orgId,
+  });
 
   useEffect(() => {
     const scrollRoot = scrollRootRef.current;

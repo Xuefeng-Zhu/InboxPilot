@@ -30,7 +30,8 @@ vi.mock('next/link', () => ({
 
 const validRoutes = ['/inbox', '/knowledge', '/analytics', '/customers', '/settings', '/team'] as const;
 
-const activeClasses = ['bg-surface-container', 'border-l-2', 'border-l-primary', 'text-primary', 'font-medium'];
+const activeClasses = ['bg-surface-container', 'border-l-primary', 'text-primary', 'font-medium'];
+const stableLayoutClasses = ['border-l-2'];
 const inactiveClasses = ['text-gray-600'];
 
 // --- Arbitraries ---
@@ -70,6 +71,9 @@ describe('Feature: stitch-ui-implementation, Property 6: Active route indication
 
           // Verify the active NavItem has all active classes
           for (const cls of activeClasses) {
+            expect(activeLink!.className).toContain(cls);
+          }
+          for (const cls of stableLayoutClasses) {
             expect(activeLink!.className).toContain(cls);
           }
         },

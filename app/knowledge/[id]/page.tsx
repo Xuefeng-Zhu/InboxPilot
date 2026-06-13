@@ -63,7 +63,7 @@ export default function KnowledgeDetailPage({ params }: { params: Promise<{ id: 
 
       await insforge.database
         .from('audit_logs')
-        .insert({
+        .insert([{
           organization_id: doc.organization_id,
           actor_id: user?.id ?? null,
           actor_type: 'user',
@@ -71,12 +71,12 @@ export default function KnowledgeDetailPage({ params }: { params: Promise<{ id: 
           resource_type: 'knowledge_document',
           resource_id: doc.id,
           metadata: { title: title.trim() },
-        })
+        }])
         .select();
 
       await insforge.database
         .from('support_jobs')
-        .insert({
+        .insert([{
           organization_id: doc.organization_id,
           job_type: 'process_knowledge_document',
           payload: { documentId: doc.id },
@@ -84,7 +84,7 @@ export default function KnowledgeDetailPage({ params }: { params: Promise<{ id: 
           attempts: 0,
           max_attempts: 3,
           run_after: new Date().toISOString(),
-        })
+        }])
         .select();
 
       setEditing(false);
@@ -106,7 +106,7 @@ export default function KnowledgeDetailPage({ params }: { params: Promise<{ id: 
       await insforge.database.from('knowledge_documents').delete().eq('id', doc.id);
       await insforge.database
         .from('audit_logs')
-        .insert({
+        .insert([{
           organization_id: doc.organization_id,
           actor_id: user?.id ?? null,
           actor_type: 'user',
@@ -114,7 +114,7 @@ export default function KnowledgeDetailPage({ params }: { params: Promise<{ id: 
           resource_type: 'knowledge_document',
           resource_id: doc.id,
           metadata: { title: doc.title },
-        })
+        }])
         .select();
 
       queryClient.invalidateQueries({ queryKey: queryKeys.knowledgeDocs() });

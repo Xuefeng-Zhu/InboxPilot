@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>InboxPilot — Mockup 3: Notion-grade</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  html, body { background: #FFFFFF; color: #1F1F1F; font-family: 'Inter', system-ui, sans-serif; }
+  .hair { border-color: #EDEEF0; }
+  .dim { color: #787774; }
+  .mute { color: #B4B4B0; }
+  .row.active { background: #F7F7F5; }
+  .row:hover:not(.active) { background: #FAFAF8; }
+  .scrollbar::-webkit-scrollbar { width: 8px; }
+  .scrollbar::-webkit-scrollbar-thumb { background: #E5E5E2; border-radius: 4px; }
+  .ai-dot { width: 6px; height: 6px; border-radius: 999px; background: #8B5CF6; animation: breathe 1.8s ease-in-out infinite; }
+  @keyframes breathe { 0%, 100% { opacity: 0.4; transform: scale(0.9); } 50% { opacity: 1; transform: scale(1.1); } }
+  .quote { background: linear-gradient(180deg, transparent, transparent 18px, #F3F0FF 18px, #F3F0FF 22px, transparent 22px); }
+</style>
+</head>
+<body class="h-screen overflow-hidden">
+
+<!-- Top bar -->
+<header class="h-12 flex items-center justify-between px-5 border-b hair">
+  <div class="flex items-center gap-6">
+    <div class="flex items-center gap-2">
+      <div class="w-5 h-5 rounded bg-gray-900 flex items-center justify-center text-white text-[10px] font-medium">IP</div>
+      <span class="text-[14px] font-medium">Acme Support</span>
+    </div>
+    <nav class="flex items-center gap-1 text-[13.5px]">
+      <a class="px-2 py-1 rounded text-gray-900 font-medium hover:bg-gray-100">Inbox</a>
+      <a class="px-2 py-1 rounded dim hover:bg-gray-100">Knowledge</a>
+      <a class="px-2 py-1 rounded dim hover:bg-gray-100">Customers</a>
+      <a class="px-2 py-1 rounded dim hover:bg-gray-100">Analytics</a>
+    </nav>
+  </div>
+  <div class="flex items-center gap-3">
+    <input class="h-8 w-64 px-3 rounded-md bg-gray-100 text-[13px] outline-none placeholder-mute" placeholder="Search…" />
+    <div class="w-7 h-7 rounded-full bg-gradient-to-br from-amber-300 to-rose-400"></div>
+  </div>
+</header>
+
+<div class="grid h-[calc(100vh-3rem)]" style="grid-template-columns: 320px 1fr 280px;">
+
+  <!-- List -->
+  <section class="border-r hair flex flex-col">
+    <div class="px-5 pt-6 pb-3">
+      <h1 class="text-[22px] font-semibold tracking-tight">Inbox</h1>
+      <p class="text-[13px] dim mt-0.5">128 open · 3 need attention</p>
+    </div>
+    <div class="px-5 pb-2 flex items-center gap-1.5 text-[12.5px]">
+      <button class="px-2 py-1 rounded bg-gray-100 font-medium">All</button>
+      <button class="px-2 py-1 rounded dim hover:bg-gray-100">Mentions</button>
+      <button class="px-2 py-1 rounded dim hover:bg-gray-100">Assigned to me</button>
+    </div>
+    <div class="flex-1 overflow-y-auto scrollbar">
+
+      <div class="row active px-5 py-3 cursor-pointer">
+        <div class="flex items-center justify-between mb-0.5">
+          <span class="text-[14px] font-medium">Maya Patel</span>
+          <span class="text-[12px] dim">2m</span>
+        </div>
+        <div class="text-[13.5px] leading-snug">Can I get a refund for order #4892? It arrived broken.</div>
+        <div class="flex items-center gap-2 mt-1.5 text-[11.5px] dim">
+          <span>SMS</span>
+          <span class="w-1 h-1 rounded-full bg-gray-300"></span>
+          <span>Order #4892</span>
+        </div>
+      </div>
+
+      <div class="row px-5 py-3 cursor-pointer">
+        <div class="flex items-center justify-between mb-0.5">
+          <span class="text-[14px] dim">Leo Park</span>
+          <span class="text-[12px] mute">8m</span>
+        </div>
+        <div class="text-[13.5px] dim leading-snug line-clamp-2">Need to talk to a real person about enterprise pricing for Q3 expansion — timeline is tight.</div>
+        <div class="flex items-center gap-2 mt-1.5 text-[11.5px] mute">
+          <span>Email</span>
+          <span class="w-1 h-1 rounded-full bg-gray-300"></span>
+          <span>2 attachments</span>
+        </div>
+      </div>
+
+      <div class="row px-5 py-3 cursor-pointer">
+        <div class="flex items-center justify-between mb-0.5">
+          <span class="text-[14px] dim">Riya Shah</span>
+          <span class="text-[12px] mute">14m</span>
+        </div>
+        <div class="text-[13.5px] dim leading-snug line-clamp-2">Where do I find my API key? I keep getting 401s.</div>
+        <div class="flex items-center gap-2 mt-1.5 text-[11.5px] mute">
+          <span>Webchat</span>
+        </div>
+      </div>
+
+      <div class="row px-5 py-3 cursor-pointer">
+        <div class="flex items-center justify-between mb-0.5">
+          <span class="text-[14px] dim">Daniel Wu</span>
+          <span class="text-[12px] mute">32m</span>
+        </div>
+        <div class="text-[13.5px] dim leading-snug">Thanks! That worked. Closing this.</div>
+        <div class="flex items-center gap-2 mt-1.5 text-[11.5px] mute">
+          <span>SMS</span>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- Thread -->
+  <section class="flex flex-col min-w-0">
+    <div class="h-14 px-8 flex items-center border-b hair">
+      <div class="flex items-center gap-3 min-w-0">
+        <div class="w-8 h-8 rounded-full bg-gradient-to-br from-pink-400 to-rose-500 flex items-center justify-center text-white text-xs font-medium">MP</div>
+        <div>
+          <div class="text-[15px] font-semibold tracking-tight">Maya Patel</div>
+          <div class="text-[12px] dim">SMS · +1 415 ··· 0932</div>
+        </div>
+      </div>
+      <div class="ml-auto flex items-center gap-2 text-[12.5px] dim">
+        <button class="h-8 px-3 rounded hover:bg-gray-100">Snooze</button>
+        <button class="h-8 px-3 rounded hover:bg-gray-100">Resolve</button>
+      </div>
+    </div>
+
+    <div class="flex-1 overflow-y-auto scrollbar px-8 py-10 space-y-7 max-w-3xl mx-auto w-full">
+
+      <div class="flex items-center gap-4 text-[11.5px] dim">
+        <div class="flex-1 h-px bg-gray-200"></div>
+        <div>Today · 10:14 AM</div>
+        <div class="flex-1 h-px bg-gray-200"></div>
+      </div>
+
+      <div>
+        <div class="text-[11.5px] dim mb-1.5">Maya · 10:14 AM</div>
+        <p class="text-[15px] leading-relaxed">Hi, my order #4892 arrived this morning but the box was completely crushed and the product inside is broken. I'd like a refund please.</p>
+      </div>
+
+      <div>
+        <div class="text-[11.5px] dim mb-1.5 flex items-center gap-1.5">InboxPilot · 10:14 AM <span class="ai-dot"></span> <span>AI drafted</span></div>
+        <p class="text-[15px] leading-relaxed">Hi Maya, I'm so sorry to hear that. I can issue a full refund for #4892 right now and send a replacement today at no cost. Could you confirm the shipping address on file is still correct?</p>
+        <button class="text-[12px] dim mt-1 hover:text-gray-700">↩ Sent automatically</button>
+      </div>
+
+      <div>
+        <div class="text-[11.5px] dim mb-1.5">Maya · 10:18 AM</div>
+        <p class="text-[15px] leading-relaxed">Yes the address is fine. Just a refund is good, no need to replace. Thanks.</p>
+      </div>
+
+      <div>
+        <div class="text-[11.5px] dim mb-1.5 flex items-center gap-1.5">InboxPilot · 10:18 AM <span class="ai-dot"></span> <span>drafting…</span></div>
+        <p class="text-[15px] leading-relaxed quote inline">Got it. I'll process the refund for #4892 to your original payment method and send a confirmation email within 5 minutes.</p>
+      </div>
+
+    </div>
+
+    <!-- Composer -->
+    <div class="border-t hair">
+      <div class="max-w-3xl mx-auto w-full px-8 py-5">
+        <div class="border hair rounded-xl px-4 py-3 focus-within:border-gray-400">
+          <textarea rows="2" class="w-full text-[15px] outline-none resize-none placeholder-mute" placeholder="Reply…">Got it. I'll process the refund for #4892 to your original payment method and send a confirmation email within 5 minutes.</textarea>
+          <div class="flex items-center justify-between mt-1.5">
+            <div class="flex items-center gap-2 text-[11.5px] dim">
+              <span>📎</span><span>📚</span><span>😊</span>
+              <span class="ml-2">117 / 160</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+              <button class="h-7 px-3 rounded text-[12.5px] dim hover:bg-gray-100">Save draft</button>
+              <button class="h-7 px-3 rounded text-[12.5px] font-medium text-white bg-gray-900 hover:bg-gray-800">Send</button>
+            </div>
+          </div>
+        </div>
+        <div class="flex items-center gap-2 mt-2 text-[11px] dim">
+          <span class="ai-dot"></span> InboxPilot is drafting. Press <kbd class="px-1 border hair rounded text-[10px]">⌘↵</kbd> to accept.
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Right rail: minimal, no cards inside cards -->
+  <aside class="border-l hair p-6 overflow-y-auto scrollbar">
+    <div class="flex items-center gap-3 pb-5 border-b hair">
+      <div class="w-10 h-10 rounded-full bg-gradient-to-br from-pink-400 to-rose-500 flex items-center justify-center text-white text-sm font-medium">MP</div>
+      <div>
+        <div class="text-[14px] font-medium">Maya Patel</div>
+        <div class="text-[12px] dim">maya.p@hey.com</div>
+      </div>
+    </div>
+
+    <dl class="py-5 space-y-3 text-[13px]">
+      <div class="flex justify-between"><dt class="dim">LTV</dt><dd>$1,284</dd></div>
+      <div class="flex justify-between"><dt class="dim">Plan</dt><dd>Pro</dd></div>
+      <div class="flex justify-between"><dt class="dim">Joined</dt><dd>Mar 2024</dd></div>
+      <div class="flex justify-between"><dt class="dim">First response</dt><dd>12s</dd></div>
+    </dl>
+
+    <div class="py-5 border-t hair">
+      <div class="text-[11px] uppercase tracking-wider dim font-medium mb-3">Recent activity</div>
+      <ol class="space-y-2.5 text-[12.5px]">
+        <li><span class="dim">10:18</span> — AI drafted a reply</li>
+        <li><span class="dim">10:14</span> — Inbound SMS received</li>
+        <li><span class="dim">Yesterday</span> — Order #4892 delivered</li>
+        <li><span class="dim">2d ago</span> — Replaced damaged item, no further contact needed</li>
+      </ol>
+    </div>
+  </aside>
+</div>
+
+</body>
+</html>

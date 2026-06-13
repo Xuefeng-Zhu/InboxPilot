@@ -29,6 +29,8 @@ vi.mock('@/lib/queries', () => ({
     messages: (conversationId: string) => ['messages', conversationId],
     messagesInfinite: (conversationId: string, pageSize: number) => ['messages', 'infinite', conversationId, pageSize],
     conversation: (conversationId: string) => ['conversation', conversationId],
+    conversationsInfinite: (orgId: string, filters: Record<string, unknown>, pageSize: number) =>
+      ['conversations', 'infinite', orgId, filters, pageSize],
     aiDecision: (conversationId: string) => ['ai-decision', conversationId],
   },
   useOrgMembership: mocks.useOrgMembership,
@@ -173,7 +175,7 @@ describe('Inbox infinite loading', () => {
       error: null,
     });
 
-    render(
+    renderWithQueryClient(
       <ConversationList
         selectedId={null}
         onSelect={vi.fn()}
@@ -201,7 +203,7 @@ describe('Inbox infinite loading', () => {
       error: null,
     });
 
-    const { rerender } = render(
+    const { rerenderWithQueryClient } = renderWithQueryClient(
       <ConversationList selectedId={null} onSelect={vi.fn()} statusFilter="all" channelFilter="all" searchQuery="" />,
     );
     expect(screen.getByText('Loading conversations…')).toBeTruthy();
@@ -215,7 +217,7 @@ describe('Inbox infinite loading', () => {
       fetchNextPage: vi.fn(),
       error: null,
     });
-    rerender(<ConversationList selectedId={null} onSelect={vi.fn()} statusFilter="all" channelFilter="all" searchQuery="" />);
+    rerenderWithQueryClient(<ConversationList selectedId={null} onSelect={vi.fn()} statusFilter="all" channelFilter="all" searchQuery="" />);
     expect(screen.getByText('Loading more…')).toBeTruthy();
 
     mocks.useInfiniteConversations.mockReturnValueOnce({
@@ -227,7 +229,7 @@ describe('Inbox infinite loading', () => {
       fetchNextPage: vi.fn(),
       error: new Error('Page failed'),
     });
-    rerender(<ConversationList selectedId={null} onSelect={vi.fn()} statusFilter="all" channelFilter="all" searchQuery="" />);
+    rerenderWithQueryClient(<ConversationList selectedId={null} onSelect={vi.fn()} statusFilter="all" channelFilter="all" searchQuery="" />);
     expect(screen.getByRole('alert').textContent).toContain('Page failed');
 
     mocks.useInfiniteConversations.mockReturnValueOnce({
@@ -239,7 +241,7 @@ describe('Inbox infinite loading', () => {
       fetchNextPage: vi.fn(),
       error: null,
     });
-    rerender(<ConversationList selectedId={null} onSelect={vi.fn()} statusFilter="all" channelFilter="all" searchQuery="" />);
+    rerenderWithQueryClient(<ConversationList selectedId={null} onSelect={vi.fn()} statusFilter="all" channelFilter="all" searchQuery="" />);
     expect(screen.getByText('No conversations found.')).toBeTruthy();
   });
 

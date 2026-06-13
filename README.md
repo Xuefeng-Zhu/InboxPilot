@@ -10,7 +10,7 @@ InboxPilot is a multi-tenant AI-powered customer support platform built on [InsF
 - **Escalation engine** — Deterministic rules evaluated before any LLM call (profanity, legal threats, safety concerns, etc.)
 - **Role-based access** — Owner, admin, agent, and viewer roles with row-level security
 - **Job queue** — Postgres-backed async processing with exponential backoff and dead-lettering
-- **Realtime updates** — Polling-based live updates for inbox, messages, and knowledge documents
+- **Realtime updates** — InsForge Realtime events for inbox, messages, and knowledge documents
 - **Audit logging** — Append-only log of all significant actions for compliance
 
 ## Architecture
@@ -19,12 +19,12 @@ InboxPilot is a multi-tenant AI-powered customer support platform built on [InsF
 Next.js Frontend
   → InsForge Auth (JWT)
   → InsForge PostgREST (auto-generated APIs with RLS)
-  → InsForge Deno Functions (14 thin entrypoints)
+  → InsForge Deno Functions (9 webhook/job/widget entrypoints)
     → support-core package (portable business logic)
       → Provider-neutral adapters (SMS, Email)
       → Repository layer (data access abstraction)
       → Postgres-backed Job Queue
-  → InsForge Realtime (polling-based MVP)
+  → InsForge Realtime (Socket.IO)
   → InsForge AI Gateway (OpenRouter)
 ```
 
@@ -72,7 +72,7 @@ See `.env.example` for the full list with comments.
 Apply the SQL migration files in order to your InsForge PostgreSQL database:
 
 ```bash
-# 1. Initial schema — all 17 tables, indexes, constraints
+# 1. Initial schema — tables, indexes, constraints
 insforge/migrations/001_initial_schema.sql
 
 # 2. RPC functions — match_knowledge_chunks, claim_support_jobs
@@ -80,6 +80,11 @@ insforge/migrations/002_rpc_functions.sql
 
 # 3. Row Level Security policies — tenant isolation, append-only audit logs
 insforge/migrations/003_rls_policies.sql
+
+# 4-6. Organization onboarding, web chat, and conversation activity updates
+insforge/migrations/004_create_organization_onboarding_rpc.sql
+insforge/migrations/005_webchat.sql
+insforge/migrations/006_backfill_conversation_activity.sql
 ```
 
 Apply each file via the InsForge SQL editor or migrations API.
@@ -119,7 +124,7 @@ The Next.js development server starts at `http://localhost:3000`.
 
 ### Function Deployment
 
-Deploy the InsForge Deno functions from the `insforge/functions/` directory using the InsForge CLI or dashboard. There are 14 function entrypoints:
+Deploy the InsForge Deno functions from the `insforge/functions/` directory using the InsForge CLI or dashboard. There are 9 Deno function entrypoints:
 
 | Function | Trigger | Purpose |
 |----------|---------|---------|
@@ -127,16 +132,13 @@ Deploy the InsForge Deno functions from the `insforge/functions/` directory usin
 | `sms-status` | SMS provider webhook | Track SMS delivery status |
 | `email-inbound` | Email provider webhook | Process inbound emails |
 | `email-status` | Email provider webhook | Track email delivery status |
-| `send-reply` | Frontend (JWT) | Send outbound replies |
-| `approve-ai-draft` | Frontend (JWT) | Approve and send AI drafts |
-| `regenerate-ai-draft` | Frontend (JWT) | Regenerate AI drafts |
-| `process-ai-job` | Job queue | Process AI message analysis |
-| `process-knowledge-document` | Job queue | Chunk and embed documents |
 | `process-jobs` | Cron/scheduler | Claim and route pending jobs |
-| `escalate-conversation` | Frontend (JWT) | Escalate to human agents |
-| `resolve-conversation` | Frontend (JWT) | Resolve conversations |
-| `reopen-conversation` | Frontend (JWT) | Reopen resolved conversations |
-| `test-channel-connection` | Frontend (JWT) | Test provider connectivity |
+| `webchat-identify` | Widget API | Identify web chat visitors |
+| `webchat-thread-init` | Widget API | Start web chat threads |
+| `webchat-session-info` | Widget API | Load widget session context |
+| `webchat-inbound` | Widget API | Process inbound web chat messages |
+
+The frontend calls 7 local Next.js API routes under `app/api/functions/` for authenticated agent actions: `send-reply`, `approve-ai-draft`, `regenerate-ai-draft`, `escalate-conversation`, `resolve-conversation`, `reopen-conversation`, and `test-channel-connection`.
 
 ## Testing
 
@@ -204,7 +206,7 @@ packages/support-core/__tests__/
 │   ├── auth-context.tsx          # Auth provider and hook
 │   └── use-realtime.ts           # Realtime polling hook
 ├── insforge/                     # InsForge configuration
-│   ├── functions/                # 14 serverless function entrypoints
+│   ├── functions/                # 9 serverless function entrypoints
 │   ├── migrations/               # SQL migration files
 │   └── seed.sql                  # Development seed data
 ├── packages/
@@ -217,7 +219,7 @@ packages/support-core/__tests__/
 │       │   ├── types/            # Shared type definitions
 │       │   └── utils/            # Normalization, chunking
 │       └── __tests__/            # Tests
-├── middleware.ts                  # Next.js auth middleware
+├── proxy.ts                       # Next.js auth proxy
 ├── vitest.config.ts              # Test configuration
 └── .env.example                  # Environment variable template
 ```

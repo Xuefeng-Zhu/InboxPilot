@@ -30,7 +30,7 @@ describe('Infinite message pagination', () => {
           );
 
           const flattened = flattenMessagesChronologically(pages);
-          const timestamps = flattened.map((message) => Date.parse(message.created_at));
+          const timestamps = flattened.map((message) => Date.parse(message.created_at as string));
 
           expect(timestamps).toEqual([...timestamps].sort((a, b) => a - b));
           expect(flattened.map((message) => message.id).sort()).toEqual(messages.map((message) => message.id).sort());

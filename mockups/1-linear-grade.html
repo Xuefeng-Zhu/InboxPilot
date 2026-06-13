@@ -1,0 +1,305 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>InboxPilot — Mockup 1: Linear-grade</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg: #0B0D10;
+    --panel: #11141A;
+    --panel-2: #161A22;
+    --hairline: #1F242C;
+    --hairline-2: #2A3140;
+    --text: #E6E8EC;
+    --text-dim: #8A93A6;
+    --text-mute: #5C6577;
+    --accent: #818CF8;
+    --accent-soft: rgba(129, 140, 248, 0.12);
+    --green: #34D399;
+    --amber: #FBBF24;
+    --red: #F87171;
+    --violet: #A78BFA;
+  }
+  html, body { background: var(--bg); color: var(--text); font-family: 'Inter', system-ui, sans-serif; font-size: 13px; }
+  .hairline { border-color: var(--hairline); }
+  .hairline-2 { border-color: var(--hairline-2); }
+  .dim { color: var(--text-dim); }
+  .mute { color: var(--text-mute); }
+  .mono { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+  .label { font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-dim); font-weight: 500; }
+  .row { border-left: 2px solid transparent; }
+  .row.active { background: var(--panel-2); border-left-color: var(--accent); }
+  .row:hover { background: var(--panel-2); }
+  .kbd { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; padding: 1px 5px; border: 1px solid var(--hairline-2); border-radius: 3px; background: var(--panel); color: var(--text-dim); }
+  .dot { width: 6px; height: 6px; border-radius: 999px; display: inline-block; }
+  .bar { width: 3px; border-radius: 2px; }
+  .hover-bar { width: 3px; align-self: stretch; background: var(--hairline-2); }
+  .scrollbar::-webkit-scrollbar { width: 8px; height: 8px; }
+  .scrollbar::-webkit-scrollbar-thumb { background: var(--hairline-2); border-radius: 4px; }
+  .blip { width: 6px; height: 6px; border-radius: 999px; background: var(--accent); box-shadow: 0 0 0 0 var(--accent); animation: blip 1.6s ease-out infinite; }
+  @keyframes blip {
+    0% { box-shadow: 0 0 0 0 rgba(129, 140, 248, 0.5); }
+    100% { box-shadow: 0 0 0 8px rgba(129, 140, 248, 0); }
+  }
+</style>
+</head>
+<body class="h-screen overflow-hidden">
+
+<!-- Top bar -->
+<header class="h-10 flex items-center justify-between px-3 border-b hairline bg-[var(--panel)]">
+  <div class="flex items-center gap-3">
+    <div class="w-5 h-5 rounded bg-[var(--accent)] flex items-center justify-center text-[10px] font-semibold text-black">IP</div>
+    <span class="font-medium">Acme Support</span>
+    <span class="mute">/</span>
+    <span class="dim">Inbox</span>
+  </div>
+  <div class="flex items-center gap-2">
+    <div class="flex items-center gap-2 px-2 h-7 border hairline-2 rounded bg-[var(--panel-2)] text-dim" style="color: var(--text-dim)">
+      <span class="text-xs">Search</span>
+      <span class="ml-auto flex items-center gap-1">
+        <span class="kbd">⌘</span><span class="kbd">K</span>
+      </span>
+    </div>
+    <div class="w-6 h-6 rounded-full bg-gradient-to-br from-violet-500 to-indigo-600"></div>
+  </div>
+</header>
+
+<!-- 3-pane shell -->
+<div class="grid h-[calc(100vh-2.5rem)]" style="grid-template-columns: 240px 300px 1fr 280px;">
+
+  <!-- Sidebar -->
+  <aside class="border-r hairline p-2 flex flex-col gap-0.5 text-[13px]">
+    <div class="label px-2 py-1 mt-1">Workspace</div>
+    <a class="flex items-center gap-2 px-2 h-7 rounded hover:bg-[var(--panel-2)]"><span class="w-4 text-center">⚡</span> Inbox <span class="ml-auto text-dim">12</span></a>
+    <a class="flex items-center gap-2 px-2 h-7 rounded hover:bg-[var(--panel-2)]"><span class="w-4 text-center">📚</span> Knowledge</a>
+    <a class="flex items-center gap-2 px-2 h-7 rounded hover:bg-[var(--panel-2)]"><span class="w-4 text-center">👥</span> Customers</a>
+    <a class="flex items-center gap-2 px-2 h-7 rounded hover:bg-[var(--panel-2)]"><span class="w-4 text-center">📈</span> Analytics</a>
+    <a class="flex items-center gap-2 px-2 h-7 rounded hover:bg-[var(--panel-2)]"><span class="w-4 text-center">⚙</span> Settings</a>
+
+    <div class="label px-2 py-1 mt-3">Views</div>
+    <a class="flex items-center gap-2 px-2 h-7 rounded bg-[var(--accent-soft)] text-[var(--accent)]"><span class="dot" style="background:var(--accent)"></span> Mine</a>
+    <a class="flex items-center gap-2 px-2 h-7 rounded hover:bg-[var(--panel-2)] dim"><span class="dot" style="background:var(--amber)"></span> Escalated <span class="ml-auto">3</span></a>
+    <a class="flex items-center gap-2 px-2 h-7 rounded hover:bg-[var(--panel-2)] dim"><span class="dot" style="background:var(--violet)"></span> AI drafted <span class="ml-auto">7</span></a>
+    <a class="flex items-center gap-2 px-2 h-7 rounded hover:bg-[var(--panel-2)] dim"><span class="dot" style="background:var(--green)"></span> Resolved</a>
+
+    <div class="label px-2 py-1 mt-3">Channels</div>
+    <a class="flex items-center gap-2 px-2 h-7 rounded hover:bg-[var(--panel-2)] dim"><span class="w-2 h-2 rounded-full" style="background:#38BDF8"></span> SMS</a>
+    <a class="flex items-center gap-2 px-2 h-7 rounded hover:bg-[var(--panel-2)] dim"><span class="w-2 h-2 rounded-full" style="background:#A78BFA"></span> Email</a>
+    <a class="flex items-center gap-2 px-2 h-7 rounded hover:bg-[var(--panel-2)] dim"><span class="w-2 h-2 rounded-full" style="background:#34D399"></span> Webchat</a>
+  </aside>
+
+  <!-- Conversation list -->
+  <section class="border-r hairline flex flex-col">
+    <div class="h-9 px-3 flex items-center justify-between border-b hairline">
+      <div class="flex items-center gap-2">
+        <span class="font-medium">Inbox</span>
+        <span class="dim text-xs">128 open</span>
+      </div>
+      <div class="flex items-center gap-1 dim">
+        <button class="kbd">J</button><button class="kbd">K</button>
+      </div>
+    </div>
+    <div class="px-3 py-2 flex items-center gap-1.5 text-xs dim border-b hairline">
+      <span class="px-1.5 py-0.5 rounded bg-[var(--panel-2)] text-[var(--text)]">All</span>
+      <span class="px-1.5 py-0.5 rounded hover:bg-[var(--panel-2)]">Unread 12</span>
+      <span class="px-1.5 py-0.5 rounded hover:bg-[var(--panel-2)]">Mentions</span>
+    </div>
+    <div class="flex-1 overflow-y-auto scrollbar">
+
+      <!-- Row 1 active -->
+      <div class="row active flex items-stretch gap-2 px-3 py-2.5 cursor-pointer">
+        <div class="bar" style="background:var(--accent)"></div>
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center justify-between">
+            <span class="font-medium truncate">Maya Patel</span>
+            <span class="mono text-[10.5px] mute">2m</span>
+          </div>
+          <div class="dim truncate text-[12.5px]">Can I get a refund for order #4892? It arrived broken.</div>
+          <div class="flex items-center gap-1.5 mt-1">
+            <span class="w-1.5 h-1.5 rounded-full" style="background:#38BDF8"></span>
+            <span class="mute text-[11px]">SMS</span>
+            <span class="ml-auto flex items-center gap-1">
+              <span class="px-1 rounded text-[10px]" style="background:rgba(167,139,250,.15); color:var(--violet)">AI</span>
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div class="row flex items-stretch gap-2 px-3 py-2.5 cursor-pointer">
+        <div class="bar" style="background:var(--amber)"></div>
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center justify-between">
+            <span class="dim truncate">Leo Park</span>
+            <span class="mono text-[10.5px] mute">8m</span>
+          </div>
+          <div class="dim truncate text-[12.5px]">Need to talk to a real person about enterprise pricing…</div>
+          <div class="flex items-center gap-1.5 mt-1">
+            <span class="w-1.5 h-1.5 rounded-full" style="background:#A78BFA"></span>
+            <span class="mute text-[11px]">Email</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="row flex items-stretch gap-2 px-3 py-2.5 cursor-pointer">
+        <div class="bar" style="background:var(--violet)"></div>
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center justify-between">
+            <span class="dim truncate">Riya Shah</span>
+            <span class="mono text-[10.5px] mute">14m</span>
+          </div>
+          <div class="dim truncate text-[12.5px]">Where do I find my API key? I keep getting 401s.</div>
+          <div class="flex items-center gap-1.5 mt-1">
+            <span class="w-1.5 h-1.5 rounded-full" style="background:#34D399"></span>
+            <span class="mute text-[11px]">Webchat</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="row flex items-stretch gap-2 px-3 py-2.5 cursor-pointer">
+        <div class="bar" style="background:var(--green)"></div>
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center justify-between">
+            <span class="dim truncate">Daniel Wu</span>
+            <span class="mono text-[10.5px] mute">32m</span>
+          </div>
+          <div class="dim truncate text-[12.5px]">Thanks! That worked. Closing this.</div>
+          <div class="flex items-center gap-1.5 mt-1">
+            <span class="w-1.5 h-1.5 rounded-full" style="background:#38BDF8"></span>
+            <span class="mute text-[11px]">SMS</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="row flex items-stretch gap-2 px-3 py-2.5 cursor-pointer">
+        <div class="bar" style="background:transparent"></div>
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center justify-between">
+            <span class="dim truncate">Priya N.</span>
+            <span class="mono text-[10.5px] mute">1h</span>
+          </div>
+          <div class="dim truncate text-[12.5px]">Subscription renewed twice this month — please check.</div>
+          <div class="flex items-center gap-1.5 mt-1">
+            <span class="w-1.5 h-1.5 rounded-full" style="background:#A78BFA"></span>
+            <span class="mute text-[11px]">Email</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- Thread -->
+  <section class="flex flex-col min-w-0 bg-[var(--bg)]">
+    <div class="h-12 px-4 flex items-center justify-between border-b hairline">
+      <div class="flex items-center gap-3 min-w-0">
+        <div class="w-7 h-7 rounded-full bg-gradient-to-br from-pink-500 to-rose-600 flex items-center justify-center text-xs font-medium">MP</div>
+        <div class="min-w-0">
+          <div class="flex items-center gap-2">
+            <span class="font-medium">Maya Patel</span>
+            <span class="w-1.5 h-1.5 rounded-full" style="background:#38BDF8"></span>
+            <span class="mute text-[11px]">SMS · +1 415…0932</span>
+          </div>
+          <div class="dim text-[11px]">Order #4892 · Refund request · 2 prior conversations</div>
+        </div>
+      </div>
+      <div class="flex items-center gap-1 dim">
+        <button class="px-2 h-7 rounded hover:bg-[var(--panel-2)] text-[12px]">Assign</button>
+        <button class="px-2 h-7 rounded hover:bg-[var(--panel-2)] text-[12px]">Snooze</button>
+        <button class="px-2 h-7 rounded text-[12px]" style="background:rgba(248,113,113,.12); color:var(--red)">Escalate</button>
+      </div>
+    </div>
+
+    <div class="flex-1 overflow-y-auto scrollbar px-6 py-6 space-y-5">
+      <div class="text-center mute text-[11px] mono">TODAY · 10:14 AM</div>
+
+      <div class="flex gap-3">
+        <div class="w-7 h-7 rounded-full bg-gradient-to-br from-pink-500 to-rose-600 flex items-center justify-center text-[10px] font-medium shrink-0">MP</div>
+        <div class="max-w-[70%]">
+          <div class="text-[11px] dim mb-1">Maya · 10:14 AM</div>
+          <div class="text-[13.5px] leading-relaxed">Hi, my order #4892 arrived this morning but the box was completely crushed and the product inside is broken. I'd like a refund please.</div>
+        </div>
+      </div>
+
+      <div class="flex gap-3">
+        <div class="w-7 h-7 rounded-full bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-[10px] font-medium shrink-0">AI</div>
+        <div class="max-w-[70%]">
+          <div class="text-[11px] dim mb-1 flex items-center gap-2">InboxPilot AI · 10:14 AM <span class="px-1 rounded text-[10px]" style="background:var(--accent-soft); color:var(--accent)">draft</span></div>
+          <div class="text-[13.5px] leading-relaxed">Hi Maya, I'm so sorry to hear that. I can issue a full refund for #4892 right now and send a replacement today at no cost. Could you confirm the shipping address on file is still correct?</div>
+        </div>
+      </div>
+
+      <div class="flex gap-3">
+        <div class="w-7 h-7 rounded-full bg-gradient-to-br from-pink-500 to-rose-600 flex items-center justify-center text-[10px] font-medium shrink-0">MP</div>
+        <div class="max-w-[70%]">
+          <div class="text-[11px] dim mb-1">Maya · 10:18 AM</div>
+          <div class="text-[13.5px] leading-relaxed">Yes the address is fine. Just a refund is good, no need to replace. Thanks.</div>
+        </div>
+      </div>
+
+      <div class="flex gap-3">
+        <div class="w-7 h-7 rounded-full bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-[10px] font-medium shrink-0">AI</div>
+        <div class="max-w-[70%]">
+          <div class="text-[11px] dim mb-1 flex items-center gap-2">InboxPilot AI · 10:18 AM <span class="blip"></span> <span class="dim">drafting…</span></div>
+          <div class="text-[13.5px] leading-relaxed opacity-60">Got it. I'll process the refund for #4892 to your original payment method and send a confirmation email within 5 minutes…</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Composer -->
+    <div class="border-t hairline p-3">
+      <div class="rounded-md border hairline-2 bg-[var(--panel)] p-2.5">
+        <div class="flex items-center gap-2 mb-2 text-[11px] dim">
+          <span class="flex items-center gap-1"><span class="blip"></span> AI is drafting a reply</span>
+          <span class="ml-auto flex items-center gap-1">
+            <button class="px-1.5 h-5 rounded hover:bg-[var(--panel-2)]">Skip</button>
+            <button class="px-1.5 h-5 rounded hover:bg-[var(--panel-2)]">Regenerate</button>
+            <button class="px-2 h-5 rounded text-white" style="background:var(--accent); color:#0B0D10">Accept · ⌘↵</button>
+          </span>
+        </div>
+        <div class="text-[13.5px] leading-relaxed">Got it. I'll process the refund for #4892 to your original payment method and send a confirmation email within 5 minutes.</div>
+      </div>
+      <div class="flex items-center gap-2 mt-2 text-[11px] mute">
+        <span><span class="kbd">R</span> reply</span>
+        <span><span class="kbd">E</span> escalate</span>
+        <span><span class="kbd">⌘</span><span class="kbd">K</span> commands</span>
+        <span class="ml-auto">117 / 160 · 1 segment</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Customer details -->
+  <aside class="border-l hairline p-3 flex flex-col gap-3 text-[12.5px]">
+    <div class="flex items-center gap-2">
+      <div class="w-9 h-9 rounded-full bg-gradient-to-br from-pink-500 to-rose-600 flex items-center justify-center text-xs font-medium">MP</div>
+      <div>
+        <div class="font-medium">Maya Patel</div>
+        <div class="dim text-[11px]">maya.p@hey.com · +1 415…0932</div>
+      </div>
+    </div>
+    <div class="grid grid-cols-2 gap-2">
+      <div class="border hairline-2 rounded p-2"><div class="label">LTV</div><div class="font-medium mt-0.5">$1,284</div></div>
+      <div class="border hairline-2 rounded p-2"><div class="label">Tier</div><div class="font-medium mt-0.5">Pro</div></div>
+    </div>
+    <div>
+      <div class="label mb-1.5">Timeline</div>
+      <div class="space-y-2">
+        <div class="flex gap-2"><span class="mute text-[11px] mono w-12 shrink-0">10:14</span><span class="dim">Inbound SMS received</span></div>
+        <div class="flex gap-2"><span class="mute text-[11px] mono w-12 shrink-0">10:14</span><span class="dim">AI draft generated</span></div>
+        <div class="flex gap-2"><span class="mute text-[11px] mono w-12 shrink-0">10:18</span><span class="dim">Customer replied</span></div>
+        <div class="flex gap-2"><span class="mute text-[11px] mono w-12 shrink-0">10:18</span><span class="dim" style="color:var(--accent)">AI drafting reply</span></div>
+      </div>
+    </div>
+    <div>
+      <div class="label mb-1.5">Cited knowledge</div>
+      <div class="border hairline-2 rounded p-2 text-[11.5px] dim">Refund policy — broken on arrival<br/><span class="mute text-[10.5px]">Refunds & Returns · v3 · edited 2d ago</span></div>
+    </div>
+  </aside>
+</div>
+
+</body>
+</html>

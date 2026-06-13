@@ -1,0 +1,326 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>InboxPilot — Mockup 4: Retool-grade (split inbox)</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  html, body { background: #F1F3F5; color: #1A1D23; font-family: 'Inter', system-ui, sans-serif; font-size: 12.5px; }
+  .hair { border-color: #DEE1E6; }
+  .dim { color: #5C6370; }
+  .mute { color: #8A8F99; }
+  .mono { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+  .col { background: #FFFFFF; border: 1px solid #DEE1E6; border-radius: 6px; display: flex; flex-direction: column; min-height: 0; }
+  .col-header { padding: 8px 10px; border-bottom: 1px solid #DEE1E6; display: flex; align-items: center; gap: 6px; background: #FAFBFC; border-top-left-radius: 6px; border-top-right-radius: 6px; }
+  .row { padding: 7px 10px; border-bottom: 1px solid #F0F2F5; cursor: pointer; display: flex; gap: 8px; align-items: flex-start; }
+  .row:hover { background: #F8F9FB; }
+  .row.selected { background: #EEF3FF; box-shadow: inset 2px 0 0 #2563EB; }
+  .sla-chip { font-size: 10px; padding: 1px 5px; border-radius: 3px; font-weight: 600; font-family: 'JetBrains Mono', monospace; letter-spacing: 0.02em; }
+  .sla-green { background: #DCFCE7; color: #15803D; }
+  .sla-amber { background: #FEF3C7; color: #B45309; }
+  .sla-red { background: #FEE2E2; color: #B91C1C; }
+  .scrollbar::-webkit-scrollbar { width: 8px; height: 8px; }
+  .scrollbar::-webkit-scrollbar-thumb { background: #D6D9DE; border-radius: 4px; }
+  .macro-key { display: inline-flex; align-items: center; justify-content: center; min-width: 22px; height: 22px; padding: 0 6px; background: #FFFFFF; border: 1px solid #DEE1E6; border-bottom-width: 2px; border-radius: 4px; font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 600; color: #1A1D23; }
+  .preview-pop { position: absolute; z-index: 10; left: 100%; top: 0; width: 340px; background: #FFFFFF; border: 1px solid #DEE1E6; border-radius: 6px; box-shadow: 0 8px 24px rgba(0,0,0,0.08); padding: 12px; }
+  .bulk-bar { position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%); background: #1A1D23; color: white; padding: 8px 12px; border-radius: 6px; display: flex; align-items: center; gap: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.18); }
+</style>
+</head>
+<body class="h-screen overflow-hidden">
+
+<!-- Top bar with bulk bar example -->
+<header class="h-10 px-3 flex items-center justify-between bg-white border-b hair">
+  <div class="flex items-center gap-3">
+    <div class="w-5 h-5 rounded bg-gray-900 flex items-center justify-center text-white text-[10px] font-semibold">IP</div>
+    <span class="text-[13px] font-semibold">Acme Support</span>
+    <span class="text-mute">/</span>
+    <span class="text-[13px] dim">Inbox</span>
+  </div>
+  <div class="flex items-center gap-1.5 text-[11.5px] dim">
+    <span>1 selected</span>
+    <button class="px-2 py-0.5 rounded hover:bg-gray-100">Reset</button>
+  </div>
+  <div class="flex items-center gap-2 text-[11.5px]">
+    <span class="dim">View:</span>
+    <button class="px-2 py-0.5 rounded bg-gray-100 font-medium">Split</button>
+    <button class="px-2 py-0.5 rounded dim hover:bg-gray-100">List</button>
+  </div>
+</header>
+
+<!-- Split inbox columns -->
+<div class="grid h-[calc(100vh-2.5rem-44px)] gap-2 p-2" style="grid-template-columns: 1fr 1fr 1fr 1fr 1.4fr;">
+
+  <!-- Column 1: Mine -->
+  <div class="col">
+    <div class="col-header">
+      <div class="w-2 h-2 rounded-full bg-blue-500"></div>
+      <span class="text-[12px] font-semibold">Mine</span>
+      <span class="text-[11px] dim ml-1">5</span>
+      <span class="ml-auto text-[10.5px] mono text-emerald-600">+1</span>
+    </div>
+    <div class="flex-1 overflow-y-auto scrollbar">
+      <div class="row selected relative">
+        <input type="checkbox" checked class="mt-1" />
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center justify-between">
+            <span class="font-medium text-[12.5px] truncate">Maya Patel</span>
+            <span class="sla-chip sla-green">12s</span>
+          </div>
+          <div class="text-dim truncate text-[12px]">Refund for #4892…</div>
+          <div class="flex items-center gap-1.5 mt-0.5 text-[10.5px] mute">
+            <span class="font-semibold text-sky-600">SMS</span> · 2m
+          </div>
+        </div>
+        <div class="preview-pop hidden">
+          <div class="flex items-center justify-between mb-1.5">
+            <span class="font-semibold text-[13px]">Maya Patel</span>
+            <span class="text-[11px] mute mono">+1 415…0932</span>
+          </div>
+          <div class="text-[12px] dim leading-relaxed border-b hair pb-2 mb-2">Hi, my order #4892 arrived this morning but the box was completely crushed and the product inside is broken. I'd like a refund please.</div>
+          <div class="space-y-1 text-[11px]">
+            <div><span class="mute mono">10:14</span> <span class="dim">Inbound SMS</span></div>
+            <div><span class="mute mono">10:14</span> <span class="dim">AI drafted (12s)</span></div>
+            <div><span class="mute mono">10:18</span> <span class="dim">Customer replied</span></div>
+            <div><span class="mute mono">10:18</span> <span class="dim text-violet-600">AI drafting reply</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="row relative">
+        <input type="checkbox" class="mt-1" />
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center justify-between">
+            <span class="text-[12.5px] truncate">Riya Shah</span>
+            <span class="sla-chip sla-amber">42m</span>
+          </div>
+          <div class="text-dim truncate text-[12px]">API key 401 errors…</div>
+          <div class="flex items-center gap-1.5 mt-0.5 text-[10.5px] mute">
+            <span class="font-semibold text-emerald-600">Chat</span> · 14m
+          </div>
+        </div>
+      </div>
+      <div class="row relative">
+        <input type="checkbox" class="mt-1" />
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center justify-between">
+            <span class="text-[12.5px] truncate">Daniel Wu</span>
+            <span class="sla-chip sla-green">1m</span>
+          </div>
+          <div class="text-dim truncate text-[12px]">Thanks, closing…</div>
+          <div class="flex items-center gap-1.5 mt-0.5 text-[10.5px] mute">
+            <span class="font-semibold text-sky-600">SMS</span> · 32m
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Column 2: Escalated -->
+  <div class="col">
+    <div class="col-header">
+      <div class="w-2 h-2 rounded-full bg-rose-500"></div>
+      <span class="text-[12px] font-semibold">Escalated</span>
+      <span class="text-[11px] dim ml-1">3</span>
+      <span class="ml-auto text-[10.5px] mono text-rose-600">+1</span>
+    </div>
+    <div class="flex-1 overflow-y-auto scrollbar">
+      <div class="row relative">
+        <input type="checkbox" class="mt-1" />
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center justify-between">
+            <span class="text-[12.5px] truncate font-medium">Leo Park</span>
+            <span class="sla-chip sla-red">2h12</span>
+          </div>
+          <div class="text-dim truncate text-[12px]">Enterprise pricing Q3…</div>
+          <div class="flex items-center gap-1.5 mt-0.5 text-[10.5px] mute">
+            <span class="font-semibold text-violet-600">Email</span> · 8m
+          </div>
+        </div>
+      </div>
+      <div class="row relative">
+        <input type="checkbox" class="mt-1" />
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center justify-between">
+            <span class="text-[12.5px] truncate">Priya N.</span>
+            <span class="sla-chip sla-red">3h05</span>
+          </div>
+          <div class="text-dim truncate text-[12px]">Subscription renewed twice…</div>
+          <div class="flex items-center gap-1.5 mt-0.5 text-[10.5px] mute">
+            <span class="font-semibold text-violet-600">Email</span> · 1h
+          </div>
+        </div>
+      </div>
+      <div class="row relative">
+        <input type="checkbox" class="mt-1" />
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center justify-between">
+            <span class="text-[12.5px] truncate">Marcus T.</span>
+            <span class="sla-chip sla-amber">1h08</span>
+          </div>
+          <div class="text-dim truncate text-[12px]">Data export failing…</div>
+          <div class="flex items-center gap-1.5 mt-0.5 text-[10.5px] mute">
+            <span class="font-semibold text-emerald-600">Chat</span> · 45m
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Column 3: AI drafted -->
+  <div class="col">
+    <div class="col-header">
+      <div class="w-2 h-2 rounded-full bg-violet-500"></div>
+      <span class="text-[12px] font-semibold">AI drafted</span>
+      <span class="text-[11px] dim ml-1">7</span>
+      <span class="ml-auto text-[10.5px] mono text-violet-600">+3</span>
+    </div>
+    <div class="flex-1 overflow-y-auto scrollbar">
+      <div class="row relative">
+        <input type="checkbox" class="mt-1" />
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center justify-between">
+            <span class="text-[12.5px] truncate">Ana Costa</span>
+            <span class="sla-chip sla-green">8s</span>
+          </div>
+          <div class="text-dim truncate text-[12px]">How do I change my plan?</div>
+          <div class="flex items-center gap-1.5 mt-0.5 text-[10.5px] mute">
+            <span class="font-semibold text-sky-600">SMS</span> · 1m
+          </div>
+        </div>
+        <button class="absolute right-2 top-1.5 text-[10px] px-1.5 py-0.5 rounded bg-violet-100 text-violet-700 font-semibold">Review</button>
+      </div>
+      <div class="row relative">
+        <input type="checkbox" class="mt-1" />
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center justify-between">
+            <span class="text-[12.5px] truncate">Owen Reed</span>
+            <span class="sla-chip sla-green">15s</span>
+          </div>
+          <div class="text-dim truncate text-[12px]">Cancel my subscription…</div>
+          <div class="flex items-center gap-1.5 mt-0.5 text-[10.5px] mute">
+            <span class="font-semibold text-violet-600">Email</span> · 3m
+          </div>
+        </div>
+        <button class="absolute right-2 top-1.5 text-[10px] px-1.5 py-0.5 rounded bg-violet-100 text-violet-700 font-semibold">Review</button>
+      </div>
+      <div class="row relative">
+        <input type="checkbox" class="mt-1" />
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center justify-between">
+            <span class="text-[12.5px] truncate">Sara Kim</span>
+            <span class="sla-chip sla-green">22s</span>
+          </div>
+          <div class="text-dim truncate text-[12px]">2FA reset link expired…</div>
+          <div class="flex items-center gap-1.5 mt-0.5 text-[10.5px] mute">
+            <span class="font-semibold text-emerald-600">Chat</span> · 5m
+          </div>
+        </div>
+        <button class="absolute right-2 top-1.5 text-[10px] px-1.5 py-0.5 rounded bg-violet-100 text-violet-700 font-semibold">Review</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Column 4: Awaiting customer -->
+  <div class="col">
+    <div class="col-header">
+      <div class="w-2 h-2 rounded-full bg-amber-500"></div>
+      <span class="text-[12px] font-semibold">Awaiting reply</span>
+      <span class="text-[11px] dim ml-1">11</span>
+    </div>
+    <div class="flex-1 overflow-y-auto scrollbar">
+      <div class="row"><input type="checkbox" class="mt-1" /><div class="flex-1 min-w-0"><div class="flex items-center justify-between"><span class="text-[12.5px] truncate">Hannah B.</span><span class="sla-chip sla-amber">1h22</span></div><div class="text-dim truncate text-[12px]">Billing question…</div><div class="text-[10.5px] mute mt-0.5"><span class="font-semibold text-violet-600">Email</span> · 1h</div></div></div>
+      <div class="row"><input type="checkbox" class="mt-1" /><div class="flex-1 min-w-0"><div class="flex items-center justify-between"><span class="text-[12.5px] truncate">Tomas R.</span><span class="sla-chip sla-green">8m</span></div><div class="text-dim truncate text-[12px]">Invoice missing line items…</div><div class="text-[10.5px] mute mt-0.5"><span class="font-semibold text-sky-600">SMS</span> · 22m</div></div></div>
+      <div class="row"><input type="checkbox" class="mt-1" /><div class="flex-1 min-w-0"><div class="flex items-center justify-between"><span class="text-[12.5px] truncate">Jules M.</span><span class="sla-chip sla-amber">48m</span></div><div class="text-dim truncate text-[12px]">Webhook signature mismatch…</div><div class="text-[10.5px] mute mt-0.5"><span class="font-semibold text-emerald-600">Chat</span> · 30m</div></div></div>
+    </div>
+  </div>
+
+  <!-- Column 5: Triage / thread preview -->
+  <div class="col" style="background: #FAFBFC">
+    <div class="col-header">
+      <span class="text-[12px] font-semibold">Triage · Maya Patel</span>
+      <span class="ml-auto flex items-center gap-1">
+        <button class="text-[11px] px-1.5 py-0.5 rounded hover:bg-gray-100">Open full ↗</button>
+      </span>
+    </div>
+    <div class="p-3 space-y-3 text-[12.5px]">
+      <div class="flex items-center gap-2">
+        <div class="w-7 h-7 rounded-full bg-gradient-to-br from-pink-400 to-rose-500 flex items-center justify-center text-white text-[10px] font-semibold">MP</div>
+        <div>
+          <div class="font-medium text-[13px]">Maya Patel</div>
+          <div class="text-[11px] dim">SMS · +1 415 ··· 0932 · VIP · Pro plan</div>
+        </div>
+      </div>
+
+      <div class="border hair rounded p-2.5 bg-white">
+        <div class="text-[10.5px] mono dim mb-1">10:14 AM · Inbound</div>
+        <div class="text-[12.5px]">Hi, my order #4892 arrived this morning but the box was completely crushed and the product inside is broken. I'd like a refund please.</div>
+      </div>
+
+      <div class="border hair rounded p-2.5 bg-violet-50 border-violet-200">
+        <div class="text-[10.5px] mono text-violet-700 mb-1">10:14 AM · AI auto-draft (12s) · SENT</div>
+        <div class="text-[12.5px]">Hi Maya, I'm so sorry to hear that. I can issue a full refund for #4892 right now and send a replacement today at no cost. Could you confirm the shipping address on file is still correct?</div>
+      </div>
+
+      <div class="border hair rounded p-2.5 bg-white">
+        <div class="text-[10.5px] mono dim mb-1">10:18 AM · Inbound</div>
+        <div class="text-[12.5px]">Yes the address is fine. Just a refund is good, no need to replace. Thanks.</div>
+      </div>
+
+      <div class="border hair rounded p-2.5 bg-violet-50 border-violet-200">
+        <div class="text-[10.5px] mono text-violet-700 mb-1 flex items-center gap-1.5">10:18 AM · AI drafting <span class="w-1.5 h-1.5 rounded-full bg-violet-500 animate-pulse"></span></div>
+        <div class="text-[12.5px]">Got it. I'll process the refund for #4892 to your original payment method and send a confirmation email within 5 minutes…</div>
+      </div>
+
+      <div class="pt-2 flex items-center gap-1.5 text-[11px]">
+        <button class="flex-1 h-7 rounded bg-gray-900 text-white font-medium hover:bg-gray-800">Approve &amp; send</button>
+        <button class="h-7 px-2 rounded border hair hover:bg-gray-50">Edit</button>
+        <button class="h-7 px-2 rounded border hair hover:bg-gray-50">Skip</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Keyboard macro bar -->
+<footer class="h-11 px-3 flex items-center gap-2 bg-white border-t hair">
+  <span class="text-[11px] dim mr-2">Quick reply:</span>
+  <button class="flex items-center gap-1.5 px-2 h-7 rounded border hair hover:bg-gray-50 text-[12px]">
+    <span class="macro-key">1</span><span>Refund confirmation</span>
+  </button>
+  <button class="flex items-center gap-1.5 px-2 h-7 rounded border hair hover:bg-gray-50 text-[12px]">
+    <span class="macro-key">2</span><span>Ask for details</span>
+  </button>
+  <button class="flex items-center gap-1.5 px-2 h-7 rounded border hair hover:bg-gray-50 text-[12px]">
+    <span class="macro-key">3</span><span>Escalate to human</span>
+  </button>
+  <span class="text-[11px] dim ml-2">Channel:</span>
+  <button class="flex items-center gap-1.5 px-2 h-7 rounded border hair bg-sky-50 border-sky-200 text-[12px]">
+    <span class="macro-key">S</span><span class="text-sky-700 font-medium">SMS</span>
+  </button>
+  <button class="flex items-center gap-1.5 px-2 h-7 rounded border hair hover:bg-gray-50 text-[12px]">
+    <span class="macro-key">E</span><span>Email</span>
+  </button>
+  <div class="ml-auto flex items-center gap-2 text-[11px] dim">
+    <span><span class="macro-key">J</span><span class="macro-key">K</span> cycle</span>
+    <span><span class="macro-key">X</span> select</span>
+    <span><span class="macro-key">⌘</span><span class="macro-key">K</span> command</span>
+  </div>
+</footer>
+
+<!-- Bulk action bar (only when rows selected) -->
+<div class="bulk-bar">
+  <span class="text-[12px]">3 selected</span>
+  <div class="h-4 w-px bg-gray-600"></div>
+  <button class="text-[12px] px-2 py-1 rounded hover:bg-white/10">Assign…</button>
+  <button class="text-[12px] px-2 py-1 rounded hover:bg-white/10">Change status</button>
+  <button class="text-[12px] px-2 py-1 rounded hover:bg-white/10">Mark resolved</button>
+  <button class="text-[12px] px-2 py-1 rounded hover:bg-white/10">Escalate</button>
+  <button class="text-[12px] px-2 py-1 rounded hover:bg-white/10">Add tag…</button>
+  <div class="h-4 w-px bg-gray-600"></div>
+  <button class="text-[12px] px-2 py-1 rounded hover:bg-white/10 text-rose-300">Close</button>
+</div>
+
+</body>
+</html>

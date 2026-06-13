@@ -19,9 +19,9 @@ interface UseRealtimeOptions {
   onConversationUpdated?: (payload: Record<string, unknown>) => void;
   /** Called when a knowledge document is updated. */
   onKnowledgeDocumentUpdated?: (payload: Record<string, unknown>) => void;
-  /** Channel to subscribe for messages (e.g., `inbox:messages:<conversationId>`). */
+  /** Channel to subscribe for messages (e.g., `org:<organizationId>`). */
   messageChannel?: string;
-  /** Channel to subscribe for conversation updates (e.g., `inbox:conversations:<orgId>`). */
+  /** Channel to subscribe for conversation updates (e.g., `org:<organizationId>`). */
   conversationChannel?: string;
   /** Set to false to disable subscriptions. Defaults to true. */
   enabled?: boolean;
@@ -57,19 +57,18 @@ export function useRealtime(options: UseRealtimeOptions): void {
 
       if (disposed) return;
 
-      // Subscribe to per-conversation message channel
-      if (messageChannel) {
-        const res = await insforge.realtime.subscribe(messageChannel);
-        if (res.ok) {
-          channels.push(messageChannel);
-        }
-      }
+      const requestedChannels = Array.from(
+        new Set(
+          [messageChannel, conversationChannel].filter(
+            (channel): channel is string => typeof channel === 'string' && channel.length > 0,
+          ),
+        ),
+      );
 
-      // Subscribe to org-level conversation updates channel
-      if (conversationChannel) {
-        const res = await insforge.realtime.subscribe(conversationChannel);
+      for (const channel of requestedChannels) {
+        const res = await insforge.realtime.subscribe(channel);
         if (res.ok) {
-          channels.push(conversationChannel);
+          channels.push(channel);
         }
       }
     }
@@ -83,15 +82,23 @@ export function useRealtime(options: UseRealtimeOptions): void {
       callbacksRef.current.onConversationUpdated?.(payload);
     }
 
+    function handleKnowledgeDocumentUpdated(payload: Record<string, unknown>) {
+      callbacksRef.current.onKnowledgeDocumentUpdated?.(payload);
+    }
+
+    insforge.realtime.on('new_message', handleMessageCreated);
     insforge.realtime.on('message_created', handleMessageCreated);
     insforge.realtime.on('conversation_updated', handleConversationUpdated);
+    insforge.realtime.on('knowledge_document_updated', handleKnowledgeDocumentUpdated);
 
     setup();
 
     return () => {
       disposed = true;
+      insforge.realtime.off('new_message', handleMessageCreated);
       insforge.realtime.off('message_created', handleMessageCreated);
       insforge.realtime.off('conversation_updated', handleConversationUpdated);
+      insforge.realtime.off('knowledge_document_updated', handleKnowledgeDocumentUpdated);
 
       // Unsubscribe from channels
       for (const ch of channels) {

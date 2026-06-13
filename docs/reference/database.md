@@ -1,6 +1,6 @@
 # Database Reference
 
-> PostgreSQL schema reference. 19 tables, 5 migrations, 3 RPCs, RLS on all tenant-scoped tables.
+> PostgreSQL schema reference. 19 tables, 6 migrations, 3 RPCs, RLS on all tenant-scoped tables.
 
 ## Migration files
 
@@ -13,6 +13,7 @@ Apply in order. All files are idempotent (`CREATE OR REPLACE`, `IF NOT EXISTS`).
 | `insforge/migrations/003_rls_policies.sql` | RLS policies, `user_org_ids()` helper, credential column revocations |
 | `insforge/migrations/004_create_organization_onboarding_rpc.sql` | `create_organization_with_owner(name, slug)` — atomic signup RPC |
 | `insforge/migrations/005_webchat.sql` | Loosens `channel` CHECK to include `'webchat'`; adds `webchat_widgets`, `webchat_threads`; RLS for both |
+| `insforge/migrations/006_backfill_conversation_activity.sql` | Backfills and indexes conversation activity timestamps |
 
 Apply via the InsForge SQL editor or migrations API.
 

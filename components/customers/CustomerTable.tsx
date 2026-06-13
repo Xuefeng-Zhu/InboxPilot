@@ -13,9 +13,9 @@ interface CustomerTableProps {
 
 export function CustomerTable({ customers, totalCount, onViewConversations, onEdit, onDelete }: CustomerTableProps) {
   return (
-    <div className="mt-4 rounded-lg border border-surface-border bg-white overflow-hidden">
+    <div className="mt-4 rounded-lg border border-surface-border bg-white overflow-x-auto">
       {/* Header */}
-      <div className="grid grid-cols-[2fr_2fr_1.5fr_1.5fr_7rem] gap-4 px-4 py-3 border-b border-surface-border bg-gray-50">
+      <div className="grid min-w-[760px] grid-cols-[2fr_2fr_1.5fr_1.5fr_7rem] gap-4 px-4 py-3 border-b border-surface-border bg-gray-50">
         <span className="text-label-sm text-gray-500 uppercase tracking-wider">Name</span>
         <span className="text-label-sm text-gray-500 uppercase tracking-wider">Email</span>
         <span className="text-label-sm text-gray-500 uppercase tracking-wider">Phone</span>
@@ -40,7 +40,7 @@ export function CustomerTable({ customers, totalCount, onViewConversations, onEd
           {customers.map((customer) => (
             <div
               key={customer.id}
-              className="grid grid-cols-[2fr_2fr_1.5fr_1.5fr_7rem] gap-4 px-4 py-3 border-b border-surface-border/50 hover:bg-gray-50 transition-colors items-center group"
+              className="group grid min-w-[760px] grid-cols-[2fr_2fr_1.5fr_1.5fr_7rem] items-center gap-4 border-b border-surface-border/50 px-4 py-3 transition-colors hover:bg-gray-50"
             >
               <div className="flex items-center gap-3 min-w-0">
                 <div className={`flex items-center justify-center w-8 h-8 rounded-full shrink-0 text-label-sm font-semibold ${getAvatarColor(customer.id)}`}>
@@ -64,10 +64,11 @@ export function CustomerTable({ customers, totalCount, onViewConversations, onEd
               </span>
 
               {/* Actions */}
-              <div className="flex items-center gap-1 justify-end opacity-0 group-hover:opacity-100 transition-opacity">
+              <div className="flex items-center justify-end gap-1 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100 group-focus-within:opacity-100">
                 <button
                   onClick={() => onViewConversations(customer.id)}
                   title="View conversations"
+                  aria-label={`View conversations for ${customer.name || customer.email || 'customer'}`}
                   className="p-1.5 rounded hover:bg-gray-100 text-gray-500 hover:text-primary transition-colors"
                 >
                   <svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -89,7 +90,7 @@ export function CustomerTable({ customers, totalCount, onViewConversations, onEd
 
       {/* Footer */}
       {customers.length > 0 && (
-        <div className="px-4 py-3 border-t border-surface-border bg-gray-50">
+        <div className="min-w-[760px] px-4 py-3 border-t border-surface-border bg-gray-50">
           <span className="text-body-sm text-gray-500">
             Showing {customers.length} of {totalCount} customer{totalCount !== 1 ? 's' : ''}
           </span>

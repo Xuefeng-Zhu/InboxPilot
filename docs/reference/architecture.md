@@ -343,7 +343,7 @@ Stubs throw `Error('not implemented')` from `sendSms` / `sendEmail` so missing p
 | Infrastructure | `support_jobs`, `audit_logs` |
 | Web chat (since 005) | `webchat_widgets`, `webchat_threads` |
 
-**19 tables, 5 migrations, 3 RPCs.** See [`reference/database.md`](database.md) for full schema, RLS policies, indexes, and the ER diagram.
+**19 tables, 6 migrations, 3 RPCs.** See [`reference/database.md`](database.md) for full schema, RLS policies, indexes, and the ER diagram.
 
 ---
 

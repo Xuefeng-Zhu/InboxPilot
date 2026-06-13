@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { insforgeAdmin as insforge } from '@/lib/insforge-admin';
-import { getUserFromToken } from '../_auth';
+import { getUserFromToken, userHasOrgPermission } from '../_auth';
 
 const FUNCTIONS_URL = process.env.NEXT_PUBLIC_INSFORGE_FUNCTIONS_URL!;
 const SERVICE_KEY = process.env.INSFORGE_SERVICE_ROLE_KEY!;
 
 export async function POST(req: NextRequest) {
   try {
-    const user = getUserFromToken(req);
+    const user = await getUserFromToken(req);
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const { conversationId } = await req.json();
@@ -17,6 +17,13 @@ export async function POST(req: NextRequest) {
       .from('conversations').select('organization_id').eq('id', conversationId).limit(1);
     const conversation = Array.isArray(convo) ? convo[0] : convo;
     if (!conversation) return NextResponse.json({ error: 'Conversation not found' }, { status: 404 });
+
+    const allowed = await userHasOrgPermission(
+      user.id,
+      conversation.organization_id as string,
+      'reply_conversations',
+    );
+    if (!allowed) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
     await insforge.database.from('conversations').update({ ai_state: 'thinking' }).eq('id', conversationId);
 

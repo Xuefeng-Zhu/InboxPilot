@@ -54,6 +54,7 @@ insforge/migrations/002_rpc_functions.sql        # match_knowledge_chunks, claim
 insforge/migrations/003_rls_policies.sql         # RLS, user_org_ids(), credential revocations
 insforge/migrations/004_create_organization_onboarding_rpc.sql  # create_organization_with_owner
 insforge/migrations/005_webchat.sql              # webchat_widgets, webchat_threads
+insforge/migrations/006_backfill_conversation_activity.sql  # conversation activity backfill
 ```
 
 All files are idempotent — `CREATE OR REPLACE`, `IF NOT EXISTS` — so re-running is safe.

@@ -55,7 +55,7 @@ export default function HomePage() {
 
               {/* Headline */}
               <h1 className="text-4xl font-bold tracking-tight text-gray-900 sm:text-5xl lg:text-[3.25rem] lg:leading-[1.15]">
-                Your AI support agent
+                Your AI support agent{' '}
                 <br className="hidden sm:block" />
                 that never sleeps
               </h1>

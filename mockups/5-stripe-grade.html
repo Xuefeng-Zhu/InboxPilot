@@ -1,0 +1,371 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>InboxPilot — Mockup 5: Stripe-grade landing</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  html, body { background: #FFFFFF; color: #0A2540; font-family: 'Inter', system-ui, sans-serif; }
+  .grid-bg { background-image: linear-gradient(rgba(10,37,64,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(10,37,64,0.04) 1px, transparent 1px); background-size: 32px 32px; }
+  .mono { font-family: 'JetBrains Mono', monospace; }
+  .h-head { letter-spacing: -0.03em; font-weight: 700; }
+  .chrome { background: #F6F9FC; border: 1px solid #E3E8EE; border-radius: 12px; box-shadow: 0 1px 2px rgba(10,37,64,0.04), 0 24px 48px -16px rgba(10,37,64,0.12); overflow: hidden; }
+  .chrome-bar { display: flex; align-items: center; gap: 6px; padding: 10px 14px; background: #FFFFFF; border-bottom: 1px solid #E3E8EE; }
+  .chrome-dot { width: 10px; height: 10px; border-radius: 50%; }
+  .btn-primary { background: #0A2540; color: white; padding: 10px 18px; border-radius: 6px; font-weight: 600; font-size: 14px; }
+  .btn-primary:hover { background: #0F2E4D; }
+  .btn-secondary { background: white; color: #0A2540; padding: 10px 18px; border-radius: 6px; font-weight: 600; font-size: 14px; border: 1px solid #E3E8EE; }
+  .band-alt { background: #F6F9FC; }
+  .pricing-pop { background: linear-gradient(135deg, #635BFF 0%, #4F46E5 100%); color: white; }
+</style>
+</head>
+<body>
+
+<!-- Nav -->
+<header class="sticky top-0 z-10 bg-white/80 backdrop-blur border-b border-gray-100">
+  <div class="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between">
+    <div class="flex items-center gap-8">
+      <div class="flex items-center gap-2">
+        <div class="w-6 h-6 rounded bg-[#0A2540] flex items-center justify-center text-white text-[11px] font-bold">IP</div>
+        <span class="text-[15px] font-bold">InboxPilot</span>
+      </div>
+      <nav class="hidden md:flex items-center gap-1 text-[14px] text-gray-600">
+        <a class="px-3 py-1.5 rounded hover:bg-gray-50">Product</a>
+        <a class="px-3 py-1.5 rounded hover:bg-gray-50">Pricing</a>
+        <a class="px-3 py-1.5 rounded hover:bg-gray-50">Customers</a>
+        <a class="px-3 py-1.5 rounded hover:bg-gray-50">Changelog</a>
+        <a class="px-3 py-1.5 rounded hover:bg-gray-50">Docs</a>
+      </nav>
+    </div>
+    <div class="flex items-center gap-2 text-[14px]">
+      <a class="px-3 py-1.5 rounded text-gray-600 hover:bg-gray-50">Sign in</a>
+      <a class="btn-primary">Start free</a>
+    </div>
+  </div>
+</header>
+
+<!-- Hero -->
+<section class="grid-bg">
+  <div class="max-w-6xl mx-auto px-6 pt-20 pb-24 text-center">
+    <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white border border-gray-200 text-[12.5px] text-gray-700 mb-6">
+      <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> New: AI tone controls per channel
+    </div>
+    <h1 class="h-head text-[56px] leading-[1.05] max-w-3xl mx-auto text-balance">
+      The support inbox that <span class="text-[#635BFF]">drafts itself.</span>
+    </h1>
+    <p class="mt-5 text-[18px] text-gray-600 max-w-xl mx-auto text-balance">
+      InboxPilot reads every SMS, email, and chat, learns from your knowledge base, and replies like your best agent — only faster.
+    </p>
+    <div class="mt-8 flex items-center justify-center gap-3">
+      <a class="btn-primary">Start free — no credit card</a>
+      <a class="btn-secondary">Watch 2-min demo</a>
+    </div>
+    <div class="mt-3 text-[12.5px] text-gray-500">Free for 14 days · Cancel anytime · SOC 2 Type II</div>
+  </div>
+
+  <!-- Browser-chrome product screenshot -->
+  <div class="max-w-5xl mx-auto px-6 pb-20">
+    <div class="chrome">
+      <div class="chrome-bar">
+        <div class="chrome-dot bg-[#FF5F57]"></div>
+        <div class="chrome-dot bg-[#FEBC2E]"></div>
+        <div class="chrome-dot bg-[#28C840]"></div>
+        <div class="flex-1 mx-3 h-6 rounded bg-gray-100 flex items-center px-3 text-[11.5px] text-gray-500 mono">app.inboxpilot.io/inbox</div>
+      </div>
+      <div class="bg-white p-5">
+        <div class="grid grid-cols-12 gap-3 text-[12px]">
+          <!-- Sidebar mini -->
+          <div class="col-span-2 border border-gray-200 rounded p-2 space-y-1.5">
+            <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded bg-gray-900"></span><span class="font-semibold text-[11px]">Acme</span></div>
+            <div class="text-[10.5px] text-gray-500 mt-2">Workspace</div>
+            <div class="bg-gray-900 text-white rounded px-1.5 py-0.5 text-[10.5px]">Inbox · 12</div>
+            <div class="text-gray-500 px-1.5 py-0.5 text-[10.5px]">Knowledge</div>
+            <div class="text-gray-500 px-1.5 py-0.5 text-[10.5px]">Customers</div>
+            <div class="text-gray-500 px-1.5 py-0.5 text-[10.5px]">Analytics</div>
+          </div>
+          <!-- List mini -->
+          <div class="col-span-3 border border-gray-200 rounded">
+            <div class="px-2 py-1.5 border-b border-gray-200 text-[10.5px] font-semibold text-gray-700">Inbox</div>
+            <div class="bg-blue-50 border-l-2 border-blue-600 px-2 py-1.5">
+              <div class="font-semibold text-[11px]">Maya Patel</div>
+              <div class="text-gray-500 text-[10.5px] truncate">Can I get a refund for #4892?…</div>
+              <div class="text-[9.5px] text-sky-600 font-semibold mt-0.5">SMS · 2m</div>
+            </div>
+            <div class="px-2 py-1.5 border-b border-gray-100">
+              <div class="text-[11px] text-gray-700">Leo Park</div>
+              <div class="text-gray-400 text-[10.5px] truncate">Enterprise pricing Q3…</div>
+            </div>
+            <div class="px-2 py-1.5 border-b border-gray-100">
+              <div class="text-[11px] text-gray-700">Riya Shah</div>
+              <div class="text-gray-400 text-[10.5px] truncate">API key 401 errors…</div>
+            </div>
+          </div>
+          <!-- Thread mini -->
+          <div class="col-span-7 border border-gray-200 rounded p-3 space-y-2.5 bg-gray-50">
+            <div class="flex items-center gap-2 pb-2 border-b border-gray-200">
+              <div class="w-5 h-5 rounded-full bg-gradient-to-br from-pink-400 to-rose-500"></div>
+              <span class="text-[11.5px] font-semibold">Maya Patel</span>
+              <span class="text-[9.5px] text-sky-600 font-bold ml-1">SMS</span>
+              <span class="text-[10.5px] text-gray-500">+1 415…0932</span>
+            </div>
+            <div class="bg-white rounded p-2 text-[11.5px]">Hi, my order #4892 arrived this morning but the box was completely crushed and the product inside is broken. I'd like a refund please.</div>
+            <div class="bg-violet-50 border border-violet-100 rounded p-2 text-[11.5px]">Hi Maya, I'm so sorry to hear that. I can issue a full refund for #4892 right now and send a replacement today at no cost. Could you confirm the shipping address on file is still correct? <span class="text-[9.5px] text-violet-700 font-semibold ml-1">AI · 12s</span></div>
+            <div class="bg-white rounded p-2 text-[11.5px]">Yes the address is fine. Just a refund is good, no need to replace. Thanks.</div>
+            <div class="bg-violet-50 border border-violet-100 rounded p-2 text-[11.5px]">Got it. I'll process the refund for #4892 to your original payment method and send a confirmation email within 5 minutes. <span class="text-[9.5px] text-violet-700 font-semibold ml-1">drafting…</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Social proof -->
+<section class="border-y border-gray-100 bg-white">
+  <div class="max-w-6xl mx-auto px-6 py-10">
+    <div class="text-center text-[12px] uppercase tracking-wider text-gray-500 font-semibold">Trusted by support teams at</div>
+    <div class="mt-6 flex items-center justify-center gap-12 text-gray-400">
+      <div class="text-[22px] font-bold tracking-tight">◇ Northwind</div>
+      <div class="text-[22px] font-bold italic">stripe.</div>
+      <div class="text-[22px] font-bold">◆ Linear</div>
+      <div class="text-[22px] font-bold tracking-wide">RAMP</div>
+      <div class="text-[22px] font-bold">✱ Vercel</div>
+      <div class="text-[22px] font-bold">◉ Notion</div>
+    </div>
+  </div>
+</section>
+
+<!-- Feature row 1: AI drafts -->
+<section class="py-24">
+  <div class="max-w-6xl mx-auto px-6 grid grid-cols-2 gap-16 items-center">
+    <div>
+      <div class="text-[12px] uppercase tracking-wider text-[#635BFF] font-semibold">AI drafts</div>
+      <h2 class="h-head text-[40px] leading-[1.1] mt-3 text-balance">First response in 12 seconds, not 12 hours.</h2>
+      <p class="mt-4 text-[16px] text-gray-600 leading-relaxed">InboxPilot reads the message, cites the right article from your knowledge base, and writes a reply in your team's tone. Your agents approve, edit, or send — never start from scratch.</p>
+      <ul class="mt-6 space-y-2.5 text-[14px] text-gray-700">
+        <li class="flex items-start gap-2"><span class="text-emerald-500 mt-0.5">✓</span> Cites source article in every draft</li>
+        <li class="flex items-start gap-2"><span class="text-emerald-500 mt-0.5">✓</span> Auto-translates across 32 languages</li>
+        <li class="flex items-start gap-2"><span class="text-emerald-500 mt-0.5">✓</span> Escalates when confidence is low</li>
+      </ul>
+    </div>
+    <div class="chrome">
+      <div class="chrome-bar">
+        <div class="chrome-dot bg-[#FF5F57]"></div><div class="chrome-dot bg-[#FEBC2E]"></div><div class="chrome-dot bg-[#28C840]"></div>
+        <div class="flex-1 mx-3 h-6 rounded bg-gray-100 flex items-center px-3 text-[11px] text-gray-500 mono">AI draft</div>
+      </div>
+      <div class="bg-white p-4 space-y-2.5 text-[12.5px]">
+        <div class="border border-gray-200 rounded p-2.5"><div class="text-[10.5px] text-gray-500 mb-1">Inbound from Maya</div>Box arrived crushed, want a refund.</div>
+        <div class="border border-violet-200 bg-violet-50 rounded p-2.5"><div class="text-[10.5px] text-violet-700 font-semibold mb-1">InboxPilot AI · cited "Refund policy"</div>Hi Maya, I'm so sorry to hear that. I can issue a full refund for #4892 right now…</div>
+        <div class="flex items-center gap-1.5 text-[10.5px]"><span class="px-1.5 py-0.5 rounded bg-gray-900 text-white font-semibold">Send · 12s</span><span class="px-1.5 py-0.5 rounded border border-gray-200">Edit</span><span class="px-1.5 py-0.5 rounded border border-gray-200">Skip</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Feature row 2: Multi-channel (alt band) -->
+<section class="band-alt py-24">
+  <div class="max-w-6xl mx-auto px-6 grid grid-cols-2 gap-16 items-center">
+    <div class="chrome">
+      <div class="chrome-bar">
+        <div class="chrome-dot bg-[#FF5F57]"></div><div class="chrome-dot bg-[#FEBC2E]"></div><div class="chrome-dot bg-[#28C840]"></div>
+        <div class="flex-1 mx-3 h-6 rounded bg-gray-100 flex items-center px-3 text-[11px] text-gray-500 mono">Channels</div>
+      </div>
+      <div class="bg-white p-4 space-y-2 text-[12.5px]">
+        <div class="flex items-center justify-between p-2 border border-gray-200 rounded">
+          <div class="flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-sky-400"></span><span class="font-semibold">Twilio SMS</span></div>
+          <span class="text-emerald-600 text-[10.5px] font-semibold">● Connected</span>
+        </div>
+        <div class="flex items-center justify-between p-2 border border-gray-200 rounded">
+          <div class="flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-violet-400"></span><span class="font-semibold">Postmark Email</span></div>
+          <span class="text-emerald-600 text-[10.5px] font-semibold">● Connected</span>
+        </div>
+        <div class="flex items-center justify-between p-2 border border-gray-200 rounded">
+          <div class="flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-emerald-400"></span><span class="font-semibold">Web chat widget</span></div>
+          <span class="text-emerald-600 text-[10.5px] font-semibold">● Live on 4 sites</span>
+        </div>
+        <div class="flex items-center justify-between p-2 border border-gray-200 rounded border-dashed">
+          <div class="flex items-center gap-2 text-gray-500"><span class="w-2 h-2 rounded-full bg-gray-300"></span><span>Add another channel</span></div>
+          <span class="text-gray-400 text-[10.5px]">+</span>
+        </div>
+      </div>
+    </div>
+    <div>
+      <div class="text-[12px] uppercase tracking-wider text-[#635BFF] font-semibold">One inbox, every channel</div>
+      <h2 class="h-head text-[40px] leading-[1.1] mt-3 text-balance">SMS, email, chat. One queue.</h2>
+      <p class="mt-4 text-[16px] text-gray-600 leading-relaxed">Stop switching between Twilio, Gmail, and Intercom. Every message — regardless of channel — lives in the same inbox, with the same AI, the same context, the same audit trail.</p>
+    </div>
+  </div>
+</section>
+
+<!-- Pricing — uses real StatusBadge / Card primitives from the app -->
+<section class="py-24">
+  <div class="max-w-6xl mx-auto px-6">
+    <div class="text-center max-w-2xl mx-auto">
+      <div class="text-[12px] uppercase tracking-wider text-[#635BFF] font-semibold">Pricing</div>
+      <h2 class="h-head text-[40px] leading-[1.1] mt-3">Pay for conversations, not seats.</h2>
+      <p class="mt-4 text-[16px] text-gray-600">All plans include unlimited agents, all channels, and the full AI suite.</p>
+    </div>
+
+    <div class="mt-12 grid grid-cols-3 gap-5">
+      <!-- Starter -->
+      <div class="border border-gray-200 rounded-xl p-6 bg-white">
+        <div class="text-[14px] font-semibold">Starter</div>
+        <div class="mt-3 flex items-baseline gap-1"><span class="text-[36px] font-bold tracking-tight">$0</span><span class="text-gray-500 text-[13px]">/ month</span></div>
+        <p class="text-[13px] text-gray-600 mt-1">For teams just starting out.</p>
+        <a class="mt-5 block text-center h-10 leading-10 rounded-md border border-gray-200 font-semibold text-[14px] hover:bg-gray-50">Get started</a>
+        <ul class="mt-5 space-y-2 text-[13px] text-gray-700">
+          <li>Up to 200 conversations / mo</li>
+          <li>2 channels</li>
+          <li>1 knowledge source</li>
+          <li>Community support</li>
+        </ul>
+      </div>
+
+      <!-- Pro (popular) -->
+      <div class="pricing-pop rounded-xl p-6 relative">
+        <div class="absolute -top-2 right-5 px-2 py-0.5 rounded-full bg-amber-300 text-amber-900 text-[10.5px] font-bold uppercase tracking-wider">Most popular</div>
+        <div class="text-[14px] font-semibold opacity-90">Pro</div>
+        <div class="mt-3 flex items-baseline gap-1"><span class="text-[36px] font-bold tracking-tight">$99</span><span class="opacity-70 text-[13px]">/ month</span></div>
+        <p class="text-[13px] opacity-80 mt-1">+ $0.40 per resolved AI conversation.</p>
+        <a class="mt-5 block text-center h-10 leading-10 rounded-md bg-white text-[#0A2540] font-semibold text-[14px] hover:bg-gray-100">Start 14-day trial</a>
+        <ul class="mt-5 space-y-2 text-[13px]">
+          <li>Unlimited conversations</li>
+          <li>All channels</li>
+          <li>Unlimited knowledge sources</li>
+          <li>SLA tracking + escalation rules</li>
+          <li>Priority email support</li>
+        </ul>
+      </div>
+
+      <!-- Enterprise -->
+      <div class="border border-gray-200 rounded-xl p-6 bg-white">
+        <div class="text-[14px] font-semibold">Enterprise</div>
+        <div class="mt-3 flex items-baseline gap-1"><span class="text-[36px] font-bold tracking-tight">Custom</span></div>
+        <p class="text-[13px] text-gray-600 mt-1">For regulated and high-volume teams.</p>
+        <a class="mt-5 block text-center h-10 leading-10 rounded-md border border-gray-200 font-semibold text-[14px] hover:bg-gray-50">Talk to sales</a>
+        <ul class="mt-5 space-y-2 text-[13px] text-gray-700">
+          <li>SSO + SCIM</li>
+          <li>SOC 2 Type II report</li>
+          <li>Custom data residency</li>
+          <li>Dedicated CSM</li>
+          <li>99.95% uptime SLA</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Component examples (kitchen sink) -->
+<section class="band-alt py-24">
+  <div class="max-w-6xl mx-auto px-6">
+    <div class="text-center max-w-2xl mx-auto">
+      <div class="text-[12px] uppercase tracking-wider text-[#635BFF] font-semibold">Design system</div>
+      <h2 class="h-head text-[40px] leading-[1.1] mt-3">Built on the same primitives your team uses.</h2>
+    </div>
+
+    <div class="mt-12 chrome max-w-3xl mx-auto">
+      <div class="chrome-bar">
+        <div class="chrome-dot bg-[#FF5F57]"></div><div class="chrome-dot bg-[#FEBC2E]"></div><div class="chrome-dot bg-[#28C840]"></div>
+        <div class="flex-1 mx-3 h-6 rounded bg-gray-100 flex items-center px-3 text-[11px] text-gray-500 mono">Components</div>
+      </div>
+      <div class="bg-white p-6 space-y-5">
+        <div>
+          <div class="text-[11px] uppercase tracking-wider text-gray-500 font-semibold mb-2">Buttons</div>
+          <div class="flex items-center gap-2">
+            <button class="btn-primary">Primary</button>
+            <button class="btn-secondary">Secondary</button>
+            <button class="px-3 py-2 rounded text-[14px] text-[#635BFF] font-semibold hover:bg-violet-50">Tertiary →</button>
+            <button class="h-9 px-3 rounded text-[14px] text-rose-600 font-semibold hover:bg-rose-50">Destructive</button>
+          </div>
+        </div>
+        <div>
+          <div class="text-[11px] uppercase tracking-wider text-gray-500 font-semibold mb-2">Status</div>
+          <div class="flex items-center gap-2">
+            <span class="px-2 py-0.5 rounded text-[11px] font-semibold" style="background:#FFF7ED;color:#C2410C">Open</span>
+            <span class="px-2 py-0.5 rounded text-[11px] font-semibold" style="background:#FEF2F2;color:#B91C1C">Escalated</span>
+            <span class="px-2 py-0.5 rounded text-[11px] font-semibold" style="background:#F0FDF4;color:#15803D">Resolved</span>
+            <span class="px-2 py-0.5 rounded text-[11px] font-semibold" style="background:#F5F3FF;color:#6D28D9">AI draft</span>
+          </div>
+        </div>
+        <div>
+          <div class="text-[11px] uppercase tracking-wider text-gray-500 font-semibold mb-2">Input</div>
+          <div class="grid grid-cols-2 gap-3 max-w-lg">
+            <input class="h-9 px-3 rounded border border-gray-200 text-[14px] outline-none focus:border-[#635BFF] focus:ring-2 focus:ring-violet-100" placeholder="Email" />
+            <input class="h-9 px-3 rounded border border-gray-200 text-[14px] outline-none" placeholder="Search…" />
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- CTA -->
+<section class="py-24">
+  <div class="max-w-3xl mx-auto px-6 text-center">
+    <h2 class="h-head text-[44px] leading-[1.1] text-balance">Start replying in 12 seconds.</h2>
+    <p class="mt-4 text-[16px] text-gray-600">14-day free trial. Connect a channel, paste in a doc, and watch the first draft appear.</p>
+    <div class="mt-7 flex items-center justify-center gap-3">
+      <a class="btn-primary">Start free</a>
+      <a class="btn-secondary">Book a demo</a>
+    </div>
+  </div>
+</section>
+
+<!-- Footer -->
+<footer class="border-t border-gray-100 bg-white">
+  <div class="max-w-6xl mx-auto px-6 py-14 grid grid-cols-5 gap-8 text-[13.5px]">
+    <div class="col-span-2">
+      <div class="flex items-center gap-2">
+        <div class="w-6 h-6 rounded bg-[#0A2540] flex items-center justify-center text-white text-[11px] font-bold">IP</div>
+        <span class="font-bold">InboxPilot</span>
+      </div>
+      <p class="mt-3 text-[13px] text-gray-500 max-w-xs">The support inbox that drafts itself. Built for teams who care about reply time and tone.</p>
+    </div>
+    <div>
+      <div class="text-[11px] uppercase tracking-wider text-gray-500 font-semibold mb-3">Product</div>
+      <ul class="space-y-2 text-gray-600">
+        <li><a class="hover:text-gray-900">Inbox</a></li>
+        <li><a class="hover:text-gray-900">Knowledge</a></li>
+        <li><a class="hover:text-gray-900">Analytics</a></li>
+        <li><a class="hover:text-gray-900">Integrations</a></li>
+        <li><a class="hover:text-gray-900">Changelog</a></li>
+      </ul>
+    </div>
+    <div>
+      <div class="text-[11px] uppercase tracking-wider text-gray-500 font-semibold mb-3">Resources</div>
+      <ul class="space-y-2 text-gray-600">
+        <li><a class="hover:text-gray-900">Docs</a></li>
+        <li><a class="hover:text-gray-900">API reference</a></li>
+        <li><a class="hover:text-gray-900">Help center</a></li>
+        <li><a class="hover:text-gray-900">Status</a></li>
+        <li><a class="hover:text-gray-900">Security</a></li>
+      </ul>
+    </div>
+    <div>
+      <div class="text-[11px] uppercase tracking-wider text-gray-500 font-semibold mb-3">Company</div>
+      <ul class="space-y-2 text-gray-600">
+        <li><a class="hover:text-gray-900">About</a></li>
+        <li><a class="hover:text-gray-900">Careers</a></li>
+        <li><a class="hover:text-gray-900">Customers</a></li>
+        <li><a class="hover:text-gray-900">Contact</a></li>
+      </ul>
+    </div>
+  </div>
+  <div class="border-t border-gray-100">
+    <div class="max-w-6xl mx-auto px-6 py-5 flex items-center justify-between text-[12.5px] text-gray-500">
+      <div>© 2026 InboxPilot, Inc.</div>
+      <div class="flex items-center gap-4">
+        <a class="hover:text-gray-900">Privacy</a>
+        <a class="hover:text-gray-900">Terms</a>
+        <a class="hover:text-gray-900">Cookies</a>
+        <a class="hover:text-gray-900">DPA</a>
+      </div>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>

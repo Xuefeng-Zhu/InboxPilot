@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { Suspense, useEffect, useRef, useState, useCallback } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
 /**
@@ -149,6 +149,23 @@ function PreChatForm({ color, onSubmit }: {
 // ---------------------------------------------------------------------------
 
 export default function WidgetChatPage() {
+  return (
+    <Suspense
+      fallback={
+        <div style={{ display: 'flex', minHeight: '100vh', flexDirection: 'column', background: '#ffffff', color: '#111827' }}>
+          <div style={{ padding: '14px 16px', background: '#4F46E5', color: '#ffffff', fontFamily: 'system-ui, sans-serif', fontSize: 15, fontWeight: 600 }}>
+            <span>Chat with us</span>
+          </div>
+          <div style={{ flex: 1, background: '#F9FAFB' }} />
+        </div>
+      }
+    >
+      <WidgetChatContent />
+    </Suspense>
+  );
+}
+
+function WidgetChatContent() {
   const params = useParams();
   const searchParams = useSearchParams();
   const widgetId = params.widgetId as string;
@@ -179,7 +196,10 @@ export default function WidgetChatPage() {
 
   // Fetch session info on mount
   useEffect(() => {
-    if (!visitorToken) return;
+    if (!visitorToken) {
+      setError('Unable to initialize chat session. Please close and reopen the chat.');
+      return;
+    }
 
     async function loadSession() {
       try {
@@ -193,25 +213,30 @@ export default function WidgetChatPage() {
           window.parent.postMessage({ type: 'inboxpilot:auth_expired' }, '*');
           return;
         }
-        if (res.ok) {
-          const json = await res.json();
-          if (json.data?.history) {
-            const history = json.data.history as ChatMessage[];
-            history.forEach((m) => messageIdsRef.current.add(m.id));
-            setMessages(history);
-          }
-          // Check if pre-chat is needed (no messages yet = fresh session, check widget config)
-          if (json.data?.history?.length === 0 || !json.data?.history) {
-            // We'll check pre-chat from URL param
-            const preChatParam = searchParams.get('prechat');
-            if (preChatParam === '1') {
-              setShowPreChat(true);
-            }
-          }
-          setSessionReady(true);
+
+        if (!res.ok) {
+          const json = await res.json().catch(() => ({}));
+          setError((json as { error?: string }).error ?? 'Unable to load this chat session.');
+          return;
         }
+
+        const json = await res.json();
+        if (json.data?.history) {
+          const history = json.data.history as ChatMessage[];
+          history.forEach((m) => messageIdsRef.current.add(m.id));
+          setMessages(history);
+        }
+        // Check if pre-chat is needed (no messages yet = fresh session, check widget config)
+        if (json.data?.history?.length === 0 || !json.data?.history) {
+          // We'll check pre-chat from URL param
+          const preChatParam = searchParams.get('prechat');
+          if (preChatParam === '1') {
+            setShowPreChat(true);
+          }
+        }
+        setSessionReady(true);
       } catch {
-        setSessionReady(true); // Show UI even if session load fails
+        setError('Network error while loading chat. Please try again.');
       }
     }
 
@@ -371,10 +396,10 @@ export default function WidgetChatPage() {
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') handleSend(); }}
                 placeholder="Type a message…"
-                disabled={sending || !sessionReady}
+                disabled={sending || !sessionReady || !!error}
                 aria-label="Message input"
               />
-              <button onClick={handleSend} disabled={sending || !input.trim() || !sessionReady} aria-label="Send message">
+              <button onClick={handleSend} disabled={sending || !input.trim() || !sessionReady || !!error} aria-label="Send message">
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
                   <path d="M14 2L7 9M14 2L9.5 14L7 9M14 2L2 6.5L7 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
                 </svg>

@@ -78,14 +78,14 @@ export default function KnowledgePage() {
 
       const { data: insertedData, error: insertError } = await insforge.database
         .from('knowledge_documents')
-        .insert({
+        .insert([{
           title: data.title,
           source_type: data.sourceType,
           body: data.body || (fileName ?? ''),
           status: 'pending',
           file_url: fileUrl,
           file_name: fileName,
-        })
+        }])
         .select();
 
       if (insertError) {
@@ -100,7 +100,7 @@ export default function KnowledgePage() {
         // Audit log
         await insforge.database
           .from('audit_logs')
-          .insert({
+          .insert([{
             organization_id: doc.organization_id ?? null,
             actor_id: user?.id ?? null,
             actor_type: 'user',
@@ -108,13 +108,13 @@ export default function KnowledgePage() {
             resource_type: 'knowledge_document',
             resource_id: doc.id ?? null,
             metadata: { title: data.title },
-          })
+          }])
           .select();
 
         // Enqueue processing job
         await insforge.database
           .from('support_jobs')
-          .insert({
+          .insert([{
             organization_id: doc.organization_id ?? null,
             job_type: 'process_knowledge_document',
             payload: { documentId: doc.id },
@@ -122,7 +122,7 @@ export default function KnowledgePage() {
             attempts: 0,
             max_attempts: 3,
             run_after: new Date().toISOString(),
-          })
+          }])
           .select();
       }
 
@@ -161,7 +161,7 @@ export default function KnowledgePage() {
       if (doc) {
         await insforge.database
           .from('audit_logs')
-          .insert({
+          .insert([{
             organization_id: doc.organization_id,
             actor_id: user?.id ?? null,
             actor_type: 'user',
@@ -169,7 +169,7 @@ export default function KnowledgePage() {
             resource_type: 'knowledge_document',
             resource_id: docId,
             metadata: { title: doc.title },
-          })
+          }])
           .select();
       }
 

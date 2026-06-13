@@ -54,6 +54,10 @@ RBAC is enforced at two layers:
   - `inviteMember` rejects `role === 'owner'` (owners are created via the `create_organization_with_owner` RPC or via `changeMemberRole`).
   - `changeMemberRole` enforces the single-owner invariant: cannot demote the last owner; promoting to owner demotes the existing owner to admin.
   - `removeMember` refuses to remove the last owner.
+- Next.js API routes under `/api/functions/*`:
+  - `send-reply`, `approve-ai-draft`, and `regenerate-ai-draft` verify `reply_conversations` for the target conversation's organization.
+  - `escalate-conversation`, `resolve-conversation`, and `reopen-conversation` verify `reply_conversations` before changing conversation status.
+  - `test-channel-connection` verifies `manage_settings` for the provider account's organization.
 
 ### Database layer (RLS)
 
@@ -61,12 +65,7 @@ The `user_org_ids()` SQL function (in `003_rls_policies.sql`) returns the user's
 
 ### Known gaps
 
-The Next.js API routes under `/api/functions/*` do **not** check RBAC permissions — they only verify the user is authenticated. Any authenticated org member can call any action, including:
-- `escalate-conversation`, `resolve-conversation`, `reopen-conversation` (anyone can change any conversation's status)
-- `approve-ai-draft` (anyone can approve any AI draft)
-- `test-channel-connection` (anyone can probe provider accounts)
-
-RLS prevents cross-org access, but intra-org RBAC is not enforced. This is tracked in [`../plans/refactor.md`](../plans/refactor.md).
+Direct client-side database writes still rely on RLS for tenant isolation and do not all enforce role-level permissions at a shared application boundary. Prefer routing significant mutations through a server-side call site that verifies the InsForge session and calls `userHasOrgPermission`.
 
 ## Adding a new permission
 
@@ -76,7 +75,7 @@ RLS prevents cross-org access, but intra-org RBAC is not enforced. This is track
 4. Add a property-based test case in `__tests__/properties/rbac.prop.test.ts` to lock the matrix.
 5. Update the table at the top of this file.
 
-Enforcement should be added at the call site of any action that requires it. For Deno Functions, call `checkPermission` in the entrypoint. For Next.js API routes, the RBAC refactor will add a shared `withPermission` HOF (see [`../plans/refactor.md`](../plans/refactor.md)).
+Enforcement should be added at the call site of any action that requires it. For Deno Functions, call `checkPermission` in the entrypoint. For Next.js API routes, verify the InsForge session and call `userHasOrgPermission` in `app/api/functions/_auth.ts`.
 
 ## Invariants
 

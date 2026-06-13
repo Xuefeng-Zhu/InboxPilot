@@ -1,0 +1,379 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>InboxPilot — Mockup 2: Front-grade</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --sms: #38BDF8;        /* sky-400 */
+    --sms-soft: #E0F2FE;
+    --email: #8B5CF6;      /* violet-500 */
+    --email-soft: #F5F3FF;
+    --chat: #10B981;       /* emerald-500 */
+    --chat-soft: #ECFDF5;
+    --bg: #F9FAFB;
+    --panel: #FFFFFF;
+    --border: #E5E7EB;
+    --border-2: #D1D5DB;
+    --text: #111827;
+    --dim: #6B7280;
+    --mute: #9CA3AF;
+  }
+  html, body { background: var(--bg); color: var(--text); font-family: 'Inter', system-ui, sans-serif; }
+  .ch-sms { color: var(--sms); }
+  .ch-email { color: var(--email); }
+  .ch-chat { color: var(--chat); }
+  .bg-sms { background: var(--sms-soft); }
+  .bg-email { background: var(--email-soft); }
+  .bg-chat { background: var(--chat-soft); }
+  .border-app { border-color: var(--border); }
+  .border-app-strong { border-color: var(--border-2); }
+  .text-dim { color: var(--dim); }
+  .text-mute { color: var(--mute); }
+  .seg { padding: 4px 10px; border-radius: 6px; font-size: 12.5px; font-weight: 500; color: var(--dim); }
+  .seg.active { background: var(--text); color: #fff; }
+  .seg:not(.active):hover { background: #F3F4F6; }
+  .pill { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; letter-spacing: 0.01em; }
+  .pill-open { background: #FFF7ED; color: #C2410C; }
+  .pill-escalated { background: #FEF2F2; color: #B91C1C; }
+  .pill-resolved { background: #F0FDF4; color: #15803D; }
+  .pill-ai { background: #F5F3FF; color: #6D28D9; }
+  .row { border-left: 3px solid transparent; }
+  .row.active { background: #F9FAFB; border-left-color: var(--text); }
+  .row:hover:not(.active) { background: #FAFAFA; }
+  .channel-rail { width: 3px; align-self: stretch; }
+  .scrollbar::-webkit-scrollbar { width: 8px; }
+  .scrollbar::-webkit-scrollbar-thumb { background: #E5E7EB; border-radius: 4px; }
+  .pulse { position: relative; }
+  .pulse::before { content: ''; position: absolute; inset: -2px; border-radius: 999px; background: var(--chat); opacity: 0.3; animation: pulse 1.6s ease-out infinite; }
+  @keyframes pulse { 0% { transform: scale(0.9); opacity: 0.4 } 100% { transform: scale(1.6); opacity: 0 } }
+</style>
+</head>
+<body class="h-screen overflow-hidden">
+
+<div class="h-12 flex items-center justify-between px-4 bg-white border-b border-app">
+  <div class="flex items-center gap-2.5">
+    <div class="w-7 h-7 rounded-lg bg-indigo-600 flex items-center justify-center text-white font-semibold text-xs">IP</div>
+    <div>
+      <div class="text-sm font-semibold">Acme Support</div>
+      <div class="text-[11px] text-mute -mt-0.5">8 inboxes · 3 teammates online</div>
+    </div>
+  </div>
+  <div class="flex items-center gap-2">
+    <button class="h-8 px-3 rounded-md border border-app text-sm font-medium hover:bg-gray-50">Share view</button>
+    <button class="h-8 px-3 rounded-md bg-indigo-600 text-white text-sm font-medium">+ New conversation</button>
+  </div>
+</div>
+
+<div class="grid h-[calc(100vh-3rem)]" style="grid-template-columns: 64px 380px 1fr 340px;">
+
+  <!-- Slim nav -->
+  <aside class="bg-white border-r border-app py-3 flex flex-col items-center gap-1">
+    <div class="w-9 h-9 rounded-lg bg-indigo-600 flex items-center justify-center text-white font-semibold text-xs mb-3">IP</div>
+    <button title="Inbox" class="w-10 h-10 rounded-lg bg-gray-900 text-white flex items-center justify-center text-lg">📬</button>
+    <button title="Knowledge" class="w-10 h-10 rounded-lg text-gray-500 hover:bg-gray-100 flex items-center justify-center text-lg">📚</button>
+    <button title="Customers" class="w-10 h-10 rounded-lg text-gray-500 hover:bg-gray-100 flex items-center justify-center text-lg">👥</button>
+    <button title="Analytics" class="w-10 h-10 rounded-lg text-gray-500 hover:bg-gray-100 flex items-center justify-center text-lg">📈</button>
+    <div class="mt-auto">
+      <div class="w-9 h-9 rounded-full bg-gradient-to-br from-amber-400 to-pink-500 flex items-center justify-center text-white text-xs font-semibold">FR</div>
+    </div>
+  </aside>
+
+  <!-- List -->
+  <section class="bg-white border-r border-app flex flex-col">
+    <!-- Channel segmented -->
+    <div class="px-3 pt-3">
+      <div class="flex items-center gap-1 p-1 bg-gray-100 rounded-lg">
+        <button class="seg flex-1 flex items-center justify-center gap-1.5 active"><span class="w-1.5 h-1.5 rounded-full" style="background:#fff"></span> All <span class="text-[11px] opacity-70">128</span></button>
+        <button class="seg flex-1 flex items-center justify-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full" style="background:var(--sms)"></span> SMS <span class="text-[11px]">42</span></button>
+        <button class="seg flex-1 flex items-center justify-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full" style="background:var(--email)"></span> Email <span class="text-[11px]">61</span></button>
+        <button class="seg flex-1 flex items-center justify-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full" style="background:var(--chat)"></span> Chat <span class="text-[11px]">25</span></button>
+      </div>
+    </div>
+
+    <div class="px-3 py-2.5 flex items-center justify-between">
+      <h2 class="text-[15px] font-semibold">Inbox</h2>
+      <div class="flex items-center gap-1">
+        <span class="text-[11px] text-dim">Sort:</span>
+        <button class="text-[11px] font-medium underline underline-offset-2">Newest</button>
+      </div>
+    </div>
+
+    <div class="px-3 pb-2 flex items-center gap-1.5 text-[11.5px]">
+      <span class="pill pill-open">Open · 12</span>
+      <span class="pill pill-escalated">Escalated · 3</span>
+      <span class="pill pill-ai">AI draft · 7</span>
+      <span class="pill" style="background:#F3F4F6; color:#374151">Mine · 5</span>
+    </div>
+
+    <div class="flex-1 overflow-y-auto scrollbar border-t border-app">
+
+      <div class="row active flex items-stretch gap-2 px-3 py-3 cursor-pointer">
+        <div class="channel-rail" style="background:var(--sms)"></div>
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2 min-w-0">
+              <div class="w-7 h-7 rounded-full bg-gradient-to-br from-pink-500 to-rose-600 flex items-center justify-center text-white text-[10px] font-semibold shrink-0">MP</div>
+              <div class="min-w-0">
+                <div class="text-[13.5px] font-semibold truncate">Maya Patel</div>
+                <div class="text-[11px] text-mute truncate">+1 415 ··· 0932</div>
+              </div>
+            </div>
+            <div class="flex flex-col items-end gap-1">
+              <span class="text-[11px] text-dim">2m</span>
+              <span class="w-2 h-2 rounded-full bg-rose-500"></span>
+            </div>
+          </div>
+          <div class="text-[12.5px] text-dim mt-1.5 line-clamp-2">Can I get a refund for order #4892? It arrived broken.</div>
+          <div class="flex items-center gap-1.5 mt-2">
+            <span class="text-[10.5px] font-semibold ch-sms uppercase tracking-wider">SMS</span>
+            <span class="text-[10.5px] text-mute">· Order #4892</span>
+            <span class="ml-auto pill pill-ai">AI drafted</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="row flex items-stretch gap-2 px-3 py-3 cursor-pointer">
+        <div class="channel-rail" style="background:var(--email)"></div>
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2 min-w-0">
+              <div class="w-7 h-7 rounded-full bg-gradient-to-br from-amber-400 to-orange-600 flex items-center justify-center text-white text-[10px] font-semibold shrink-0">LP</div>
+              <div class="min-w-0">
+                <div class="text-[13.5px] font-medium truncate text-dim">Leo Park</div>
+                <div class="text-[11px] text-mute truncate">leo@northwind.io</div>
+              </div>
+            </div>
+            <span class="text-[11px] text-dim">8m</span>
+          </div>
+          <div class="text-[12.5px] text-dim mt-1.5 line-clamp-2"><span class="font-medium text-gray-800">Re: Enterprise pricing for Q3</span> — Need to talk to a real person about enterprise pricing…</div>
+          <div class="flex items-center gap-1.5 mt-2">
+            <span class="text-[10.5px] font-semibold ch-email uppercase tracking-wider">Email</span>
+            <span class="text-[10.5px] text-mute">· 2 attachments</span>
+            <span class="ml-auto pill pill-escalated">Escalated</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="row flex items-stretch gap-2 px-3 py-3 cursor-pointer">
+        <div class="channel-rail" style="background:var(--chat)"></div>
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2 min-w-0">
+              <div class="w-7 h-7 rounded-full bg-gradient-to-br from-emerald-400 to-teal-600 flex items-center justify-center text-white text-[10px] font-semibold shrink-0 relative">
+                RS
+                <span class="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-500 border-2 border-white pulse"></span>
+              </div>
+              <div class="min-w-0">
+                <div class="text-[13.5px] font-medium truncate text-dim">Riya Shah</div>
+                <div class="text-[11px] text-mute truncate">on the site · 1m ago</div>
+              </div>
+            </div>
+            <span class="text-[11px] text-dim">14m</span>
+          </div>
+          <div class="text-[12.5px] text-dim mt-1.5 line-clamp-2">Where do I find my API key? I keep getting 401s.</div>
+          <div class="flex items-center gap-1.5 mt-2">
+            <span class="text-[10.5px] font-semibold ch-chat uppercase tracking-wider">Webchat</span>
+            <span class="ml-auto text-[10.5px] text-emerald-600 font-medium">● typing</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="row flex items-stretch gap-2 px-3 py-3 cursor-pointer">
+        <div class="channel-rail" style="background:var(--sms)"></div>
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2 min-w-0">
+              <div class="w-7 h-7 rounded-full bg-gradient-to-br from-blue-400 to-indigo-600 flex items-center justify-center text-white text-[10px] font-semibold shrink-0">DW</div>
+              <div class="min-w-0">
+                <div class="text-[13.5px] font-medium truncate text-dim">Daniel Wu</div>
+                <div class="text-[11px] text-mute truncate">+1 206 ··· 4421</div>
+              </div>
+            </div>
+            <span class="text-[11px] text-dim">32m</span>
+          </div>
+          <div class="text-[12.5px] text-dim mt-1.5 line-clamp-2">Thanks! That worked. Closing this.</div>
+          <div class="flex items-center gap-1.5 mt-2">
+            <span class="text-[10.5px] font-semibold ch-sms uppercase tracking-wider">SMS</span>
+            <span class="ml-auto pill pill-resolved">Resolved</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- Thread -->
+  <section class="flex flex-col min-w-0 bg-[var(--bg)]">
+    <div class="h-14 px-5 flex items-center justify-between bg-white border-b border-app">
+      <div class="flex items-center gap-3 min-w-0">
+        <div class="w-9 h-9 rounded-full bg-gradient-to-br from-pink-500 to-rose-600 flex items-center justify-center text-white text-xs font-semibold">MP</div>
+        <div class="min-w-0">
+          <div class="flex items-center gap-2">
+            <span class="text-[14.5px] font-semibold">Maya Patel</span>
+            <span class="text-[10.5px] font-semibold ch-sms uppercase tracking-wider px-1.5 py-0.5 rounded bg-sms">SMS</span>
+            <span class="text-[11.5px] text-mute">+1 415 ··· 0932</span>
+          </div>
+          <div class="text-[11.5px] text-dim">Order <button class="underline underline-offset-2 hover:text-gray-700">#4892</button> · 3 prior conversations · VIP</div>
+        </div>
+      </div>
+      <div class="flex items-center gap-1.5">
+        <button class="h-8 px-3 rounded-md text-[12.5px] font-medium border border-app hover:bg-gray-50">Snooze</button>
+        <button class="h-8 px-3 rounded-md text-[12.5px] font-medium border border-app hover:bg-gray-50">Assign</button>
+        <button class="h-8 px-3 rounded-md text-[12.5px] font-semibold text-white bg-rose-600 hover:bg-rose-700">Escalate</button>
+      </div>
+    </div>
+
+    <div class="flex-1 overflow-y-auto scrollbar px-6 py-8 space-y-5">
+
+      <div class="flex items-center gap-3"><div class="flex-1 h-px bg-gray-200"></div><div class="text-[10.5px] uppercase tracking-wider text-mute font-semibold">Today · 10:14 AM</div><div class="flex-1 h-px bg-gray-200"></div></div>
+
+      <div class="flex gap-3">
+        <div class="w-8 h-8 rounded-full bg-gradient-to-br from-pink-500 to-rose-600 flex items-center justify-center text-white text-[11px] font-semibold shrink-0">MP</div>
+        <div class="max-w-[68%]">
+          <div class="flex items-center gap-2 mb-1">
+            <span class="text-[12px] font-semibold">Maya Patel</span>
+            <span class="text-[11px] text-mute">10:14 AM</span>
+            <span class="text-[10.5px] ch-sms font-semibold uppercase tracking-wider">via SMS</span>
+          </div>
+          <div class="bg-white border border-app rounded-2xl rounded-tl-md px-4 py-2.5 text-[14px] leading-relaxed shadow-sm">Hi, my order #4892 arrived this morning but the box was completely crushed and the product inside is broken. I'd like a refund please.</div>
+        </div>
+      </div>
+
+      <div class="flex gap-3">
+        <div class="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-white text-[11px] font-semibold shrink-0">AI</div>
+        <div class="max-w-[68%]">
+          <div class="flex items-center gap-2 mb-1">
+            <span class="text-[12px] font-semibold">InboxPilot AI</span>
+            <span class="pill pill-ai">Auto-drafted</span>
+            <span class="text-[11px] text-mute">10:14 AM</span>
+          </div>
+          <div class="bg-violet-50 border border-violet-100 rounded-2xl rounded-tl-md px-4 py-2.5 text-[14px] leading-relaxed">Hi Maya, I'm so sorry to hear that. I can issue a full refund for #4892 right now and send a replacement today at no cost. Could you confirm the shipping address on file is still correct?</div>
+          <button class="mt-1.5 text-[11.5px] text-mute hover:text-gray-700">↩ Sent automatically · click to undo</button>
+        </div>
+      </div>
+
+      <div class="flex gap-3">
+        <div class="w-8 h-8 rounded-full bg-gradient-to-br from-pink-500 to-rose-600 flex items-center justify-center text-white text-[11px] font-semibold shrink-0">MP</div>
+        <div class="max-w-[68%]">
+          <div class="flex items-center gap-2 mb-1">
+            <span class="text-[12px] font-semibold">Maya Patel</span>
+            <span class="text-[11px] text-mute">10:18 AM</span>
+          </div>
+          <div class="bg-white border border-app rounded-2xl rounded-tl-md px-4 py-2.5 text-[14px] leading-relaxed">Yes the address is fine. Just a refund is good, no need to replace. Thanks.</div>
+        </div>
+      </div>
+
+      <div class="flex gap-3">
+        <div class="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-white text-[11px] font-semibold shrink-0">AI</div>
+        <div class="max-w-[68%]">
+          <div class="flex items-center gap-2 mb-1">
+            <span class="text-[12px] font-semibold">InboxPilot AI</span>
+            <span class="pill pill-ai">Drafting…</span>
+            <span class="ml-1 w-1.5 h-1.5 rounded-full bg-violet-500 animate-pulse"></span>
+          </div>
+          <div class="bg-violet-50 border border-violet-100 rounded-2xl rounded-tl-md px-4 py-2.5 text-[14px] leading-relaxed">Got it. I'll process the refund for #4892 to your original payment method and send a confirmation email within 5 minutes…</div>
+          <div class="mt-2 flex items-center gap-1.5 text-[11px] text-mute">
+            <span>📎 Cited:</span>
+            <span class="px-1.5 py-0.5 rounded bg-white border border-app">Refund policy · broken on arrival</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Composer -->
+    <div class="border-t border-app bg-white p-3">
+      <div class="rounded-xl border border-app overflow-hidden focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-100">
+        <div class="px-3 pt-2 pb-1 flex items-center gap-1.5 text-[12px]">
+          <button class="px-2 py-1 rounded bg-violet-100 text-violet-700 font-medium">SMS</button>
+          <button class="px-2 py-1 rounded text-dim hover:bg-gray-100">Email</button>
+          <button class="px-2 py-1 rounded text-dim hover:bg-gray-100">Internal note</button>
+        </div>
+        <textarea class="w-full px-3 py-2 text-[14px] outline-none resize-none" rows="2" placeholder="Reply to Maya…">Got it. I'll process the refund for #4892 to your original payment method and send a confirmation email within 5 minutes.</textarea>
+        <div class="px-3 py-2 flex items-center justify-between border-t border-app bg-gray-50">
+          <div class="flex items-center gap-1 text-dim">
+            <button title="Template" class="w-7 h-7 rounded hover:bg-gray-200 flex items-center justify-center">📝</button>
+            <button title="Knowledge" class="w-7 h-7 rounded hover:bg-gray-200 flex items-center justify-center">📚</button>
+            <button title="Insert" class="w-7 h-7 rounded hover:bg-gray-200 flex items-center justify-center">🔗</button>
+            <button title="Schedule" class="w-7 h-7 rounded hover:bg-gray-200 flex items-center justify-center">⏰</button>
+            <span class="ml-2 text-[11px] text-mute">117 / 160 · 1 SMS segment</span>
+          </div>
+          <div class="flex items-center gap-1.5">
+            <button class="h-8 px-3 rounded-md text-[12.5px] font-medium text-dim hover:bg-gray-200">Discard</button>
+            <button class="h-8 px-3 rounded-md text-[12.5px] font-semibold text-white bg-indigo-600 hover:bg-indigo-700">Send reply</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Right: Timeline tab replaces "Audit" placeholder -->
+  <aside class="bg-white border-l border-app p-4 flex flex-col gap-4 overflow-y-auto scrollbar">
+    <div class="flex items-center justify-between">
+      <h3 class="text-[13.5px] font-semibold">Maya Patel</h3>
+      <button class="text-[11px] text-dim hover:text-gray-700">···</button>
+    </div>
+
+    <div class="grid grid-cols-2 gap-2">
+      <div class="border border-app rounded-lg p-2.5"><div class="text-[10.5px] uppercase tracking-wider text-mute font-semibold">LTV</div><div class="text-[15px] font-semibold mt-0.5">$1,284</div></div>
+      <div class="border border-app rounded-lg p-2.5"><div class="text-[10.5px] uppercase tracking-wider text-mute font-semibold">Plan</div><div class="text-[15px] font-semibold mt-0.5">Pro</div></div>
+    </div>
+
+    <!-- Tabs: Timeline (real data) replaces Audit (placeholder) -->
+    <div>
+      <div class="flex items-center gap-3 border-b border-app mb-3">
+        <button class="text-[12.5px] font-semibold pb-2 border-b-2 border-gray-900 -mb-px">Timeline</button>
+        <button class="text-[12.5px] text-dim pb-2">Details</button>
+        <button class="text-[12.5px] text-dim pb-2">Orders</button>
+      </div>
+      <div class="space-y-3">
+        <div class="flex gap-2.5">
+          <div class="w-1 self-stretch rounded-full" style="background:var(--violet)"></div>
+          <div>
+            <div class="text-[12px] font-medium">AI drafted a reply</div>
+            <div class="text-[11px] text-mute">10:18 AM · cited Refund policy</div>
+          </div>
+        </div>
+        <div class="flex gap-2.5">
+          <div class="w-1 self-stretch rounded-full bg-blue-400"></div>
+          <div>
+            <div class="text-[12px] font-medium">Inbound SMS received</div>
+            <div class="text-[11px] text-mute">10:14 AM · "Can I get a refund…"</div>
+          </div>
+        </div>
+        <div class="flex gap-2.5">
+          <div class="w-1 self-stretch rounded-full bg-amber-400"></div>
+          <div>
+            <div class="text-[12px] font-medium">Marked escalated by Jess</div>
+            <div class="text-[11px] text-mute">Yesterday · "broken item, manual review"</div>
+          </div>
+        </div>
+        <div class="flex gap-2.5">
+          <div class="w-1 self-stretch rounded-full bg-emerald-400"></div>
+          <div>
+            <div class="text-[12px] font-medium">Order #4892 delivered</div>
+            <div class="text-[11px] text-mute">Yesterday 4:32 PM</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="text-[10.5px] uppercase tracking-wider text-mute font-semibold mb-2">SLA</div>
+      <div class="border border-app rounded-lg p-2.5">
+        <div class="flex items-center justify-between text-[12px]"><span>First response</span><span class="font-semibold text-emerald-600">12s · on time</span></div>
+        <div class="flex items-center justify-between text-[12px] mt-1"><span>Resolution</span><span class="font-semibold text-amber-600">due in 38m</span></div>
+      </div>
+    </div>
+
+  </aside>
+</div>
+
+</body>
+</html>

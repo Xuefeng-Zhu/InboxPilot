@@ -47,31 +47,44 @@ const messageRowArb = (senderType: 'contact' | 'user' | 'ai'): fc.Arbitrary<Mess
 // --- Property tests ---
 
 describe('Feature: stitch-ui-implementation, Property 8: Message bubble sender-type styling', () => {
-  it('contact messages render with bg-gray-50 and border-gray-200 classes', () => {
+  it('contact messages render with bg-white and border-surface-border classes', () => {
     fc.assert(
       fc.property(messageRowArb('contact'), (message) => {
         const { container } = render(<MessageBubble message={message} />);
-        const bubble = container.querySelector('.rounded-lg.border')!;
+        const bubble = container.querySelector('.rounded.border')!;
         expect(bubble).not.toBeNull();
-        expect(bubble.className).toContain('bg-gray-50');
-        expect(bubble.className).toContain('border-gray-200');
+        expect(bubble.className).toContain('bg-white');
+        expect(bubble.className).toContain('border-surface-border');
       }),
       { numRuns: 100 },
     );
   });
 
-  it('user/agent messages render with bg-white and border-surface-border classes', () => {
+  it('user messages render with bg-white and border-surface-border classes', () => {
     fc.assert(
       fc.property(
-        fc.constantFrom('user', 'ai').chain((st) => messageRowArb(st as 'user' | 'ai')),
+        messageRowArb('user'),
         (message) => {
           const { container } = render(<MessageBubble message={message} />);
-          const bubble = container.querySelector('.rounded-lg.border')!;
+          const bubble = container.querySelector('.rounded.border')!;
           expect(bubble).not.toBeNull();
           expect(bubble.className).toContain('bg-white');
           expect(bubble.className).toContain('border-surface-border');
         },
       ),
+      { numRuns: 100 },
+    );
+  });
+
+  it('AI messages render with ai-tinted background and border classes', () => {
+    fc.assert(
+      fc.property(messageRowArb('ai'), (message) => {
+        const { container } = render(<MessageBubble message={message} />);
+        const bubble = container.querySelector('.rounded.border')!;
+        expect(bubble).not.toBeNull();
+        expect(bubble.className).toContain('bg-ai-50/50');
+        expect(bubble.className).toContain('border-ai-200');
+      }),
       { numRuns: 100 },
     );
   });
@@ -90,7 +103,7 @@ describe('Feature: stitch-ui-implementation, Property 8: Message bubble sender-t
         ),
         ({ msg, expectedLabel }) => {
           const { container } = render(<MessageBubble message={msg} />);
-          const labelEl = container.querySelector('.text-label-sm.text-gray-500.font-medium');
+          const labelEl = container.querySelector('.text-body-sm.font-medium.text-gray-900');
           expect(labelEl).not.toBeNull();
           expect(labelEl!.textContent).toBe(expectedLabel);
         },

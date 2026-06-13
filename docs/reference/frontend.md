@@ -31,7 +31,7 @@ app/                          # Pages (App Router)
   customers/                  # /customers
   team/                       # /team — members list
   wchat/[widgetId]/           # Widget iframe content
-  api/functions/              # 7 JWT-authed routes
+  api/functions/              # 7 InsForge-verified, RBAC-checked routes
 components/
   inbox/                      # Conversation list, thread, AI draft panel, etc.
   knowledge/                  # KB table, editor, document content
@@ -84,7 +84,7 @@ flowchart LR
 
 - **Server-side**: `proxy.ts` redirects unauthenticated users on protected paths.
 - **Client-side**: `useAuth()` returns `loading` until hydration; pages can early-return a spinner.
-- **API routes**: `app/api/functions/_auth.ts` decodes the JWT locally to get `userId`. This avoids a round-trip on every action; the routes are same-origin and the token was issued by InsForge.
+- **API routes**: `app/api/functions/_auth.ts` verifies the access token with InsForge before using the service-role client, then checks org membership permissions for the requested action.
 
 ## React Query conventions
 
@@ -169,8 +169,8 @@ Use the `useRealtime()` hook in pages that should react to live updates:
 
 ```ts
 useRealtime({
-  messageChannel: `inbox:messages:${conversationId}`,
-  conversationChannel: `inbox:conversations:${orgId}`,
+  messageChannel: `org:${orgId}`,
+  conversationChannel: `org:${orgId}`,
   onNewMessage: (payload) => { /* e.g. refetch messages */ },
   onConversationUpdated: (payload) => { /* refetch conversation */ },
 });
@@ -196,6 +196,6 @@ The hook subscribes via `insforge.realtime.connect()` / `.subscribe()` and unsub
 ## Known gotchas
 
 - **Two `StatusBadge` components** — `components/ui/StatusBadge.tsx` and `components/inbox/StatusBadge.tsx` exist and have different prop signatures. They conflict on import resolution. Tracked in [`../plans/ui-polish.md`](../plans/ui-polish.md).
-- **Real-time channel names** — the hook accepts `inbox:messages:<id>` and `inbox:conversations:<id>` style names, but the InsForge functions actually publish on `org:{orgId}` channels. The hook's parameter is a passthrough to `insforge.realtime.subscribe()` so it works as long as the caller passes the right channel name. The naming convention across the codebase is inconsistent (see `lib/use-realtime.ts` for the comment on the topic).
+- **Real-time channel names** — app code subscribes to `org:{orgId}` channels, which match the InsForge functions' published events. The hook also listens for legacy `message_created` events for compatibility.
 - **`aria-invalid` typing** — the Input/Select/Textarea components historically passed a boolean to `aria-invalid`. ARIA spec requires the string `"true"`. Tracked in [`../plans/ui-polish.md`](../plans/ui-polish.md).
 - **Team page name bug** — `useTeamMembers` selects from `organization_members` only (no `users` join), so the team page renders the user's UUID as the name. Tracked in [`../plans/ui-polish.md`](../plans/ui-polish.md).

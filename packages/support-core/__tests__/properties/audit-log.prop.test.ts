@@ -107,10 +107,11 @@ describe('Property 15: Audit log immutability', () => {
         expect(typeof repo.create).toBe('function');
 
         // The repo instance MUST NOT have `update` or `delete`
-        expect((repo as Record<string, unknown>)['update']).toBeUndefined();
-        expect((repo as Record<string, unknown>)['delete']).toBeUndefined();
-        expect((repo as Record<string, unknown>)['remove']).toBeUndefined();
-        expect((repo as Record<string, unknown>)['destroy']).toBeUndefined();
+        const repoShape = repo as unknown as Record<string, unknown>;
+        expect(repoShape['update']).toBeUndefined();
+        expect(repoShape['delete']).toBeUndefined();
+        expect(repoShape['remove']).toBeUndefined();
+        expect(repoShape['destroy']).toBeUndefined();
       }),
       { numRuns: 100 },
     );

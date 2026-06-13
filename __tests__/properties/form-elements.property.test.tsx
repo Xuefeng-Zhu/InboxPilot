@@ -23,7 +23,7 @@ import { Textarea } from '../../components/ui/Textarea';
 
 const REQUIRED_BASE_CLASSES = [
   'border',
-  'border-gray-300',
+  'border-surface-border',
   'rounded',
   'text-body-md',
   'focus:border-primary',

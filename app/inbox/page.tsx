@@ -48,28 +48,38 @@ function InboxContent() {
 
   // Counts shown in the inbox filters subline
   const { data: counts } = useQuery({
-    queryKey: queryKeys.conversationCounts(orgId ?? ''),
+    // Use a distinct cache key from the Sidebar's `conversationCounts` so the
+    // Sidebar's `{ inbox, mentions, escalated }` payload does not bleed into
+    // this query's `{ total, escalated, drafted }` shape (the prior collision
+    // produced "undefined conversations · N escalated · undefined AI drafted").
+    queryKey: queryKeys.inboxSublineCounts(orgId ?? ''),
     enabled: !!orgId,
     queryFn: async () => {
       if (!orgId) return { total: 0, escalated: 0, drafted: 0 };
-      const { count: total } = await insforge.database
-        .from('conversations')
-        .select('id', { count: 'exact', head: true })
-        .eq('organization_id', orgId);
-      const { count: escalated } = await insforge.database
-        .from('conversations')
-        .select('id', { count: 'exact', head: true })
-        .eq('organization_id', orgId)
-        .eq('status', 'escalated');
-      const { count: drafted } = await insforge.database
-        .from('conversations')
-        .select('id', { count: 'exact', head: true })
-        .eq('organization_id', orgId)
-        .eq('ai_state', 'drafted');
+      const build = () =>
+        insforge.database
+          .from('conversations')
+          .select('id', { count: 'exact', head: true })
+          .eq('organization_id', orgId);
+      const [r1, r2, r3] = await Promise.all([
+        build(),
+        build().eq('status', 'escalated'),
+        build().eq('ai_state', 'drafted'),
+      ]);
+      // Defensive: `count` is typed `number | null` by the SDK but defensive
+      // coercion handles any future shape change. Falls back to data.length
+      // when the SDK does not populate `count` (matches the precedent in
+      // app/knowledge/[id]/page.tsx:53-57).
+      const readCount = (
+        r: { count: number | null; data: unknown },
+      ): number => {
+        if (typeof r.count === 'number') return r.count;
+        return Array.isArray(r.data) ? r.data.length : 0;
+      };
       return {
-        total: total ?? 0,
-        escalated: escalated ?? 0,
-        drafted: drafted ?? 0,
+        total: readCount(r1),
+        escalated: readCount(r2),
+        drafted: readCount(r3),
       };
     },
     staleTime: 30_000,

@@ -216,3 +216,91 @@ describe('Property 5: Unassigned vs Mine', () => {
     );
   });
 });
+
+// ─── Extended edge cases (T16) ────────────────────────────────────────
+
+describe('Property 6: Precedence wins when both escalated and unassigned match', () => {
+  it('escalated + assigned_to=null still routes to "escalated" (precedence over Unassigned)', () => {
+    fc.assert(
+      fc.property(
+        aiStateArb,
+        directionArb,
+        userIdArb,
+        (aiState, direction, userId) => {
+          const c = buildConversation({
+            status: 'escalated',
+            ai_state: aiState,
+            assigned_to: null,
+            last_message_direction: direction,
+          });
+          expect(routeToLane(c, userId)).toBe('escalated');
+        },
+      ),
+      { numRuns: 100 },
+    );
+  });
+});
+
+describe('Property 7: All fields null defaults to unassigned', () => {
+  it('a fully-null conversation (no status, no ai_state, no assigned_to, no last_message_direction) routes to "unassigned"', () => {
+    fc.assert(
+      fc.property(userIdArb, (userId) => {
+        const c = buildConversation({
+          status: 'open',
+          ai_state: 'idle',
+          assigned_to: null,
+          last_message_at: null,
+          last_message_direction: null,
+        });
+        expect(routeToLane(c, userId)).toBe('unassigned');
+      }),
+      { numRuns: 100 },
+    );
+  });
+});
+
+describe('Property 8: userId=null prevents Mine lane', () => {
+  it('Mine lane is never returned when userId is null, regardless of assigned_to', () => {
+    fc.assert(
+      fc.property(
+        fc.uuid(),
+        directionArb.filter((d) => d !== 'outbound'),
+        (assignedTo, direction) => {
+          const c = buildConversation({
+            status: 'open',
+            ai_state: 'idle',
+            assigned_to: assignedTo,
+            last_message_direction: direction,
+          });
+          // userId is null — Mine lane must not match
+          expect(routeToLane(c, null)).not.toBe('mine');
+        },
+      ),
+      { numRuns: 100 },
+    );
+  });
+});
+
+describe('Property 9: Resolved conversations route to a non-Mine lane', () => {
+  it('status="resolved" + assigned_to=userId does NOT route to "mine" (Mine excludes resolved/closed)', () => {
+    fc.assert(
+      fc.property(
+        fc.uuid(),
+        userIdArb,
+        (assignedTo, userId) => {
+          const concreteUserId = userId ?? 'concrete-user';
+          const c = buildConversation({
+            status: 'resolved',
+            ai_state: 'idle',
+            assigned_to: concreteUserId,
+            last_message_direction: null,
+          });
+          // Mine predicate requires `isActive(c)` which excludes resolved.
+          // So this conversation should NOT land in Mine.
+          expect(routeToLane(c, concreteUserId)).not.toBe('mine');
+        },
+      ),
+      { numRuns: 100 },
+    );
+  });
+});

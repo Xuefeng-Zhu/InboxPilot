@@ -48,12 +48,12 @@ graph TD
 
   subgraph SupportCore["packages/support-core/ (portable)"]
     Services["Services<br/>(InboundMessage, OutboundMessage,<br/>AiAgent, KnowledgeIngestion,<br/>Organization, WebchatThread)"]
-    Repos["Repositories (16)"]
+    Repos["Repositories (15)"]
     Adapters["Adapters<br/>(Mock/Twilio/Telnyx/Postmark, ...)"]
     Interfaces["Interfaces<br/>(DatabaseClient, JobQueue,<br/>SmsProviderAdapter, ...)"]
   end
 
-  DB[("PostgreSQL + pgvector<br/>19 tables · RLS · RPC")]
+  DB[("PostgreSQL + pgvector<br/>20 tables · RLS · RPC")]
 
   Pages --> Lib
   Components --> Lib
@@ -275,7 +275,7 @@ All three channels use the same `conversations` and `messages` tables (the `chan
 
 ---
 
-## Repositories (16)
+## Repositories (15)
 
 | Repository | Table(s) | Key methods |
 |---|---|---|
@@ -339,7 +339,7 @@ Stubs throw `Error('not implemented')` from `sendSms` / `sendEmail` so missing p
 | Infrastructure | `support_jobs`, `audit_logs` |
 | Web chat (since 005) | `webchat_widgets`, `webchat_threads` |
 
-**19 tables, 6 migrations, 3 RPCs.** See [`reference/database.md`](database.md) for full schema, RLS policies, indexes, and the ER diagram.
+**20 tables, 10 migrations, 6 RPCs.** See [`reference/database.md`](database.md) for full schema, RLS policies, indexes, and the ER diagram.
 
 ---
 

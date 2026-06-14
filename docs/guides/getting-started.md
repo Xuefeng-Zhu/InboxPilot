@@ -48,14 +48,18 @@ NEXT_PUBLIC_DEMO_WIDGET_ID=
 
 Apply the SQL files in order to your InsForge project (via the InsForge SQL editor or migrations API):
 
-```bash
-insforge/migrations/001_initial_schema.sql      # 17 tables, indexes, extensions
-insforge/migrations/002_rpc_functions.sql        # match_knowledge_chunks, claim_support_jobs
-insforge/migrations/003_rls_policies.sql         # RLS, user_org_ids(), credential revocations
-insforge/migrations/004_create_organization_onboarding_rpc.sql  # create_organization_with_owner
-insforge/migrations/005_webchat.sql              # webchat_widgets, webchat_threads
-insforge/migrations/006_backfill_conversation_activity.sql  # conversation activity backfill
-```
+| File | Purpose |
+|---|---|
+| `insforge/migrations/001_initial_schema.sql` | 17 core tables, indexes, CHECK constraints, `pgcrypto` + `vector` extensions |
+| `insforge/migrations/002_rpc_functions.sql` | `match_knowledge_chunks` (RAG); initial `claim_support_jobs` (superseded by 008) |
+| `insforge/migrations/003_rls_policies.sql` | RLS policies, `user_org_ids()` helper, `credentials_secret_id` column revocations |
+| `insforge/migrations/004_create_organization_onboarding_rpc.sql` | `create_organization_with_owner(name, slug)` — atomic signup RPC |
+| `insforge/migrations/005_webchat.sql` | Loosens `channel` CHECK for `'webchat'`; `webchat_widgets`, `webchat_threads` tables + RLS |
+| `insforge/migrations/006_backfill_conversation_activity.sql` | Backfills `last_message_at` / `last_customer_message_at` on conversations |
+| `insforge/migrations/007_ai_decision_chunks.sql` | `ai_decision_chunks` table; `ai_decision_chunks_validate()` trigger; `insert_ai_decision_chunks()` RPC |
+| `insforge/migrations/008_claim_failed_jobs.sql` | Drops old `idx_support_jobs_pending`; new `idx_support_jobs_claimable` index; replaces `claim_support_jobs` with overload using `claim_limit` that also claims failed jobs |
+| `insforge/migrations/009_org_sla_thresholds.sql` | Adds `organizations.sla_thresholds jsonb`; `conversations.last_message_direction text`; backfill from `messages.direction` |
+| `insforge/migrations/010_drop_pending_status.sql` | Drops `'pending'` from `conversations.status` CHECK (was in 001 but never assigned by code) |
 
 All files are idempotent — `CREATE OR REPLACE`, `IF NOT EXISTS` — so re-running is safe.
 

@@ -12,6 +12,7 @@ InboxPilot is a multi-tenant AI-powered customer support platform built on [InsF
 - **Job queue** — Postgres-backed async processing with exponential backoff and dead-lettering
 - **Realtime updates** — InsForge Realtime events for inbox, messages, and knowledge documents
 - **Audit logging** — Append-only log of all significant actions for compliance
+- **RAG context persistence** — Every AI decision records which knowledge chunks it used (`ai_decision_chunks` table) for traceability and post-hoc analysis
 
 ## Architecture
 
@@ -71,21 +72,18 @@ See `.env.example` for the full list with comments.
 
 Apply the SQL migration files in order to your InsForge PostgreSQL database:
 
-```bash
-# 1. Initial schema — tables, indexes, constraints
-insforge/migrations/001_initial_schema.sql
-
-# 2. RPC functions — match_knowledge_chunks, claim_support_jobs
-insforge/migrations/002_rpc_functions.sql
-
-# 3. Row Level Security policies — tenant isolation, append-only audit logs
-insforge/migrations/003_rls_policies.sql
-
-# 4-6. Organization onboarding, web chat, and conversation activity updates
-insforge/migrations/004_create_organization_onboarding_rpc.sql
-insforge/migrations/005_webchat.sql
-insforge/migrations/006_backfill_conversation_activity.sql
-```
+| File | Purpose |
+|---|---|
+| `insforge/migrations/001_initial_schema.sql` | 17 core tables, indexes, CHECK constraints, `pgcrypto` + `vector` extensions |
+| `insforge/migrations/002_rpc_functions.sql` | `match_knowledge_chunks` (RAG); initial `claim_support_jobs` (superseded by 008) |
+| `insforge/migrations/003_rls_policies.sql` | RLS policies, `user_org_ids()` helper, `credentials_secret_id` column revocations |
+| `insforge/migrations/004_create_organization_onboarding_rpc.sql` | `create_organization_with_owner(name, slug)` — atomic signup RPC |
+| `insforge/migrations/005_webchat.sql` | Loosens `channel` CHECK for `'webchat'`; `webchat_widgets`, `webchat_threads` tables + RLS |
+| `insforge/migrations/006_backfill_conversation_activity.sql` | Backfills `last_message_at` / `last_customer_message_at` on conversations |
+| `insforge/migrations/007_ai_decision_chunks.sql` | `ai_decision_chunks` table; `ai_decision_chunks_validate()` trigger; `insert_ai_decision_chunks()` RPC |
+| `insforge/migrations/008_claim_failed_jobs.sql` | Drops old `idx_support_jobs_pending`; new `idx_support_jobs_claimable` index; replaces `claim_support_jobs` with overload using `claim_limit` that also claims failed jobs |
+| `insforge/migrations/009_org_sla_thresholds.sql` | Adds `organizations.sla_thresholds jsonb`; `conversations.last_message_direction text`; backfill from `messages.direction` |
+| `insforge/migrations/010_drop_pending_status.sql` | Drops `'pending'` from `conversations.status` CHECK (was in 001 but never assigned by code) |
 
 Apply each file via the InsForge SQL editor or migrations API.
 

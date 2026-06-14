@@ -64,7 +64,7 @@
 - Adding a `loading.tsx` / `error.tsx` (project convention is inline `<Suspense>` and Next's default UI).
 
 ## UNIQUE
-- **`app/symphony/` is fully built but undocumented** — River of cards + minimap + zoomable time axis. Has its own 7 components, 3 tests, and a data hook (`useSymphony.ts`). Linked from Sidebar. Treat as in-progress.
+- **`app/symphony/` is fully built and now partially documented** — River of cards + minimap + zoomable time axis. Has its own 7 components, 5 tests, and a data hook (`useSymphony.ts`). Linked from Sidebar. A reference page exists at `docs/reference/symphony.md`; it is not yet in the root `README.md` or any `AGENTS.md` summary.
 - **`app/wchat/[widgetId]/page.tsx` is the only public authed-content page** — it lives outside the agent shell and uses visitor JWT auth (in URL `?t=`).
 - **`/settings` `team`/`billing`/`audit` tabs are placeholders** with stale "old settings page" copy. The real team UI is at `/team`.
 - **`/team` Edit Role/Remove buttons are presentational only.**

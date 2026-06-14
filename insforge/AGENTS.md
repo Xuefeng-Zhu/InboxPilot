@@ -3,7 +3,7 @@
 **Always loaded** for any work touching the database, Deno functions, RLS, or migrations.
 
 ## OVERVIEW
-The committed InsForge backend tree. Contains **9 Deno function entrypoints** (webhooks + cron + widget), **8 SQL migrations** (NOT 5 — docs are stale), a `seed.sql`, and a `_bundled/` directory of `deno bundle` output. The real InsForge project is **InboxPilot** (API base `https://y39ezar3.us-east.insforge.app`); credentials in `.insforge/project.json` (gitignored).
+The committed InsForge backend tree. Contains **9 Deno function entrypoints** (webhooks + cron + widget), **10 SQL migrations** (NOT 5 — docs are stale), a `seed.sql`, and a `_bundled/` directory of `deno bundle` output. The real InsForge project is **InboxPilot** (API base `https://y39ezar3.us-east.insforge.app`); credentials in `.insforge/project.json` (gitignored).
 
 ## WHERE TO LOOK
 | Need | Location |
@@ -50,5 +50,5 @@ The committed InsForge backend tree. Contains **9 Deno function entrypoints** (w
 ## NOTES
 - Use the `insforge` skill for app code with `@insforge/sdk`, the `insforge-cli` skill for backend infrastructure (migrations, RLS, functions deploy), and the `insforge-debug` skill for diagnosing failures.
 - Table count is **20** (not 19 — the 20th is `ai_decision_chunks` from migration 007). `docs/reference/database.md` is stale.
-- Migration count is **8** (not 5). 006 (activity backfill), 007 (ai_decision_chunks), 008 (replaces `claim_support_jobs` from 002) are missing from the docs.
+- Migration count is **10** (not 5). 006 (activity backfill), 007 (ai_decision_chunks), 008 (replaces `claim_support_jobs` from 002), 009 (org SLA thresholds), 010 (drop pending status) are missing from the docs.
 - The README claims `lib/queries.ts` exists; it does not — the actual data layer is `lib/queries/` (a subdir).

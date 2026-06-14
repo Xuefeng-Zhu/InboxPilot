@@ -1,9 +1,9 @@
 # insforge/migrations/ — SQL Migrations
 
 ## OVERVIEW
-**8 SQL files** (NOT 5 — `docs/README.md` is stale). Applied in numeric order. Append-only — never edit a past migration. New ones: `006` (activity backfill), `007` (ai_decision_chunks), `008` (replaces `claim_support_jobs` from 002).
+**10 SQL files** (NOT 5 — `docs/README.md` is stale). Applied in numeric order. Append-only — never edit a past migration. New ones: `006` (activity backfill), `007` (ai_decision_chunks), `008` (replaces `claim_support_jobs` from 002), `009` (org SLA thresholds), `010` (drop pending status).
 
-## THE 8 MIGRATIONS
+## THE 10 MIGRATIONS
 | # | File | Purpose |
 |---|---|---|
 | 001 | `001_initial_schema.sql` | 17 core tables + indexes + constraints (enables `pgcrypto`, `vector`) |
@@ -14,6 +14,8 @@
 | 006 | `006_backfill_conversation_activity.sql` | Backfill `last_message_at` / `last_customer_message_at` |
 | 007 | `007_ai_decision_chunks.sql` | `ai_decision_chunks` table + `ai_decision_chunks_validate()` trigger + `insert_ai_decision_chunks()` RPC |
 | 008 | `008_claim_failed_jobs.sql` | `claim_support_jobs(claim_limit int DEFAULT 5)` — current version with bounded claim |
+| 009 | `009_org_sla_thresholds.sql` | Adds `organizations.sla_thresholds jsonb`; `conversations.last_message_direction text`; backfill from `messages.direction` |
+| 010 | `010_drop_pending_status.sql` | Drops `'pending'` from `conversations.status` CHECK (was in 001 but never assigned by code) |
 
 ## THE 20 TABLES (8 from 001+005, +2 from 005, +1 from 007)
 1. `organizations` 2. `organization_members` 3. `contacts` 4. `conversations` 5. `messages` 6. `sms_provider_accounts` 7. `sms_phone_numbers` 8. `sms_delivery_events` 9. `email_provider_accounts` 10. `email_addresses` 11. `email_delivery_events` 12. `ai_settings` 13. `ai_decisions` 14. `knowledge_documents` 15. `knowledge_chunks` 16. `support_jobs` 17. `audit_logs` 18. `webchat_widgets` 19. `webchat_threads` 20. `ai_decision_chunks`
@@ -57,7 +59,7 @@
 - Removing `audit_logs` policies or adding UPDATE/DELETE on it (breaks the append-only contract).
 
 ## UNIQUE
-- **Migration count is 8, not 5** — `docs/README.md` is stale. The new ones: 006, 007, 008.
+- **Migration count is 10, not 5** — `docs/README.md` is stale. The new ones: 006, 007, 008, 009, 010.
 - **Table count is 20, not 19** — the 20th is `ai_decision_chunks` (007). `docs/reference/database.md` is stale.
 - **Two `claim_support_jobs` coexist** (002 + 008). Dispatch is by arity, so old callers still work, but a cleanup migration renaming the old one might be worth doing.
 - **`user_org_ids()` is `STABLE SECURITY DEFINER`** — the canonical tenant-isolation primitive.

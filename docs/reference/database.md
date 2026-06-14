@@ -1,19 +1,23 @@
 # Database Reference
 
-> PostgreSQL schema reference. 19 tables, 6 migrations, 3 RPCs, RLS on all tenant-scoped tables.
+> PostgreSQL schema reference. 20 tables, 10 migrations, 6 RPCs, RLS on all tenant-scoped tables.
 
 ## Migration files
 
 Apply in order. All files are idempotent (`CREATE OR REPLACE`, `IF NOT EXISTS`).
 
-| File | Contents |
+| File | Purpose |
 |---|---|
-| `insforge/migrations/001_initial_schema.sql` | 17 tables, indexes, constraints, extensions (`pgcrypto`, `vector`) |
-| `insforge/migrations/002_rpc_functions.sql` | `match_knowledge_chunks`, `claim_support_jobs` |
-| `insforge/migrations/003_rls_policies.sql` | RLS policies, `user_org_ids()` helper, credential column revocations |
+| `insforge/migrations/001_initial_schema.sql` | 17 core tables, indexes, CHECK constraints, `pgcrypto` + `vector` extensions |
+| `insforge/migrations/002_rpc_functions.sql` | `match_knowledge_chunks` (RAG); initial `claim_support_jobs` (superseded by 008) |
+| `insforge/migrations/003_rls_policies.sql` | RLS policies, `user_org_ids()` helper, `credentials_secret_id` column revocations |
 | `insforge/migrations/004_create_organization_onboarding_rpc.sql` | `create_organization_with_owner(name, slug)` — atomic signup RPC |
-| `insforge/migrations/005_webchat.sql` | Loosens `channel` CHECK to include `'webchat'`; adds `webchat_widgets`, `webchat_threads`; RLS for both |
-| `insforge/migrations/006_backfill_conversation_activity.sql` | Backfills and indexes conversation activity timestamps |
+| `insforge/migrations/005_webchat.sql` | Loosens `channel` CHECK for `'webchat'`; `webchat_widgets`, `webchat_threads` tables + RLS |
+| `insforge/migrations/006_backfill_conversation_activity.sql` | Backfills `last_message_at` / `last_customer_message_at` on conversations |
+| `insforge/migrations/007_ai_decision_chunks.sql` | `ai_decision_chunks` table; `ai_decision_chunks_validate()` trigger; `insert_ai_decision_chunks()` RPC |
+| `insforge/migrations/008_claim_failed_jobs.sql` | Drops old `idx_support_jobs_pending`; new `idx_support_jobs_claimable` index; replaces `claim_support_jobs` with overload using `claim_limit` that also claims failed jobs |
+| `insforge/migrations/009_org_sla_thresholds.sql` | Adds `organizations.sla_thresholds jsonb`; `conversations.last_message_direction text`; backfill from `messages.direction` |
+| `insforge/migrations/010_drop_pending_status.sql` | Drops `'pending'` from `conversations.status` CHECK (was in 001 but never assigned by code) |
 
 Apply via the InsForge SQL editor or migrations API.
 
@@ -32,6 +36,8 @@ erDiagram
   messages ||--o{ email_delivery_events : "1:N"
   organizations ||--o| ai_settings : "1:1"
   organizations ||--o{ ai_decisions : "1:N"
+  ai_decisions ||--o{ ai_decision_chunks : "1:N"
+  knowledge_chunks ||--o{ ai_decision_chunks : "1:N"
   organizations ||--o{ knowledge_documents : "1:N"
   knowledge_documents ||--o{ knowledge_chunks : "1:N"
   organizations ||--o{ sms_provider_accounts : "1:N"
@@ -240,6 +246,20 @@ Identical structure to `sms_delivery_events`.
 | `raw_response` | `jsonb` | nullable | Full LLM response for debugging |
 | `created_at` | `timestamptz` | NOT NULL | |
 
+#### ai_decision_chunks (added in migration 007)
+
+| Column | Type | Constraints | Description |
+|---|---|---|---|
+| `id` | `uuid` | PK | |
+| `ai_decision_id` | `uuid` | NOT NULL, FK → `ai_decisions` (CASCADE) | |
+| `knowledge_chunk_id` | `uuid` | NOT NULL, FK → `knowledge_chunks` (CASCADE) | |
+| `organization_id` | `uuid` | NOT NULL, FK → `organizations` (CASCADE) | Denormalized for RLS |
+| `rank` | `integer` | NOT NULL | Ordering within an AI decision |
+| `similarity` | `numeric(4,3)` | nullable | Cosine similarity score |
+| `created_at` | `timestamptz` | NOT NULL | |
+
+**Indexes:** `idx_ai_decision_chunks_decision` (btree on `ai_decision_id`), `idx_ai_decision_chunks_org` (btree on `organization_id`), UNIQUE `(ai_decision_id, knowledge_chunk_id)`.
+
 ### Knowledge
 
 #### knowledge_documents
@@ -372,6 +392,14 @@ Atomically claims up to N pending jobs whose `run_after <= now()`, setting their
 
 > **Note:** The current `PostgresJobQueue.claim(limit)` calls this RPC with `{ max_count: limit }` (the parameter name in the RPC is `claim_limit` but the queue calls it `max_count` — they may need to be aligned; see [`jobs.md`](jobs.md#known-quirks)).
 
+### `ai_decision_chunks_validate()`
+
+BEFORE INSERT trigger on `ai_decision_chunks` that validates each row's `knowledge_chunk_id` belongs to the same `organization_id` as the `ai_decision`. Raises an exception if mismatched. Defined in `insforge/migrations/007_ai_decision_chunks.sql`.
+
+### `insert_ai_decision_chunks(p_ai_decision_id uuid, p_organization_id uuid, p_chunk_ids uuid[])`
+
+Atomic insert of multiple `(ai_decision_id, organization_id, knowledge_chunk_id, rank)` rows in one statement. The `rank` is assigned by array position. Used by `AiDecisionRepository` to persist RAG context for an AI decision. Returns the inserted rows.
+
 ### `create_organization_with_owner(org_name text, org_slug text DEFAULT NULL)`
 
 Atomic onboarding RPC. Idempotent for repeat calls: if the actor is already a member of any organization, it ensures the first org has an `ai_settings` row and returns it. Otherwise it creates the organization with a unique slug (loop with `suffix`), creates the owner member record, creates the `ai_settings` row, and writes an `audit_logs` entry (`action: 'organization_created'`). Defined with `SECURITY DEFINER`.
@@ -386,7 +414,7 @@ Called by `lib/onboarding.ts` after signup.
 
 ## RLS policies
 
-All 19 tables have RLS enabled. The general pattern:
+All 20 tables have RLS enabled. The general pattern:
 
 | Operation | Policy |
 |---|---|
@@ -443,6 +471,8 @@ REVOKE SELECT (credentials_secret_id) ON email_provider_accounts FROM authentica
 | `knowledge_chunks` | `idx_knowledge_chunks_embedding` | **HNSW** `(embedding vector_cosine_ops)` | Vector similarity |
 | `support_jobs` | `idx_support_jobs_pending` | **partial** `(status, run_after) WHERE status = 'pending'` | Queue claim |
 | `audit_logs` | `idx_audit_logs_org_created` | btree `(organization_id, created_at DESC)` | Chronological audit query |
+| `ai_decision_chunks` | `idx_ai_decision_chunks_decision` | btree `(ai_decision_id)` | Lookup by decision |
+| `ai_decision_chunks` | `idx_ai_decision_chunks_org` | btree `(organization_id)` | Org lookup |
 | `webchat_widgets` | `idx_webchat_widgets_org` | btree | Org lookup |
 | `webchat_threads` | `idx_webchat_threads_widget_visitor` | btree `(widget_id, last_seen_at DESC)` | Active thread list |
 | `webchat_threads` | `idx_webchat_threads_conversation` | btree `(conversation_id)` | Reverse lookup |

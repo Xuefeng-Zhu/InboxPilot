@@ -129,7 +129,7 @@ Next.js Client (agent actions)
 
 - **Repository count: 15, not 16.** `PostgresJobQueue` lives in `services/` (not `repositories/`) — it implements the `JobQueue` interface and carries business logic (idempotency, backoff, dead-lettering), not table CRUD. Update the README if you touch this.
 - **Table count: 20, not 19.** 20th is `ai_decision_chunks` (added in migration 007). `docs/reference/database.md` is stale.
-- **Migration count: 8, not 5.** `006` (activity backfill), `007` (ai_decision_chunks), `008` (replaces `claim_support_jobs` from 002) are missing from the docs.
+- **Migration count: 10, not 5.** `006`, `007`, `008`, `009`, `010` are missing from the docs.
 - **`app/symphony/` is built but undocumented** in `README.md` and the original AGENTS.md. Has its own 7 components, 3 tests, and a data hook (`useSymphony.ts`), linked from Sidebar. Treat as in-progress.
 - **`/team` page has unwired buttons** (Edit Role, Remove) — presentational only.
 - **The "old settings page" referenced in `/settings` placeholders (team/billing/audit) does not exist** — placeholder copy is stale.

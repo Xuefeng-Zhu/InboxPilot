@@ -108,6 +108,19 @@ const Icon = {
       <path d="M1 7c1 0 1-2 2-2s1 2 2 2 1-2 2-2 1 2 2 2 1-2 2-2" />
     </svg>
   ),
+  kanban: (
+    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="1" y="1" width="3" height="3" rx="0.5" />
+      <rect x="4.5" y="1" width="3" height="3" rx="0.5" />
+      <rect x="8" y="1" width="3" height="3" rx="0.5" />
+      <rect x="1" y="4.5" width="3" height="3" rx="0.5" />
+      <rect x="4.5" y="4.5" width="3" height="3" rx="0.5" />
+      <rect x="8" y="4.5" width="3" height="3" rx="0.5" />
+      <rect x="1" y="8" width="3" height="3" rx="0.5" />
+      <rect x="4.5" y="8" width="3" height="3" rx="0.5" />
+      <rect x="8" y="8" width="3" height="3" rx="0.5" />
+    </svg>
+  ),
 };
 
 function NavRow({
@@ -278,6 +291,11 @@ export function Sidebar() {
         href: '/symphony',
         label: 'Symphony',
         icon: Icon.wave,
+      },
+      {
+        href: '/inbox/kanban',
+        label: 'Kanban',
+        icon: Icon.kanban,
       },
       {
         href: '/inbox?assigned=me',

@@ -36,7 +36,7 @@ export { useContact, useContacts } from './hooks/useContacts';
 
 export { useKnowledgeDoc, useKnowledgeDocs } from './hooks/useKnowledge';
 
-export { useAiDecision } from './hooks/useAiDecision';
+export { useAiDecision, useAiDecisionsForConversation } from './hooks/useAiDecision';
 
 export { useTeamMembers } from './hooks/useTeamMembers';
 export { useTeamMemberInfo, type TeamMemberInfo } from './hooks/useTeamMemberInfo';

@@ -160,9 +160,10 @@ function computeVolumeBucketCount(range: RangeKey, now: Date): number {
 }
 
 export default function AnalyticsPage() {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const { data: orgId } = useOrgMembership(user?.id);
   const { data: org } = useOrganization(orgId ?? undefined);
+  const authReady = !authLoading && !!user;
   const [range, setRange] = useState<RangeKey>('30d');
   const { start: startDate, end: endDate } = useMemo(() => rangeToDates(range), [range]);
   const [metrics, setMetrics] = useState<Metrics | null>(null);
@@ -297,8 +298,9 @@ export default function AnalyticsPage() {
   }, [startDate, endDate, range]);
 
   useEffect(() => {
+    if (!authReady) return;
     computeMetrics();
-  }, [computeMetrics]);
+  }, [authReady, computeMetrics]);
 
   const channelTotal = channelSplit.email + channelSplit.sms + channelSplit.webchat || 1;
   const channelPct = {

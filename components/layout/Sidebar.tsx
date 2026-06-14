@@ -1,5 +1,6 @@
 'use client';
 
+import { Suspense } from 'react';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import { useQuery } from '@tanstack/react-query';
@@ -243,7 +244,107 @@ function userInitial(email: string | undefined | null): string {
   return email.trim().charAt(0).toUpperCase() || '?';
 }
 
-export function Sidebar() {
+// ---------------------------------------------------------------------------
+// Sidebar content (module-level) — shared by Body and Fallback
+// ---------------------------------------------------------------------------
+// Extracted to avoid duplicating nav data and the user chip in both the
+// `useSearchParams`-driven body and the static Suspense fallback.
+
+const WORKSPACE_LINKS: SectionLink[] = [
+  { href: '/inbox', label: 'Inbox', icon: Icon.inbox },
+  {
+    href: '/inbox?status=escalated',
+    label: 'Escalated',
+    icon: Icon.bolt,
+    countTone: 'escalated',
+  },
+  { href: '/symphony', label: 'Symphony', icon: Icon.wave },
+  { href: '/inbox/kanban', label: 'Kanban', icon: Icon.kanban },
+  {
+    href: '/inbox?assigned=me',
+    label: 'Mine',
+    icon: Icon.user,
+    disabled: true,
+    disabledReason: 'Coming soon — wire ?assigned= into the inbox page',
+  },
+  {
+    href: '/inbox?assigned=none',
+    label: 'Unassigned',
+    icon: Icon.userPlus,
+    disabled: true,
+    disabledReason: 'Coming soon — wire ?assigned= into the inbox page',
+  },
+];
+
+const CHANNELS_LINKS: SectionLink[] = [
+  { href: '/inbox?channel=sms', label: 'SMS', icon: Icon.sms },
+  { href: '/inbox?channel=email', label: 'Email', icon: Icon.mail },
+  { href: '/inbox?channel=webchat', label: 'Webchat', icon: Icon.chat },
+];
+
+const MANAGE_LINKS: SectionLink[] = [
+  { href: '/knowledge', label: 'Knowledge', icon: Icon.book },
+  { href: '/customers', label: 'Customers', icon: Icon.user },
+  { href: '/analytics', label: 'Analytics', icon: Icon.chart },
+  { href: '/settings', label: 'Settings', icon: Icon.cog },
+];
+
+function UserChip() {
+  const { user } = useAuth();
+  return (
+    <div className="border-t border-[var(--m03-line)] pt-2">
+      <div className="mt-1 flex items-center gap-2 rounded px-2 py-2">
+        <span
+          aria-hidden="true"
+          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--m03-fg)] font-mono text-[11px] font-semibold text-[var(--m03-bg)]"
+        >
+          {userInitial(user?.email)}
+        </span>
+        <span className="truncate text-[12.5px] text-[var(--m03-fg-2)]">
+          {user?.email ?? 'Signed in'}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function renderSection(
+  section: Section,
+  key: string,
+  isLinkActive: (href: string) => boolean,
+) {
+  return (
+    <div key={key}>
+      {section.topRule && <div className="my-2 mx-2 border-t border-[var(--m03-line)]" />}
+      {section.label && <SectionHeader label={section.label} />}
+      <div className="flex flex-col gap-0.5">
+        {section.links.map((l) => (
+          <div key={`${key}-${l.href}-${l.label}`}>
+            {l.dividerBefore && (
+              <div className="mx-2 my-1 border-t border-[var(--m03-line)]" />
+            )}
+            <NavRow
+              href={l.href}
+              label={l.label}
+              icon={l.icon}
+              isActive={isLinkActive(l.href)}
+              count={l.count}
+              countTone={l.countTone}
+              disabled={l.disabled}
+              disabledReason={l.disabledReason}
+            />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// Internal — the part of Sidebar that calls `useSearchParams`. Next.js 16
+// requires `useSearchParams` consumers to be wrapped in a `<Suspense>`
+// boundary, otherwise static prerendering of any page that renders Sidebar
+// (e.g. /analytics) bails out and the production build fails.
+function SidebarBody() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const { user } = useAuth();
@@ -276,114 +377,52 @@ export function Sidebar() {
     return true;
   }
 
-  const workspaceSection: Section = {
-    label: 'Workspace',
-    links: [
-      { href: '/inbox', label: 'Inbox', icon: Icon.inbox, count: counts?.inbox },
-      {
-        href: '/inbox?status=escalated',
-        label: 'Escalated',
-        icon: Icon.bolt,
-        count: counts?.escalated,
-        countTone: 'escalated',
-      },
-      {
-        href: '/symphony',
-        label: 'Symphony',
-        icon: Icon.wave,
-      },
-      {
-        href: '/inbox/kanban',
-        label: 'Kanban',
-        icon: Icon.kanban,
-      },
-      {
-        href: '/inbox?assigned=me',
-        label: 'Mine',
-        icon: Icon.user,
-        disabled: true,
-        disabledReason: 'Coming soon — wire ?assigned= into the inbox page',
-      },
-      {
-        href: '/inbox?assigned=none',
-        label: 'Unassigned',
-        icon: Icon.userPlus,
-        disabled: true,
-        disabledReason: 'Coming soon — wire ?assigned= into the inbox page',
-      },
-    ],
-  };
+  // Apply counts to the workspace links (the only section that uses them).
+  const workspaceLinks: SectionLink[] = WORKSPACE_LINKS.map((l) => {
+    if (l.href === '/inbox') return { ...l, count: counts?.inbox };
+    if (l.href === '/inbox?status=escalated') return { ...l, count: counts?.escalated };
+    return l;
+  });
 
-  const channelsSection: Section = {
-    label: 'Channels',
-    topRule: true,
-    links: [
-      { href: '/inbox?channel=sms', label: 'SMS', icon: Icon.sms },
-      { href: '/inbox?channel=email', label: 'Email', icon: Icon.mail },
-      { href: '/inbox?channel=webchat', label: 'Webchat', icon: Icon.chat },
-    ],
-  };
-
-  const manageSection: Section = {
-    label: 'Manage',
-    topRule: true,
-    links: [
-      { href: '/knowledge', label: 'Knowledge', icon: Icon.book },
-      { href: '/customers', label: 'Customers', icon: Icon.user },
-      { href: '/analytics', label: 'Analytics', icon: Icon.chart },
-      { href: '/settings', label: 'Settings', icon: Icon.cog },
-    ],
-  };
-
-  function renderSection(section: Section, key: string) {
-    return (
-      <div key={key}>
-        {section.topRule && <div className="my-2 mx-2 border-t border-[var(--m03-line)]" />}
-        {section.label && <SectionHeader label={section.label} />}
-        <div className="flex flex-col gap-0.5">
-          {section.links.map((l) => (
-            <div key={`${key}-${l.href}-${l.label}`}>
-              {l.dividerBefore && (
-                <div className="mx-2 my-1 border-t border-[var(--m03-line)]" />
-              )}
-              <NavRow
-                href={l.href}
-                label={l.label}
-                icon={l.icon}
-                isActive={isLinkActive(l.href)}
-                count={l.count}
-                countTone={l.countTone}
-                disabled={l.disabled}
-                disabledReason={l.disabledReason}
-              />
-            </div>
-          ))}
-        </div>
-      </div>
-    );
-  }
+  const sections: Section[] = [
+    { label: 'Workspace', links: workspaceLinks },
+    { label: 'Channels', topRule: true, links: CHANNELS_LINKS },
+    { label: 'Manage', topRule: true, links: MANAGE_LINKS },
+  ];
 
   return (
     <aside className="flex h-full w-sidebar-w shrink-0 flex-col border-r border-[var(--m03-line)] bg-white py-3.5 px-2 text-[13px]">
       <div className="flex-1 overflow-y-auto">
-        {renderSection(workspaceSection, 'ws')}
-        {renderSection(channelsSection, 'ch')}
-        {renderSection(manageSection, 'manage')}
+        {sections.map((s, i) => renderSection(s, String(i), isLinkActive))}
       </div>
-
-      <div className="border-t border-[var(--m03-line)] pt-2">
-        <div className="mt-1 flex items-center gap-2 rounded px-2 py-2">
-          <span
-            aria-hidden="true"
-            className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--m03-fg)] font-mono text-[11px] font-semibold text-[var(--m03-bg)]"
-          >
-            {userInitial(user?.email)}
-          </span>
-          <span className="truncate text-[12.5px] text-[var(--m03-fg-2)]">
-            {user?.email ?? 'Signed in'}
-          </span>
-        </div>
-      </div>
+      <UserChip />
     </aside>
+  );
+}
+
+// Suspense fallback — same shell, no active highlighting, no counts. Shown
+// during prerender or while the client is hydrating; the real SidebarBody
+// swaps in immediately after.
+function SidebarFallback() {
+  const sections: Section[] = [
+    { label: 'Workspace', links: WORKSPACE_LINKS },
+    { label: 'Channels', topRule: true, links: CHANNELS_LINKS },
+    { label: 'Manage', topRule: true, links: MANAGE_LINKS },
+  ];
+  return (
+    <aside className="flex h-full w-sidebar-w shrink-0 flex-col border-r border-[var(--m03-line)] bg-white py-3.5 px-2 text-[13px]">
+      <div className="flex-1 overflow-y-auto">
+        {sections.map((s, i) => renderSection(s, String(i), () => false))}
+      </div>
+      <UserChip />
+    </aside>
+  );
+}
+
+export function Sidebar() {
+  return (
+    <Suspense fallback={<SidebarFallback />}>
+      <SidebarBody />
+    </Suspense>
   );
 }

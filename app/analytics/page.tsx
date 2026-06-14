@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { insforge } from '@/lib/insforge';
 import { AppShell } from '@/components/layout';
 import { Pill } from '@/components/ui';
@@ -32,6 +32,13 @@ interface Metrics {
   averageResponseTimeMs: number | null;
   aiAutoReplyRate: number | null;
   resolutionRate: number | null;
+}
+
+interface VolumeBucket {
+  label: string;
+  from: number;
+  to: number;
+  count: number;
 }
 
 type RangeKey = '7d' | '30d' | 'quarter';
@@ -69,6 +76,89 @@ function rangeToDates(range: RangeKey): { start: string; end: string } {
   };
 }
 
+function buildVolume(
+  conversations: Conversation[],
+  range: RangeKey,
+  now: Date,
+): VolumeBucket[] {
+  const rangeStart = rangeStartMs(range, now);
+  const startOfFirstDay = new Date(rangeStart);
+  startOfFirstDay.setHours(0, 0, 0, 0);
+  const startOfToday = new Date(now);
+  startOfToday.setHours(0, 0, 0, 0);
+  const dayMs = 24 * 60 * 60 * 1000;
+
+  if (range === '7d' || range === '30d') {
+    const numDays = range === '7d' ? 7 : 30;
+    // Anchor on today: the last bucket is the partial day [today 00:00, now),
+    // earlier buckets are full days. This gives exactly N buckets where N
+    // matches the range label, not N+1.
+    const startOfFirstBucket = new Date(now);
+    startOfFirstBucket.setDate(startOfFirstBucket.getDate() - (numDays - 1));
+    startOfFirstBucket.setHours(0, 0, 0, 0);
+
+    const buckets: VolumeBucket[] = [];
+    for (let i = 0; i < numDays; i++) {
+      const from = new Date(startOfFirstBucket);
+      from.setDate(from.getDate() + i);
+      const isLast = i === numDays - 1;
+      const to = isLast ? new Date(now) : new Date(from.getTime() + dayMs);
+      buckets.push({
+        label: from.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
+        from: from.getTime(),
+        to: to.getTime(),
+        count: 0,
+      });
+    }
+    for (const c of conversations) {
+      const t = new Date(c.created_at).getTime();
+      if (Number.isNaN(t)) continue;
+      const b = buckets.find((b) => t >= b.from && t < b.to);
+      if (b) b.count += 1;
+    }
+    return buckets;
+  }
+
+  // quarter: weekly buckets from the start of the range
+  const numWeeks = computeVolumeBucketCount(range, now);
+  const buckets: VolumeBucket[] = [];
+  for (let i = 0; i < numWeeks; i++) {
+    const from = new Date(startOfFirstDay);
+    from.setDate(from.getDate() + i * 7);
+    const to = new Date(from);
+    to.setDate(to.getDate() + 7);
+    buckets.push({ label: `W${i + 1}`, from: from.getTime(), to: to.getTime(), count: 0 });
+  }
+  for (const c of conversations) {
+    const t = new Date(c.created_at).getTime();
+    if (Number.isNaN(t)) continue;
+    const b = buckets.find((b) => t >= b.from && t < b.to);
+    if (b) b.count += 1;
+  }
+  return buckets;
+}
+
+function rangeStartMs(range: RangeKey, now: Date): number {
+  const d = new Date(now);
+  if (range === '7d') d.setDate(d.getDate() - 7);
+  else if (range === '30d') d.setDate(d.getDate() - 30);
+  else d.setMonth(d.getMonth() - 3);
+  return d.getTime();
+}
+
+function computeVolumeBucketCount(range: RangeKey, now: Date): number {
+  if (range === '7d') return 7;
+  if (range === '30d') return 30;
+  // quarter: no fixed count in the label, align to the KPI range
+  const rangeStart = rangeStartMs(range, now);
+  const startDay = new Date(rangeStart);
+  startDay.setHours(0, 0, 0, 0);
+  const today = new Date(now);
+  today.setHours(0, 0, 0, 0);
+  const dayMs = 24 * 60 * 60 * 1000;
+  return Math.max(1, Math.round((today.getTime() - startDay.getTime()) / (7 * dayMs)) + 1);
+}
+
 export default function AnalyticsPage() {
   const { user } = useAuth();
   const { data: orgId } = useOrgMembership(user?.id);
@@ -76,17 +166,29 @@ export default function AnalyticsPage() {
   const [range, setRange] = useState<RangeKey>('30d');
   const { start: startDate, end: endDate } = useMemo(() => rangeToDates(range), [range]);
   const [metrics, setMetrics] = useState<Metrics | null>(null);
-  const [weeklyVolume, setWeeklyVolume] = useState<number[]>([]);
+  const [volumeBuckets, setVolumeBuckets] = useState<VolumeBucket[]>([]);
   const [channelSplit, setChannelSplit] = useState<{ email: number; sms: number; webchat: number }>({
     email: 0,
     sms: 0,
     webchat: 0,
   });
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const metricsRef = useRef<Metrics | null>(null);
+  metricsRef.current = metrics;
+
   const computeMetrics = useCallback(async () => {
-    setLoading(true);
+    const isRefresh = metricsRef.current !== null;
+    if (isRefresh) {
+      setRefreshing(true);
+      setMetrics(null);
+      setVolumeBuckets([]);
+      setChannelSplit({ email: 0, sms: 0, webchat: 0 });
+    } else {
+      setLoading(true);
+    }
     setError(null);
     try {
       const startIso = new Date(startDate).toISOString();
@@ -131,19 +233,8 @@ export default function AnalyticsPage() {
       }
       setChannelSplit(channelCounts);
 
-      // 12-week conversation volume (independent of selected range)
-      const twelveWeeksAgo = new Date();
-      twelveWeeksAgo.setDate(twelveWeeksAgo.getDate() - 84);
-      const weekly = new Array(12).fill(0) as number[];
-      for (const c of convList) {
-        const t = new Date(c.created_at).getTime();
-        if (Number.isNaN(t)) continue;
-        if (t < twelveWeeksAgo.getTime()) continue;
-        const weeksAgo = Math.floor((Date.now() - t) / (7 * 24 * 60 * 60 * 1000));
-        const idx = 11 - weeksAgo;
-        if (idx >= 0 && idx < 12) weekly[idx] += 1;
-      }
-      setWeeklyVolume(weekly);
+      // Conversation volume — bucketed per selected range
+      setVolumeBuckets(buildVolume(filtered, range, new Date()));
 
       // Average response time from messages
       let averageResponseTimeMs: number | null = null;
@@ -201,8 +292,9 @@ export default function AnalyticsPage() {
       setError('Failed to compute analytics');
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
-  }, [startDate, endDate]);
+  }, [startDate, endDate, range]);
 
   useEffect(() => {
     computeMetrics();
@@ -214,7 +306,12 @@ export default function AnalyticsPage() {
     sms: Math.round((channelSplit.sms / channelTotal) * 100),
     webchat: Math.round((channelSplit.webchat / channelTotal) * 100),
   };
-  const maxWeekly = Math.max(1, ...weeklyVolume);
+  const maxVolume = Math.max(1, ...volumeBuckets.map((b) => b.count));
+  const volumePlaceholderCount =
+    volumeBuckets.length > 0
+      ? volumeBuckets.length
+      : computeVolumeBucketCount(range, new Date());
+  const rangeDisabled = loading || refreshing;
 
   const subline = `${endDate}${org?.name ? ` · ${org.name} workspace` : ''}`;
 
@@ -231,7 +328,8 @@ export default function AnalyticsPage() {
               <button
                 type="button"
                 onClick={() => setRange('7d')}
-                className="cursor-pointer"
+                disabled={rangeDisabled}
+                className="cursor-pointer disabled:cursor-not-allowed disabled:opacity-60"
                 style={{ all: 'unset', cursor: 'pointer' }}
               >
                 7 days
@@ -241,7 +339,8 @@ export default function AnalyticsPage() {
               <button
                 type="button"
                 onClick={() => setRange('30d')}
-                style={{ all: 'unset', cursor: 'pointer' }}
+                disabled={rangeDisabled}
+                style={{ all: 'unset', cursor: 'pointer', opacity: rangeDisabled ? 0.6 : 1 }}
               >
                 30 days
               </button>
@@ -250,7 +349,8 @@ export default function AnalyticsPage() {
               <button
                 type="button"
                 onClick={() => setRange('quarter')}
-                style={{ all: 'unset', cursor: 'pointer' }}
+                disabled={rangeDisabled}
+                style={{ all: 'unset', cursor: 'pointer', opacity: rangeDisabled ? 0.6 : 1 }}
               >
                 Quarter
               </button>
@@ -264,86 +364,113 @@ export default function AnalyticsPage() {
           </div>
         )}
 
-        {loading && !metrics ? (
+        {loading && !metrics && !refreshing ? (
           <p className="text-[13px] text-[var(--m03-fg-2)]">Loading analytics…</p>
         ) : (
-          metrics && (
-            <>
-              {/* Metric cards */}
-              <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                <StatCard label="Open conversations" value={String(metrics.openConversations)} />
-                <StatCard label="Resolved" value={String(metrics.resolvedConversations)} />
-                <StatCard
-                  label="AI auto-reply rate"
-                  value={formatCsat(metrics.aiAutoReplyRate)}
-                />
-                <StatCard
-                  label="First response"
-                  value={formatDuration(metrics.averageResponseTimeMs)}
-                />
+          <>
+            {/* Metric cards */}
+            <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <StatCard
+                label="Open conversations"
+                value={refreshing || !metrics ? '—' : String(metrics.openConversations)}
+              />
+              <StatCard
+                label="Resolved"
+                value={refreshing || !metrics ? '—' : String(metrics.resolvedConversations)}
+              />
+              <StatCard
+                label="AI auto-reply rate"
+                value={formatCsat(refreshing ? null : (metrics?.aiAutoReplyRate ?? null))}
+              />
+              <StatCard
+                label="First response"
+                value={formatDuration(refreshing ? null : (metrics?.averageResponseTimeMs ?? null))}
+              />
+            </div>
+
+            {/* Charts row */}
+            <div className="grid grid-cols-1 gap-3 lg:grid-cols-[2fr_1fr]">
+              {/* Weekly volume */}
+              <div className="rounded-lg border border-[var(--m03-line)] bg-white p-[18px]">
+                <div className="mb-3.5 flex items-center justify-between">
+                  <h2 className="m-0 text-[14px] font-semibold">Conversation volume</h2>
+                  <Pill active>
+                    {range === '7d'
+                      ? 'Last 7 days'
+                      : range === '30d'
+                        ? 'Last 30 days'
+                        : 'Last quarter'}
+                  </Pill>
+                </div>
+                <div className="flex h-[140px] items-end gap-1.5">
+                  {refreshing || volumeBuckets.length === 0
+                    ? Array.from({ length: volumePlaceholderCount }).map((_, i) => (
+                        <div
+                          key={i}
+                          className="min-h-[6px] flex-1 animate-pulse rounded-t bg-[var(--m03-line-2)]"
+                        />
+                      ))
+                    : volumeBuckets.map((b, i) => (
+                        <div
+                          key={i}
+                          style={{ height: `${Math.max(6, (b.count / maxVolume) * 100)}%` }}
+                          className="min-h-[6px] flex-1 rounded-t bg-[var(--m03-fg)]"
+                          title={`${b.label}: ${b.count}`}
+                        />
+                      ))}
+                </div>
+                <div className="mt-1.5 flex justify-between font-mono text-[10px] text-[var(--m03-fg-3)]">
+                  {range === 'quarter' ? (
+                    <>
+                      <span>W1</span>
+                      <span>W3</span>
+                      <span>W5</span>
+                      <span>W7</span>
+                      <span>W9</span>
+                      <span>W11</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>{volumeBuckets[0]?.label ?? ''}</span>
+                      <span>
+                        {volumeBuckets[Math.floor(volumeBuckets.length / 2)]?.label ?? ''}
+                      </span>
+                      <span>{volumeBuckets[volumeBuckets.length - 1]?.label ?? ''}</span>
+                    </>
+                  )}
+                </div>
               </div>
 
-              {/* Charts row */}
-              <div className="grid grid-cols-1 gap-3 lg:grid-cols-[2fr_1fr]">
-                {/* Weekly volume */}
-                <div className="rounded-lg border border-[var(--m03-line)] bg-white p-[18px]">
-                  <div className="mb-3.5 flex items-center justify-between">
-                    <h2 className="m-0 text-[14px] font-semibold">Conversation volume</h2>
-                    <Pill active>Last 12 weeks</Pill>
-                  </div>
-                  <div className="flex h-[140px] items-end gap-1.5">
-                    {weeklyVolume.length === 0
-                      ? Array.from({ length: 12 }).map((_, i) => (
-                          <div
-                            key={i}
-                            style={{ height: `${20 + i * 6}%` }}
-                            className="min-h-[6px] flex-1 rounded-t bg-[var(--m03-fg)]"
-                          />
-                        ))
-                      : weeklyVolume.map((v, i) => (
-                          <div
-                            key={i}
-                            style={{ height: `${Math.max(6, (v / maxWeekly) * 100)}%` }}
-                            className="min-h-[6px] flex-1 rounded-t bg-[var(--m03-fg)]"
-                            title={`Week ${i + 1}: ${v}`}
-                          />
-                        ))}
-                  </div>
-                  <div className="mt-1.5 flex justify-between font-mono text-[10px] text-[var(--m03-fg-3)]">
-                    <span>W1</span>
-                    <span>W3</span>
-                    <span>W5</span>
-                    <span>W7</span>
-                    <span>W9</span>
-                    <span>W11</span>
-                  </div>
+              {/* Channel split */}
+              <div className="rounded-lg border border-[var(--m03-line)] bg-white p-[18px]">
+                <div className="mb-3.5 flex items-center justify-between">
+                  <h2 className="m-0 text-[14px] font-semibold">Channel split</h2>
                 </div>
-
-                {/* Channel split */}
-                <div className="rounded-lg border border-[var(--m03-line)] bg-white p-[18px]">
-                  <div className="mb-3.5 flex items-center justify-between">
-                    <h2 className="m-0 text-[14px] font-semibold">Channel split</h2>
-                  </div>
-                  <div className="flex flex-col gap-2.5">
-                    <ChannelBar label="Email" pct={channelPct.email} shade="fg" />
-                    <ChannelBar label="SMS" pct={channelPct.sms} shade="fg-2" />
-                    <ChannelBar label="Webchat" pct={channelPct.webchat} shade="fg-4" />
-                  </div>
+                <div className="flex flex-col gap-2.5">
+                  <ChannelBar label="Email" pct={channelPct.email} shade="fg" />
+                  <ChannelBar label="SMS" pct={channelPct.sms} shade="fg-2" />
+                  <ChannelBar label="Webchat" pct={channelPct.webchat} shade="fg-4" />
                 </div>
               </div>
+            </div>
 
               {/* Secondary metrics row */}
               <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                <StatCard label="Total conversations" value={String(metrics.totalConversations)} />
+                <StatCard
+                  label="Total conversations"
+                  value={refreshing || !metrics ? '—' : String(metrics.totalConversations)}
+                />
                 <StatCard
                   label="Resolution rate"
-                  value={formatCsat(metrics.resolutionRate)}
+                  value={formatCsat(refreshing ? null : (metrics?.resolutionRate ?? null))}
                 />
-                <StatCard label="Escalated" value={String(metrics.escalatedConversations)} />
+                <StatCard
+                  label="Escalated"
+                  value={refreshing || !metrics ? '—' : String(metrics.escalatedConversations)}
+                />
               </div>
             </>
-          )
-        )}
+          )}
       </div>
     </AppShell>
   );

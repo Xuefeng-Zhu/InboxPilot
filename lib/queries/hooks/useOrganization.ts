@@ -7,6 +7,7 @@ export interface Organization {
   id: string;
   name: string;
   slug: string;
+  sla_thresholds: { greenMs: number; amberMs: number };
 }
 
 export function useOrgMembership(userId: string | undefined) {
@@ -36,7 +37,7 @@ export function useOrganization(orgId: string | undefined) {
     queryFn: async () => {
       const { data, error } = await insforge.database
         .from('organizations')
-        .select('id,name,slug')
+        .select('id,name,slug,sla_thresholds')
         .eq('id', orgId!)
         .single();
 

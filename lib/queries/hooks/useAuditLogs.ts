@@ -47,7 +47,10 @@ function escapeIlike(input: string): string {
   return input.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
 }
 
-export function useAuditLogs(filters?: AuditLogFilters) {
+export function useAuditLogs(
+  filters?: AuditLogFilters,
+  options?: { enabled?: boolean },
+) {
   const authReady = useAuthReady();
   return useQuery({
     queryKey: queryKeys.auditLogs(filters as Record<string, unknown> | undefined),
@@ -88,6 +91,6 @@ export function useAuditLogs(filters?: AuditLogFilters) {
       if (error) throw new Error(error.message);
       return Array.isArray(data) ? (data as AuditLogRow[]) : [];
     },
-    enabled: authReady,
+    enabled: authReady && (options?.enabled ?? true),
   });
 }

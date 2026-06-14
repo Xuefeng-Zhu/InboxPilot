@@ -47,6 +47,8 @@ export {
   type AuditLogRow,
 } from './hooks/useAuditLogs';
 
+export { useConversationAuditTrail } from './hooks/useConversationAuditTrail';
+
 export {
   useSymphonyConversations,
   useSymphonyCounts,

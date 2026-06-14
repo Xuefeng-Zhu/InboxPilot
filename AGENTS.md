@@ -1,189 +1,146 @@
 ---
-description: Instructions building apps with MCP
+description: InboxPilot project guide – multi-tenant AI customer support platform
 globs: *
 alwaysApply: true
 ---
 
-# InboxPilot Project Guide
+# InboxPilot Knowledge Base
 
-## Project Overview
-InboxPilot is a multi-tenant AI customer support platform. See `docs/README.md` for the full docs index.
+## OVERVIEW
+InboxPilot is a multi-tenant AI customer support platform on Next.js App Router + InsForge (Deno BaaS). Processes inbound/outbound SMS & email with AI draft/auto-reply, deterministic escalation, and human handoff. See `docs/README.md` for the full docs index.
 
-## Key Documentation
-Start at `docs/README.md`. The most-referenced docs are:
+**Stack**: Next.js 16 App Router (Turbopack) • TypeScript • React 19 • InsForge (PostgREST + Auth + Functions + Realtime + AI) • Tailwind CSS 3.4 (locked — do NOT upgrade to v4) • Vitest/fast-check • npm (no workspaces — see Notes)
 
-- `docs/reference/architecture.md` — System architecture, data flows, design decisions
-- `docs/reference/database.md` — Schema reference (19 tables, 5 migrations), RLS policies, RPCs
-- `docs/reference/api.md` — 9 InsForge Deno functions + 7 Next.js API routes
-- `docs/reference/rbac.md` — Role × permission matrix
-- `docs/reference/jobs.md` — Job queue lifecycle, types, payloads, idempotency
-- `docs/reference/audit.md` — Every `audit_logs.action` string emitted
-- `docs/reference/frontend.md` — React Query patterns, `lib/queries.ts`, auth context
-- `docs/reference/webchat.md` — Web chat widget integration guide
-- `docs/reference/testing.md` — Property-based testing, 17 correctness properties
-- `docs/guides/getting-started.md` — 15-minute setup
-- `docs/guides/local-development.md` — Day-to-day workflow
-- `docs/guides/adding-a-channel.md` — Add a new SMS/email provider
-- `docs/guides/adding-an-escalation-rule.md` — Add a new escalation rule
-- `docs/guides/debugging.md` — Diagnose common issues
-- `docs/guides/deploying.md` — Frontend + functions + widget deploy
-
-## Critical Rules for This Project
-1. **Portability**: Business logic in `packages/support-core/` MUST NOT import `@insforge/sdk` or any InsForge-specific code. All external dependencies are injected via interfaces.
-2. **SDK Usage**: Frontend code uses `@insforge/sdk` via `lib/insforge.ts`. Use `insforge.database.from()` chainable API, NOT raw fetch.
-3. **Auth**: Use `insforge.auth.signUp()`, `insforge.auth.signInWithPassword()`, `insforge.auth.getCurrentUser()`, `insforge.auth.signOut()`.
-4. **Database Queries**: Use `insforge.database.from('table').select().eq().order()` pattern. See `docs/reference/frontend.md` for examples.
-5. **Tailwind CSS**: Use v3.4 only. Do NOT upgrade to v4.
-6. **Testing**: All new business logic needs property-based tests (fast-check). See `docs/reference/testing.md`.
-7. **Audit Logging**: All significant actions must be logged to `audit_logs` table. See `docs/reference/audit.md` for the action catalog.
-8. **RLS**: All tenant-scoped tables have Row Level Security. Never bypass RLS from client code.
-
-## Project Structure Quick Reference
-- `app/` — Next.js pages (login, register, inbox, knowledge, analytics, settings, customers, team, wchat)
-- `app/api/functions/` — 7 JWT-authed Next.js Route Handlers
-- `components/` — React components (inbox, knowledge, customers, layout, ui, landing)
-- `lib/` — Frontend utilities (`insforge.ts`, `auth-context.tsx`, `queries.ts`, `use-realtime.ts`, `query-provider.tsx`, `insforge-admin.ts`, `onboarding.ts`)
-- `widget-src/` — Vite project for the embeddable web chat widget bundle
-- `packages/support-core/src/` — Portable business logic
-  - `adapters/` — SMS/email provider adapters (Twilio, Telnyx, Postmark, mocks, stubs)
-  - `interfaces/` — TypeScript interfaces (DatabaseClient, JobQueue, SmsProviderAdapter, EmailProviderAdapter, AiClient, RealtimePublisher, ProviderRegistry, EscalationEngine, …)
-  - `repositories/` — Data access layer (16 repositories)
-  - `services/` — Business logic (InboundMessage, OutboundMessage, AiAgent, KnowledgeIngestion, WebchatThread, Organization, PostgresJobQueue, …)
-  - `types/` — Shared entity types, enums, input/output shapes
-  - `utils/` — Normalization, chunking
-- `insforge/functions/` — 9 Deno serverless function entrypoints
-- `insforge/migrations/` — 5 SQL migration files
-- `scripts/mock-sms.mjs` — Local helper to simulate SMS inbound/outbound against a real backend
-
----
-
-# InsForge SDK Documentation - Overview
-
-## What is InsForge?
-
-Backend-as-a-service (BaaS) platform providing:
-
-- **Database**: PostgreSQL with PostgREST API
-- **Authentication**: Email/password + OAuth (Google, GitHub)
-- **Storage**: File upload/download
-- **AI**: Chat completions and image generation (OpenAI-compatible)
-- **Functions**: Serverless function deployment
-- **Realtime**: WebSocket pub/sub (database + client events)
-
-## Installation
-
-The following is a step-by-step guide to installing and using the InsForge TypeScript SDK for Web applications. If you are building other types of applications, please refer to:
-- [Swift SDK documentation](/sdks/swift/overview) for iOS, macOS, tvOS, and watchOS applications.
-- [Kotlin SDK documentation](/sdks/kotlin/overview) for Android applications.
-- [REST API documentation](/sdks/rest/overview) for direct HTTP API access.
-
-### 🚨 CRITICAL: Follow these steps in order
-
-### Step 1: Download Template
-
-Use the `download-template` MCP tool to create a new project with your backend URL and anon key pre-configured.
-
-### Step 2: Install SDK
-
-```bash
-npm install @insforge/sdk@latest
+## STRUCTURE
+```
+app/                          Next.js pages – inbox, knowledge, analytics, settings, login, register, team, wchat, symphony
+app/api/functions/            7 JWT-authed Next.js Route Handlers (send-reply, approve-ai-draft, etc.)
+components/                   React components – inbox/, knowledge/, customers/, landing/, layout/, ui/
+lib/                          Frontend utilities & React Query hooks (insforge.ts, auth-context.tsx, queries/)
+packages/support-core/        Portable business logic (see packages/support-core/AGENTS.md)
+insforge/functions/           9 Deno serverless entrypoints (see insforge/functions/AGENTS.md)
+insforge/migrations/          8 SQL migrations + seed.sql (docs claim 5 — stale)
+widget-src/                   Vite + TS webchat widget bundle
+docs/                         Architecture, database, API, RBAC, audit, jobs, webchat, testing references + guides
 ```
 
-### Step 3: Create SDK Client
+## WHERE TO LOCATE KEY FILES
+| Need | Look in |
+|------|---------|
+| Auth UI | `app/login/`, `app/register/`, `lib/auth-context.tsx` |
+| Inbox UI | `app/inbox/`, `components/inbox/` |
+| Settings UI | `app/settings/` |
+| Symphony (timeline) UI | `app/symphony/` |
+| API routes (agent actions) | `app/api/functions/` |
+| InsForge SDK client | `lib/insforge.ts` |
+| React Query hooks | `lib/queries/hooks/` |
+| Business logic (services) | `packages/support-core/src/services/` |
+| Data access (repositories) | `packages/support-core/src/repositories/` |
+| Provider adapters (SMS/Email) | `packages/support-core/src/adapters/` |
+| InsForge Deno functions | `insforge/functions/` |
+| Migrations & seed | `insforge/migrations/`, `insforge/seed.sql` |
+| Docs index | `docs/README.md` |
+| Test suites | `__tests__/`, `packages/support-core/__tests__/` |
 
-You must create a client instance using `createClient()` with your base URL and anon key:
+## CODE MAP
 
-```javascript
-import { createClient } from '@insforge/sdk';
+### Data Flow
+```
+External (Twilio/Telnyx/Postmark/Widget)
+  → insforge/functions/ (Deno entrypoints: parse request, verify JWT, delegate)
+    → packages/support-core/services/ (business logic orchestration)
+      → packages/support-core/repositories/ (data access, returns typed entities)
+        → InsForge PostgREST (auto-generated HTTP API with RLS)
+          → PostgreSQL
 
-const client = createClient({
-  baseUrl: 'https://your-app.region.insforge.app',  // Your InsForge backend URL
-  anonKey: 'your-anon-key-here'       // Get this from backend metadata
-});
-
+Next.js Client (agent actions)
+  → app/api/functions/ (Next.js Route Handlers, verify JWT)
+    → packages/support-core/services/
+      → packages/support-core/repositories/
 ```
 
-**API BASE URL**: Your API base URL is `https://your-app.region.insforge.app`.
+### Key Modules
+- **InboundMessageService**: Normalize inbound SMS/email → deduplicate → create/update conversation → escalation check → AI auto-reply or draft → enqueue delivery
+- **OutboundMessageService**: Validate → create message → send via provider adapter → handle delivery event
+- **AiAgentService**: Select mode (draft/auto-reply/human) → call OpenRouter → store AI decision → enqueue reply
+- **PostgresJobQueue**: PostgresJobQueue: claim available jobs → process with exponential backoff → dead-letter after max attempts
+- **EscalationRules**: Pre-AI rule evaluation (profanity, legal threats, safety concerns) → blocks/overrides AI auto-reply
 
-## Getting Detailed Documentation
+## CORE CONVENTIONS
 
-### 🚨 CRITICAL: Always Fetch Documentation Before Writing Code
+1. **Portability** (CRITICAL): `packages/support-core/` MUST NOT import `@insforge/sdk` or any InsForge-specific code. All external dependencies injected via interfaces (`DatabaseClient`, `JobQueue`, `AiClient`, `SmsProviderAdapter`, `EmailProviderAdapter`, etc.).
+2. **SDK usage**: Frontend uses `@insforge/sdk` via `lib/insforge.ts`. Use `insforge.database.from('table').select().eq().order()` chainable API. Never raw fetch.
+3. **Auth methods**: `insforge.auth.signUp()`, `.signInWithPassword()`, `.getCurrentUser()`, `.signOut()`.
+4. **Tailwind CSS**: v3.4 only. Never upgrade to v4. Lock in `package.json`.
+5. **Testing**: Business logic needs property-based tests (fast-check, 100+ iterations). See `docs/reference/testing.md` for 17 correctness properties.
+6. **Audit logging**: Every significant action logged to `audit_logs`. See `docs/reference/audit.md` for allowed action strings.
+7. **RLS**: All tenant-scoped tables have Row Level Security. Never bypass from client code.
+8. **InsForge SDK**: Always fetch latest docs via `fetch-docs`/`fetch-sdk-docs` MCP tools before writing InsForge integration code. SDK returns `{data, error}` tuple. Database inserts use array format: `insert([{...}])`.
+9. **No lint/format config**: Conventions enforced via AGENTS.md only. No ESLint, Prettier, or semantic config files.
+10. **Type safety**: `as any`, `@ts-ignore`, `@ts-expect-error` never allowed. Empty catch blocks `catch(e) {}` never allowed.
 
-InsForge provides official SDKs and REST APIs, use them to interact with InsForge services from your application code.
+## ANTI-PATTERNS TO WATCH FOR
 
-- [TypeScript SDK](/sdks/typescript/overview) - JavaScript/TypeScript
-- [Swift SDK](/sdks/swift/overview) - iOS, macOS, tvOS, and watchOS
-- [Kotlin SDK](/sdks/kotlin/overview) - Android and Kotlin Multiplatform
-- [REST API](/sdks/rest/overview) - Direct HTTP API access
+- **Importing @insforge/sdk in support-core** – breaks portability. All dependencies injected via interfaces.
+- **Bypassing RLS with service_role key in client** – security violation. Service role is server-side only.
+- **Skipping property tests** – all new business logic needs fast-check property tests.
+- **Empty catch blocks** – never suppress errors.
+- **Type suppression** with `as any`, `@ts-ignore` – never allowed.
+- **Hardcoded tenant IDs** – must come from JWT context (auth.uid() / org context).
+- **Direct fetch() to InsForge** – always go through `lib/insforge.ts` SDK client.
+- **Refactoring while bugfixing** – fix minimally, never refactor during fixes.
+- **Testing with real provider credentials** – use mock/stub adapters from `packages/support-core/src/adapters/`.
+- **Editing `_bundled/` files in insforge/functions/** – build artifacts, re-deploy to regenerate.
 
-Before writing or editing any InsForge integration code, you **MUST** call the `fetch-docs` or `fetch-sdk-docs` MCP tool to get the latest SDK documentation. This ensures you have accurate, up-to-date implementation patterns.
+## UNIQUE STYLES
 
-### Use the InsForge `fetch-docs` MCP tool to get specific SDK documentation:
+- **Monorepo with turbo@2**: `npm run dev` (parallel), `npm run build` (ordered), `npm run lint`, `npm run type-check`, `npm test`.
+- **Portable business logic package**: `packages/support-core` is a separate npm workspace package with its own `package.json` and `tsconfig.json`. Extracted for potential reuse outside InsForge.
+- **Interface-first architecture**: Every external dependency has a TypeScript interface in `packages/support-core/src/interfaces/`. Implementations injected at entrypoint layer.
+- **Deterministic escalation before AI**: Escalation rules evaluate BEFORE any LLM call. If a rule triggers, the AI never sees the message.
+- **Symphony timeline**: Custom river visualization at `app/symphony/` (River, TimeAxis, MiniMap, RiverCard, RiverExpandedPanel components).
+- **proxy.ts pattern**: Root-level proxy middleware (Next.js 16 style, not standard middleware.ts convention).
+- **NEXT_PUBLIC_INSFORGE_URL** env var naming (InsForge-specific, not Supabase-style).
+- **Mock/stub adapter hierarchy**: Each provider has a mock (in-memory, dev) and stub (static canned responses) variant for testing.
 
-Available documentation types:
+## COMMANDS
 
-- `"instructions"` - Essential backend setup (START HERE)
-- `"real-time"` - Real-time pub/sub (database + client events) via WebSockets
-- `"db-sdk-typescript"` - Database operations with TypeScript SDK
-- **Authentication** - Choose based on implementation:
-  - `"auth-sdk-typescript"` - TypeScript SDK methods for custom auth flows
-  - `"auth-components-react"` - Pre-built auth UI for React+Vite (singlepage App)
-  - `"auth-components-react-router"` - Pre-built auth UI for React(Vite+React Router) (Multipage App)
-  - `"auth-components-nextjs"` - Pre-built auth UI for Nextjs (SSR App)
-- `"storage-sdk"` - File storage operations
-- `"functions-sdk"` - Serverless functions invocation
-- `"ai-integration-sdk"` - AI chat and image generation
-- `"real-time"` - Real-time pub/sub (database + client events) via WebSockets
-- `"deployment"` - Deploy frontend applications via MCP tool
+| Command | Purpose |
+|---------|---------|
+| `npm run dev` | Start Next.js dev server (Turbopack) |
+| `npm run build` | Build all (`build:widget` → `next build`) |
+| `npm run build:widget` | Vite build of `widget-src/` → `public/widget.js` |
+| `npm test` | Run all tests (Vitest) |
+| `npm run test:watch` | Test watch mode |
+| `npm run test:core` | ⚠ Currently broken — `vitest.config.ts` has no `projects` field |
+| `npm run lint` | `tsc --noEmit` (no ESLint configured) |
+| `cd packages/support-core && npm test` | Support-core tests only |
+| `node scripts/mock-sms.mjs inbound "Hi"` | Simulate SMS traffic against real backend |
 
-These documentations are mostly for TypeScript SDK. For other languages, you can also use `fetch-sdk-docs` mcp tool to get specific documentation.
+## NOTES
 
-### Use the InsForge `fetch-sdk-docs` MCP tool to get specific SDK documentation
+- No ESLint/Prettier config – formatting conventions enforced by AGENTS.md.
+- No TS/JS LSP available in dev environment – rely on `npm run lint` and `npm test` for correctness.
+- InsForge project: **InboxPilot** (API base `https://y39ezar3.us-east.insforge.app`).
+- Credentials in `.env.local` (client) and `.insforge/project.json` (CLI). Never commit.
+- Use InsForge skills (`/insforge`, `/insforge-cli`, `/insforge-debug`, `/insforge-integrations`) before writing InsForge integration code.
 
-You can fetch sdk documentation using the `fetch-sdk-docs` MCP tool with specific feature type and language.
+## KNOWN ISSUES / GOTCHAS
 
-Available feature types:
-- db - Database operations
-- storage - File storage operations
-- functions - Serverless functions invocation
-- auth - User authentication
-- ai - AI chat and image generation
-- realtime - Real-time pub/sub (database + client events) via WebSockets
-
-Available languages:
-- typescript - JavaScript/TypeScript SDK
-- swift - Swift SDK (for iOS, macOS, tvOS, and watchOS)
-- kotlin - Kotlin SDK (for Android and JVM applications)
-- rest-api - REST API
-
-## When to Use SDK vs MCP Tools
-
-### Always SDK for Application Logic:
-
-- Authentication (register, login, logout, profiles)
-- Database CRUD (select, insert, update, delete)
-- Storage operations (upload, download files)
-- AI operations (chat, image generation)
-- Serverless function invocation
-
-### Use MCP Tools for Infrastructure:
-
-- Project scaffolding (`download-template`) - Download starter templates with InsForge integration
-- Backend setup and metadata (`get-backend-metadata`)
-- Database schema management (`run-raw-sql`, `get-table-schema`)
-- Storage bucket creation (`create-bucket`, `list-buckets`, `delete-bucket`)
-- Serverless function deployment (`create-function`, `update-function`, `delete-function`)
-- Frontend deployment (`create-deployment`) - Deploy frontend apps to InsForge hosting
-
-## Important Notes
-
-- For auth: use `auth-sdk` for custom UI, or framework-specific components for pre-built UI
-- SDK returns `{data, error}` structure for all operations
-- Database inserts require array format: `[{...}]`
-- Serverless functions have single endpoint (no subpaths)
-- Storage: Upload files to buckets, store URLs in database
-- AI operations are OpenAI-compatible
-- **EXTRA IMPORTANT**: Use Tailwind CSS 3.4 (do not upgrade to v4). Lock these dependencies in `package.json`
+- **Repository count: 15, not 16.** `PostgresJobQueue` lives in `services/` (not `repositories/`) — it implements the `JobQueue` interface and carries business logic (idempotency, backoff, dead-lettering), not table CRUD. Update the README if you touch this.
+- **Table count: 20, not 19.** 20th is `ai_decision_chunks` (added in migration 007). `docs/reference/database.md` is stale.
+- **Migration count: 8, not 5.** `006` (activity backfill), `007` (ai_decision_chunks), `008` (replaces `claim_support_jobs` from 002) are missing from the docs.
+- **`app/symphony/` is built but undocumented** in `README.md` and the original AGENTS.md. Has its own 7 components, 3 tests, and a data hook (`useSymphony.ts`), linked from Sidebar. Treat as in-progress.
+- **`/team` page has unwired buttons** (Edit Role, Remove) — presentational only.
+- **The "old settings page" referenced in `/settings` placeholders (team/billing/audit) does not exist** — placeholder copy is stale.
+- **`TelnyxSmsAdapter.verifyWebhook` is a stub** (only checks header presence, not ed25519). Marked with TODO.
+- **6 of 6 integration test files are 100% `it.todo` placeholders** (45 placeholders total) — they need a real InsForge DB; pass as "todo" without exercising code.
+- **`__tests__/middleware.test.ts` should be `__tests__/proxy.test.ts`** — Next.js 16 rename in flight.
+- **`proxy.ts` checks cookie PRESENCE only** (not JWT validity). Real auth boundary is in `app/api/functions/_auth.ts` and `insforge/functions/_shared/verify-jwt.ts`.
+- **`insforge/functions/_bundled/` is deno bundle output**, mtime `Jun 8` (older than entrypoints `Jun 14`). Regenerate before deploy.
+- **`tsconfig.tsbuildinfo` is committed at root** despite `*.tsbuildinfo` in `.gitignore` (the rule may not match this filename).
+- **`.kiro/settings/mcp.json` contains plaintext API keys** (Stitch + InsForge). If you fork publicly, scrub these.
+- **Two `Topbar.tsx` files exist on purpose** — `components/Topbar.tsx` (landing) vs `components/layout/Topbar.tsx` (in-app, with auth). Not duplicates.
 
 <!-- INSFORGE:START -->
 ## InsForge backend

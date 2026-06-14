@@ -1,12 +1,12 @@
 'use client';
 
 import { useRouter, usePathname } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth-context';
 
 // ---------------------------------------------------------------------------
-// Topbar — M03 global topbar (logo · search · avatar)
+// Topbar — M03 global topbar (logo · search · avatar menu)
 // Matches design-mock-3.html lines 43-63
 // ---------------------------------------------------------------------------
 
@@ -34,8 +34,10 @@ interface TopbarProps {
 export function Topbar({ nav }: TopbarProps) {
   const router = useRouter();
   const pathname = usePathname();
-  const { user } = useAuth();
+  const { user, signOut } = useAuth();
   const [search, setSearch] = useState('');
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (!pathname.startsWith('/inbox')) {
@@ -46,10 +48,37 @@ export function Topbar({ nav }: TopbarProps) {
     setSearch(params.get('q') ?? '');
   }, [pathname]);
 
+  // Close the user menu on outside click + Escape.
+  useEffect(() => {
+    if (!menuOpen) return;
+
+    function handlePointerDown(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    }
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') setMenuOpen(false);
+    }
+
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [menuOpen]);
+
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const q = search.trim();
     router.push(q ? `/inbox?q=${encodeURIComponent(q)}` : '/inbox');
+  }
+
+  async function handleSignOut() {
+    setMenuOpen(false);
+    await signOut();
+    router.push('/login');
   }
 
   return (
@@ -95,12 +124,57 @@ export function Topbar({ nav }: TopbarProps) {
         />
       </form>
 
-      <div
-        className="flex h-7 w-7 items-center justify-center rounded-full bg-[var(--m03-fg)] text-[11px] font-semibold text-white"
-        aria-label={user?.email ?? 'User avatar'}
-      >
-        {getInitials(user?.email)}
-      </div>
+      {user && (
+        <div className="relative" ref={menuRef}>
+          <button
+            type="button"
+            onClick={() => setMenuOpen((v) => !v)}
+            aria-haspopup="menu"
+            aria-expanded={menuOpen}
+            aria-label={user.email ?? 'Open user menu'}
+            className="flex h-7 w-7 items-center justify-center rounded-full bg-[var(--m03-fg)] text-[11px] font-semibold text-white transition-opacity hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--m03-fg)] focus-visible:ring-offset-2"
+          >
+            {getInitials(user.email)}
+          </button>
+
+          {menuOpen && (
+            <div
+              role="menu"
+              aria-label="User menu"
+              className="absolute right-0 top-[calc(100%+6px)] z-50 w-56 overflow-hidden rounded-md border border-[var(--m03-line)] bg-white shadow-lg"
+            >
+              <div className="border-b border-[var(--m03-line)] px-3 py-2.5">
+                <div className="truncate text-[12px] font-medium text-[var(--m03-fg)]">
+                  {user.email}
+                </div>
+              </div>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={handleSignOut}
+                className="flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] text-[var(--m03-fg-2)] transition-colors hover:bg-[var(--m03-line-2)] hover:text-[var(--m03-fg)] focus:bg-[var(--m03-line-2)] focus:outline-none"
+              >
+                <svg
+                  width="12"
+                  height="12"
+                  viewBox="0 0 12 12"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M4.5 10H3a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1h1.5" />
+                  <polyline points="7,4 9.5,6 7,8" />
+                  <line x1="9.5" y1="6" x2="4.5" y2="6" />
+                </svg>
+                Sign out
+              </button>
+            </div>
+          )}
+        </div>
+      )}
     </header>
   );
 }

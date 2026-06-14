@@ -1,6 +1,6 @@
 'use client';
 
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import { useQuery } from '@tanstack/react-query';
 import { insforge } from '@/lib/insforge';
@@ -14,7 +14,7 @@ import { cn } from '@/components/ui/cn';
 //   WORKSPACE  → Inbox, Escalated, Mine*, Unassigned*
 //   CHANNELS   → SMS, Email, Webchat
 //   MANAGE     → Knowledge, Customers, Analytics
-//   footer     → user chip + sign-out
+//   footer     → user chip
 //
 // * Mine / Unassigned are dimmed with a "Coming soon" tooltip until the
 //   `?assigned=` URL param is wired into app/inbox/page.tsx (tracked in
@@ -101,13 +101,6 @@ const Icon = {
     <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
       <circle cx="6" cy="6" r="2" />
       <path d="M6 1.5v1.5M6 9v1.5M1.5 6h1.5M9 6h1.5M3 3l1 1M8 8l1 1M3 9l1-1M8 4l1-1" />
-    </svg>
-  ),
-  signout: (
-    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M4.5 10H3a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1h1.5" />
-      <polyline points="7,4 9.5,6 7,8" />
-      <line x1="9.5" y1="6" x2="4.5" y2="6" />
     </svg>
   ),
 };
@@ -235,8 +228,7 @@ function userInitial(email: string | undefined | null): string {
 export function Sidebar() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const router = useRouter();
-  const { user, signOut } = useAuth();
+  const { user } = useAuth();
   const { data: orgId } = useOrgMembership(user?.id);
   const { data: counts } = useSidebarCounts(orgId);
 
@@ -343,11 +335,6 @@ export function Sidebar() {
     );
   }
 
-  async function handleSignOut() {
-    await signOut();
-    router.push('/login');
-  }
-
   return (
     <aside className="flex h-full w-sidebar-w shrink-0 flex-col border-r border-[var(--m03-line)] bg-white py-3.5 px-2 text-[13px]">
       <div className="flex-1 overflow-y-auto">
@@ -357,7 +344,7 @@ export function Sidebar() {
       </div>
 
       <div className="border-t border-[var(--m03-line)] pt-2">
-        <div className="mt-1 flex items-center gap-2 rounded px-2 py-2 transition-colors hover:bg-[var(--m03-line-2)]">
+        <div className="mt-1 flex items-center gap-2 rounded px-2 py-2">
           <span
             aria-hidden="true"
             className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--m03-fg)] font-mono text-[11px] font-semibold text-[var(--m03-bg)]"
@@ -367,14 +354,6 @@ export function Sidebar() {
           <span className="truncate text-[12.5px] text-[var(--m03-fg-2)]">
             {user?.email ?? 'Signed in'}
           </span>
-          <button
-            onClick={handleSignOut}
-            title="Sign out"
-            aria-label="Sign out"
-            className="ml-auto flex h-6 w-6 shrink-0 items-center justify-center rounded text-[var(--m03-fg-3)] transition-colors hover:bg-white hover:text-[var(--m03-fg)]"
-          >
-            {Icon.signout}
-          </button>
         </div>
       </div>
     </aside>

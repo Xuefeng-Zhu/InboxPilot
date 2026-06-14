@@ -18,6 +18,7 @@ const jobTypeArb = fc.constantFrom<JobType>(
   'process_knowledge_document',
   'send_outbound_message',
   'process_delivery_status',
+  'record_chunk_refs',
   'retry_failed_jobs',
 );
 

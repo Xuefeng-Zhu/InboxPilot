@@ -264,6 +264,54 @@ function buildJobHandlers(
     async retry_failed_jobs(_job: Job) {
       // TODO: Implement retry logic — re-enqueue failed jobs as pending.
     },
+
+    async record_chunk_refs(job: Job) {
+      // Persist which knowledge chunks grounded an AI decision. Triggered
+      // by AiAgentService after each ai_decisions insert so the
+      // /knowledge/[id] "Linked conversations" panel can show real,
+      // tenant-scoped, document-grounded citations.
+      //
+      // Why a job and not an inline DB write: the AI agent runs inside
+      // process-jobs (a serverless function). Inline writes from a
+      // detached promise can be torn down when the function returns its
+      // response, leaving the audit row missing. Routing through the
+      // queue makes the write durable: the job row is committed in the
+      // same transaction as the decision, and this worker is the only
+      // thing that consumes it.
+      //
+      // Idempotency: insert_ai_decision_chunks (migration 007) uses
+      // ON CONFLICT (ai_decision_id, knowledge_chunk_id) DO NOTHING so
+      // re-runs after a transient Supabase 5xx — where some rows may
+      // have already committed before the error — complete the missing
+      // rows instead of failing on the unique constraint. Combined with
+      // the 008 migration that re-claims failed jobs past their
+      // run_after backoff, this gives the chunk-ref pipeline at-least-
+      // once delivery with idempotent application.
+      //
+      // The 007 trigger still validates cross-tenant references
+      // server-side on every row the RPC attempts to insert.
+      const aiDecisionId = (job.payload.ai_decision_id as string) ?? null;
+      const chunkIds = (job.payload.knowledge_chunk_ids as string[]) ?? [];
+      const orgId = job.organizationId;
+
+      if (!aiDecisionId) {
+        throw new Error('record_chunk_refs: missing ai_decision_id');
+      }
+      if (chunkIds.length === 0) {
+        // Nothing to do; succeed silently.
+        return;
+      }
+
+      const { error: rpcError } = await db.rpc('insert_ai_decision_chunks', {
+        p_ai_decision_id: aiDecisionId,
+        p_organization_id: orgId,
+        p_chunk_ids: chunkIds,
+      });
+
+      if (rpcError) {
+        throw new Error(`insert_ai_decision_chunks failed: ${rpcError.message}`);
+      }
+    },
   };
 }
 

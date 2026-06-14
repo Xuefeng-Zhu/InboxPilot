@@ -41,6 +41,7 @@ export type JobType =
   | 'process_knowledge_document'
   | 'send_outbound_message'
   | 'process_delivery_status'
+  | 'record_chunk_refs'
   | 'retry_failed_jobs';
 
 export type JobStatus = 'pending' | 'claimed' | 'completed' | 'failed' | 'dead';

@@ -134,6 +134,45 @@ export class AiAgentService {
       // The MissingKnowledgeRule will handle escalation if needed
     }
 
+    // Chunk IDs that grounded this turn. Enqueued (not inserted inline)
+    // after each ai_decisions insert so the /knowledge/[id] page can show
+    // "Linked conversations" that actually cited this document.
+    //
+    // The enqueue is awaited, so the durable job row is committed in the
+    // same transactional path as the decision. A separate process-jobs
+    // worker picks up the record_chunk_refs job and does the actual
+    // insert. This survives serverless function freeze-on-return, which
+    // an inline DB write from a detached promise would not.
+    const citedChunkIds: ReadonlyArray<string> = knowledgeChunks
+      .map((c) => c.id)
+      .filter((id): id is string => typeof id === 'string' && id.length > 0);
+
+    /** Enqueue a record_chunk_refs job for a freshly-created decision.
+     *  Empty arrays are a no-op. A failure here is rare (single INSERT to
+     *  support_jobs) and surfaces as a failed job with exponential
+     *  backoff; the AI turn itself succeeds without the link, which is
+     *  the same audit-log-gap-but-not-pipeline-failure semantic as
+     *  before, but now durably. */
+    const enqueueChunkRefs = async (decisionId: string): Promise<void> => {
+      if (citedChunkIds.length === 0) return;
+      try {
+        await this.jobQueue.enqueue(
+          'record_chunk_refs',
+          {
+            ai_decision_id: decisionId,
+            knowledge_chunk_ids: citedChunkIds as string[],
+          },
+          orgId,
+        );
+      } catch (err) {
+        // Soft-fail: a missing enqueue means the link won't appear in
+        // the Linked-conversations panel, but the decision itself is
+        // already committed. We log and move on so the AI turn's
+        // response is not blocked.
+        console.warn('record_chunk_refs enqueue failed', err);
+      }
+    };
+
     // Build effective settings for escalation context
     const effectiveSettings: AiSettings = settings ?? {
       id: '',
@@ -183,6 +222,7 @@ export class AiAgentService {
         requiresHuman: true,
         rawResponse: { escalationRule: escalationResult.ruleName, reason: escalationResult.reason },
       });
+      await enqueueChunkRefs(escalateDecision.id);
 
       await this.auditLog.create({
         organizationId: orgId,
@@ -233,6 +273,7 @@ export class AiAgentService {
           requiresHuman: false,
           rawResponse: { raw: llmResponse.content, error: parseResult.error },
         });
+        await enqueueChunkRefs(failedDecision.id);
 
         await this.auditLog.create({
           organizationId: orgId,
@@ -274,6 +315,7 @@ export class AiAgentService {
           requiresHuman: true,
           rawResponse: parsed as unknown as Record<string, unknown>,
         });
+        await enqueueChunkRefs(lowConfDecision.id);
 
         await this.auditLog.create({
           organizationId: orgId,
@@ -307,6 +349,7 @@ export class AiAgentService {
           requiresHuman: true,
           rawResponse: parsed as unknown as Record<string, unknown>,
         });
+        await enqueueChunkRefs(humanDecision.id);
 
         await this.auditLog.create({
           organizationId: orgId,
@@ -336,6 +379,7 @@ export class AiAgentService {
           requiresHuman: false,
           rawResponse: parsed as unknown as Record<string, unknown>,
         });
+        await enqueueChunkRefs(draftDecision.id);
 
         await this.auditLog.create({
           organizationId: orgId,
@@ -367,6 +411,7 @@ export class AiAgentService {
             requiresHuman: false,
             rawResponse: parsed as unknown as Record<string, unknown>,
           });
+          await enqueueChunkRefs(autoDecision.id);
 
           // Enqueue outbound message job
           if (parsed.response_text) {
@@ -408,6 +453,7 @@ export class AiAgentService {
             requiresHuman: false,
             rawResponse: parsed as unknown as Record<string, unknown>,
           });
+          await enqueueChunkRefs(draftDecision.id);
 
           await this.auditLog.create({
             organizationId: orgId,
@@ -442,6 +488,7 @@ export class AiAgentService {
         requiresHuman: false,
         rawResponse: parsed as unknown as Record<string, unknown>,
       });
+      await enqueueChunkRefs(fallbackDecision.id);
 
       await this.auditLog.create({
         organizationId: orgId,
@@ -471,6 +518,7 @@ export class AiAgentService {
         requiresHuman: false,
         rawResponse: { error: errorMessage },
       });
+      await enqueueChunkRefs(failedDecision.id);
 
       await this.auditLog.create({
         organizationId: orgId,

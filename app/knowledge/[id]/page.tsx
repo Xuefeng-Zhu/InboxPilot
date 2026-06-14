@@ -39,36 +39,55 @@ export default function KnowledgeDetailPage({ params }: { params: Promise<{ id: 
     let cancelled = false;
     (async () => {
       try {
-        const { data, count } = await insforge.database
+        // Chunk count for the document. The ai_decision_chunks table joins
+        // ai_decisions to knowledge_chunks, so we need chunk ids to look up
+        // which decisions (and therefore which conversations) cited this doc.
+        const { data: chunkRows, count } = await insforge.database
           .from('knowledge_chunks')
           .select('id', { count: 'exact' })
           .eq('document_id', doc.id);
         if (cancelled) return;
+        const chunkIds = (Array.isArray(chunkRows) ? chunkRows : []).map(
+          (r) => (r as { id: string }).id,
+        );
         if (typeof count === 'number') {
           setChunkCount(count);
-        } else if (Array.isArray(data)) {
-          setChunkCount(data.length);
+        } else {
+          setChunkCount(chunkIds.length);
         }
 
-        // Linked conversations: ai_decisions that referenced a chunk from this doc
+        if (chunkIds.length === 0) {
+          setLinkedConversations([]);
+          return;
+        }
+
+        // Linked conversations: ai_decisions that referenced any of this
+        // document's chunks, joined to the conversation it belongs to.
+        // Ordered by most recent first, deduplicated, capped at 5.
         const { data: links } = await insforge.database
-          .from('ai_decisions')
-          .select('conversation_id,conversations(id,customer_name,last_message_at)')
-          .limit(50);
+          .from('ai_decision_chunks')
+          .select('ai_decisions(id,conversation_id,created_at,conversations(id,customer_name,last_message_at))')
+          .in('knowledge_chunk_id', chunkIds)
+          .order('created_at', { ascending: false })
+          .limit(100);
         if (cancelled || !links) return;
+
         const seen = new Set<string>();
         const list: Array<{ id: string; customer_name: string; updated_at: string }> = [];
         for (const row of links as unknown as Array<{
-          conversation_id: string;
-          conversations: { id: string; customer_name: string; last_message_at: string } | null;
+          ai_decisions: {
+            id: string;
+            conversations: { id: string; customer_name: string; last_message_at: string } | null;
+          } | null;
         }>) {
-          if (!row.conversations) continue;
-          if (seen.has(row.conversations.id)) continue;
-          seen.add(row.conversations.id);
+          const conv = row.ai_decisions?.conversations;
+          if (!conv) continue;
+          if (seen.has(conv.id)) continue;
+          seen.add(conv.id);
           list.push({
-            id: row.conversations.id,
-            customer_name: row.conversations.customer_name ?? 'Unknown',
-            updated_at: row.conversations.last_message_at,
+            id: conv.id,
+            customer_name: conv.customer_name ?? 'Unknown',
+            updated_at: conv.last_message_at,
           });
           if (list.length >= 5) break;
         }

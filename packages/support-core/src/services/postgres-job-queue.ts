@@ -43,6 +43,7 @@ const IDEMPOTENCY_KEYS: Record<string, string[]> = {
   process_knowledge_document: ['documentId'],
   send_outbound_message: ['conversationId', 'messageId'],
   process_delivery_status: ['externalMessageId'],
+  record_chunk_refs: ['ai_decision_id'],
   retry_failed_jobs: [],
 };
 

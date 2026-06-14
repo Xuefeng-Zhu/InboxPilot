@@ -113,4 +113,36 @@ export class AiDecisionRepository {
 
     return data ? toAiDecision(data as AiDecisionRow) : null;
   }
+
+  /**
+   * Persist which knowledge chunks grounded a given AI decision.
+   * One row inserted per (aiDecisionId, knowledgeChunkId) pair. Rows are
+   * append-only audit records — there is no update method. A no-op when
+   * `chunkIds` is empty so callers don't need to guard.
+   *
+   * Throws on failure, consistent with other write methods in this repo.
+   * Callers (the AI agent service) wrap calls in try/catch if they need
+   * soft-failure semantics.
+   */
+  async recordChunkRefs(
+    aiDecisionId: string,
+    organizationId: string,
+    chunkIds: ReadonlyArray<string>,
+  ): Promise<void> {
+    if (chunkIds.length === 0) return;
+
+    const rows = chunkIds.map((chunkId) => ({
+      ai_decision_id: aiDecisionId,
+      knowledge_chunk_id: chunkId,
+      organization_id: organizationId,
+    }));
+
+    const { error } = await this.db
+      .from('ai_decision_chunks')
+      .insert(rows);
+
+    if (error) {
+      throw new Error(`AiDecisionRepository.recordChunkRefs failed: ${error.message}`);
+    }
+  }
 }

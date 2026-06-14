@@ -253,9 +253,9 @@ export function AiDraftPanel({ conversationId, aiState, onPrefillComposer }: AiD
                 onClick={handleApprove}
                 disabled={actionLoading !== null}
                 className="h-7 rounded-md border border-[var(--m03-fg)] bg-[var(--m03-fg)] px-3 text-[12px] font-semibold text-[var(--m03-bg)] transition-colors hover:bg-[var(--m03-fg-2)] disabled:cursor-not-allowed disabled:opacity-50"
-                aria-label="Approve and send AI draft"
+                aria-label="Fill composer with AI draft"
               >
-                {actionLoading === 'approve' ? 'Sending…' : 'Approve & send'}
+                {actionLoading === 'approve' ? 'Filling…' : 'Fill composer'}
               </button>
 
               <button

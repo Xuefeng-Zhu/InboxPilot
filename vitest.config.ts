@@ -15,6 +15,7 @@ export default defineConfig({
       '__tests__/**/*.test.tsx',
       '__tests__/**/*.property.test.ts',
       '__tests__/**/*.property.test.tsx',
+      '__tests__/**/*.prop.test.ts',
     ],
   },
   resolve: {

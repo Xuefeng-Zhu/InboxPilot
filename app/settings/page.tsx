@@ -1,11 +1,14 @@
 'use client';
 
 import { Suspense, useCallback, useMemo } from 'react';
+import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { AppShell } from '@/components/layout';
+import { Card } from '@/components/ui';
 import { useAuth } from '@/lib/auth-context';
 import { useOrgMembership, useOrganization } from '@/lib/queries';
 import AiSettingsPanel from './_components/AiSettingsPanel';
+import AuditLogSettingsPanel from './_components/AuditLogSettingsPanel';
 import EmailSettingsPanel from './_components/EmailSettingsPanel';
 import SmsSettingsPanel from './_components/SmsSettingsPanel';
 import WebchatSettingsPanel from './_components/WebchatSettingsPanel';
@@ -74,23 +77,33 @@ function SettingsTabs() {
         {activeTab === 'sms' && <SmsSettingsPanel />}
         {activeTab === 'webchat' && <WebchatSettingsPanel />}
         {activeTab === 'team' && (
-          <PlaceholderCard
-            title="Team"
-            body="Invite teammates and assign roles. Coming soon to the redesign — currently available at the original settings page."
-          />
+          <Card
+            header={
+              <h2 className="text-[18px] font-semibold tracking-tight text-[var(--m03-fg)]">
+                Team
+              </h2>
+            }
+          >
+            <p className="m-0 text-[13px] text-[var(--m03-fg-2)]">
+              Manage members and roles on the team page.
+            </p>
+            <div className="mt-4">
+              <Link
+                href="/team"
+                className="inline-flex h-8 items-center justify-center rounded-md border border-[var(--m03-fg)] bg-[var(--m03-fg)] px-3.5 text-[13px] font-medium text-[var(--m03-bg)] transition-colors duration-150 hover:bg-[var(--m03-fg-2)] focus:outline-none focus:ring-1 focus:ring-[var(--m03-fg)]"
+              >
+                Open team page →
+              </Link>
+            </div>
+          </Card>
         )}
         {activeTab === 'billing' && (
           <PlaceholderCard
             title="Billing"
-            body="Plan, usage, and invoices. Coming soon to the redesign."
+            body="Plan, usage, and invoices are coming soon. Track progress on the roadmap."
           />
         )}
-        {activeTab === 'audit' && (
-          <PlaceholderCard
-            title="Audit log"
-            body="Append-only record of every AI decision, escalation, and credential change. Coming soon to the redesign."
-          />
-        )}
+        {activeTab === 'audit' && <AuditLogSettingsPanel />}
       </div>
     </div>
   );

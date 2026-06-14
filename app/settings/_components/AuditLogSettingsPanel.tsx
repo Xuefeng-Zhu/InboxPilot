@@ -1,0 +1,207 @@
+'use client';
+
+import { useMemo, useState } from 'react';
+import { Card, Input, Select } from '@/components/ui';
+import { useAuditLogs, type AuditLogRow } from '@/lib/queries';
+
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+
+const ACTOR_TYPE_OPTIONS = [
+  { value: '', label: 'All actors' },
+  { value: 'user', label: 'User' },
+  { value: 'system', label: 'System' },
+  { value: 'ai', label: 'AI' },
+];
+
+const ACTOR_TYPE_BADGE: Record<'user' | 'system' | 'ai', string> = {
+  user: 'bg-[var(--m03-line-2)] text-[var(--m03-fg-2)] border border-[var(--m03-line)]',
+  system: 'bg-[var(--m03-line-2)] text-[var(--m03-fg-3)] border border-[var(--m03-line)]',
+  ai: 'bg-[var(--m03-blue-fill)] text-[var(--m03-blue)] border border-[var(--m03-blue-line)]',
+};
+
+type ActorTypeFilter = '' | 'user' | 'system' | 'ai';
+
+function isActorTypeFilter(value: string): value is ActorTypeFilter {
+  return value === '' || value === 'user' || value === 'system' || value === 'ai';
+}
+
+// ---------------------------------------------------------------------------
+// Formatters
+// ---------------------------------------------------------------------------
+
+function truncateId(id: string | null): string {
+  if (!id) return '—';
+  if (id.length <= 12) return id;
+  return `${id.slice(0, 12)}…`;
+}
+
+function formatTimestamp(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' });
+}
+
+function actorDisplay(row: AuditLogRow): string {
+  if (row.actor_type === 'system') return 'system';
+  if (row.actor_type === 'ai') return 'ai';
+  return truncateId(row.actor_id);
+}
+
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
+
+export default function AuditLogSettingsPanel() {
+  const [actorType, setActorType] = useState<ActorTypeFilter>('');
+  const [search, setSearch] = useState('');
+
+  const filters = useMemo(
+    () => ({
+      ...(actorType ? { actorType } : {}),
+      ...(search.trim() ? { search: search.trim() } : {}),
+    }),
+    [actorType, search],
+  );
+
+  const { data, isLoading, error } = useAuditLogs(filters);
+  const rows: AuditLogRow[] = Array.isArray(data) ? data : [];
+
+  const errorMessage =
+    error instanceof Error ? error.message : error ? 'Failed to load audit log.' : null;
+
+  return (
+    <Card
+      header={
+        <div>
+          <h2 className="text-[18px] font-semibold tracking-tight text-[var(--m03-fg)]">
+            Audit Log
+          </h2>
+          <p className="mt-1 text-[13px] text-[var(--m03-fg-2)]">
+            Append-only record of every AI decision, escalation, and credential change.
+            Showing the most recent 100 events for your organization.
+          </p>
+        </div>
+      }
+    >
+      {errorMessage && (
+        <div
+          className="mb-4 rounded border border-[var(--m03-red-line)] bg-[var(--m03-red-fill)] p-3"
+          role="alert"
+        >
+          <p className="text-[14px] text-[var(--m03-red)]">{errorMessage}</p>
+        </div>
+      )}
+
+      <div className="mb-4 grid gap-3 sm:grid-cols-[180px_1fr]">
+        <Select
+          id="audit-actor-type"
+          label="Actor"
+          value={actorType}
+          onChange={(e) => {
+            const value = e.target.value;
+            if (isActorTypeFilter(value)) setActorType(value);
+          }}
+          options={ACTOR_TYPE_OPTIONS}
+        />
+        <Input
+          id="audit-search"
+          label="Search"
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Filter by action or resource type"
+        />
+      </div>
+
+      {isLoading ? (
+        <div className="py-8 text-center">
+          <p className="text-[14px] text-[var(--m03-fg-2)]">Loading audit log…</p>
+        </div>
+      ) : rows.length === 0 ? (
+        <div className="py-8 text-center">
+          <p className="text-[14px] text-[var(--m03-fg-2)]">No audit log entries yet.</p>
+        </div>
+      ) : (
+        <div className="overflow-auto rounded-md border border-[var(--m03-line)]">
+          <table className="w-full min-w-[960px] border-collapse text-[13px]">
+            <thead>
+              <tr>
+                <th className="border-b border-[var(--m03-line)] bg-white px-3 py-2.5 text-left text-[11px] font-medium uppercase tracking-wider text-[var(--m03-fg-2)]">
+                  When
+                </th>
+                <th className="border-b border-[var(--m03-line)] bg-white px-3 py-2.5 text-left text-[11px] font-medium uppercase tracking-wider text-[var(--m03-fg-2)]">
+                  Actor
+                </th>
+                <th className="border-b border-[var(--m03-line)] bg-white px-3 py-2.5 text-left text-[11px] font-medium uppercase tracking-wider text-[var(--m03-fg-2)]">
+                  Type
+                </th>
+                <th className="border-b border-[var(--m03-line)] bg-white px-3 py-2.5 text-left text-[11px] font-medium uppercase tracking-wider text-[var(--m03-fg-2)]">
+                  Action
+                </th>
+                <th className="border-b border-[var(--m03-line)] bg-white px-3 py-2.5 text-left text-[11px] font-medium uppercase tracking-wider text-[var(--m03-fg-2)]">
+                  Resource
+                </th>
+                <th className="border-b border-[var(--m03-line)] bg-white px-3 py-2.5 text-left text-[11px] font-medium uppercase tracking-wider text-[var(--m03-fg-2)]">
+                  Metadata
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row) => (
+                <tr
+                  key={row.id}
+                  className="border-b border-[var(--m03-line)] align-top last:border-b-0"
+                >
+                  <td
+                    className="px-3 py-2.5 whitespace-nowrap text-[var(--m03-fg-2)]"
+                    title={row.created_at}
+                  >
+                    {formatTimestamp(row.created_at)}
+                  </td>
+                  <td className="px-3 py-2.5 font-mono text-[12px] text-[var(--m03-fg-2)]">
+                    {actorDisplay(row)}
+                  </td>
+                  <td className="px-3 py-2.5">
+                    <span
+                      className={`inline-flex items-center rounded-[3px] px-1.5 py-px font-mono text-[9px] font-semibold uppercase tracking-[0.04em] ${ACTOR_TYPE_BADGE[row.actor_type]}`}
+                    >
+                      {row.actor_type}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2.5 font-mono text-[12px] text-[var(--m03-fg)]">
+                    {row.action}
+                  </td>
+                  <td className="px-3 py-2.5 text-[var(--m03-fg-2)]">
+                    <div className="flex flex-col gap-0.5">
+                      <span className="text-[12px]">{row.resource_type}</span>
+                      {row.resource_id && (
+                        <span className="font-mono text-[11px] text-[var(--m03-fg-3)]">
+                          {truncateId(row.resource_id)}
+                        </span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-3 py-2.5">
+                    <details className="group">
+                      <summary className="inline-flex cursor-pointer list-none items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-medium text-[var(--m03-fg-2)] hover:bg-[var(--m03-line-2)] hover:text-[var(--m03-fg)]">
+                        <span aria-hidden="true" className="font-mono text-[10px]">
+                          ▸
+                        </span>
+                        View
+                      </summary>
+                      <pre className="mt-2 max-w-[360px] overflow-auto rounded border border-[var(--m03-line)] bg-[var(--m03-line-2)] p-2 font-mono text-[11px] leading-snug text-[var(--m03-fg)]">
+                        {JSON.stringify(row.metadata ?? {}, null, 2)}
+                      </pre>
+                    </details>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Card>
+  );
+}

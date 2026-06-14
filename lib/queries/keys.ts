@@ -56,4 +56,5 @@ export const queryKeys = {
     ['kanban-lane', orgId, userId, lane, pageSize] as const,
   kanbanLanes: (orgId: string, userId: string) =>
     ['kanban-lanes', orgId, userId] as const,
+  auditLogs: (filters?: Record<string, unknown>) => ['audit-logs', filters] as const,
 };

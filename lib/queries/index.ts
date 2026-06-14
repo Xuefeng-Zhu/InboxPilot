@@ -35,6 +35,12 @@ export { useAiDecision } from './hooks/useAiDecision';
 export { useTeamMembers } from './hooks/useTeamMembers';
 
 export {
+  useAuditLogs,
+  type AuditLogFilters,
+  type AuditLogRow,
+} from './hooks/useAuditLogs';
+
+export {
   useSymphonyConversations,
   useSymphonyCounts,
   computeSymphonyWindow,

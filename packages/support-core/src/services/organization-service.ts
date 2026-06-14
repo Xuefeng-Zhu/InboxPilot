@@ -67,12 +67,14 @@ export class OrganizationService {
    * @param orgId - Organization ID
    * @param userId - The user ID to invite
    * @param role - The role to assign (admin, agent, or viewer)
+   * @param actorId - The user ID performing the action (for the audit log)
    * @returns The created member record
    */
   async inviteMember(
     orgId: string,
     userId: string,
     role: MemberRole,
+    actorId: string,
   ): Promise<OrganizationMember> {
     if (role === 'owner') {
       throw new Error('Cannot invite a member as owner. Use changeMemberRole to transfer ownership.');
@@ -87,12 +89,12 @@ export class OrganizationService {
     // Record audit log
     await this.auditLog.create({
       organizationId: orgId,
-      actorId: userId,
+      actorId,
       actorType: 'user',
       action: 'member_added',
       resourceType: 'organization_member',
       resourceId: member.id,
-      metadata: { role },
+      metadata: { role, invitedUserId: userId },
     });
 
     return member;
@@ -107,12 +109,14 @@ export class OrganizationService {
    * @param orgId - Organization ID
    * @param memberId - The member ID whose role is being changed
    * @param newRole - The new role to assign
+   * @param actorId - The user ID performing the action (for the audit log)
    * @returns The updated member record
    */
   async changeMemberRole(
     orgId: string,
     memberId: string,
     newRole: MemberRole,
+    actorId: string,
   ): Promise<OrganizationMember> {
     const members = await this.memberRepo.listByOrg(orgId);
     const target = members.find((m) => m.id === memberId);
@@ -150,11 +154,12 @@ export class OrganizationService {
     // Record audit log
     await this.auditLog.create({
       organizationId: orgId,
+      actorId,
       actorType: 'user',
       action: 'member_role_changed',
       resourceType: 'organization_member',
       resourceId: memberId,
-      metadata: { previousRole: currentRole, newRole },
+      metadata: { previousRole: currentRole, newRole, targetUserId: target.userId },
     });
 
     return updated;
@@ -166,8 +171,9 @@ export class OrganizationService {
    *
    * @param orgId - Organization ID
    * @param memberId - The member ID to remove
+   * @param actorId - The user ID performing the action (for the audit log)
    */
-  async removeMember(orgId: string, memberId: string): Promise<void> {
+  async removeMember(orgId: string, memberId: string, actorId: string): Promise<void> {
     const members = await this.memberRepo.listByOrg(orgId);
     const target = members.find((m) => m.id === memberId);
 
@@ -192,11 +198,12 @@ export class OrganizationService {
     // Record audit log
     await this.auditLog.create({
       organizationId: orgId,
-      actorId: target.userId,
+      actorId,
       actorType: 'user',
       action: 'member_removed',
       resourceType: 'organization_member',
       resourceId: memberId,
+      metadata: { removedUserId: target.userId, removedRole: target.role },
     });
   }
 }

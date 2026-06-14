@@ -191,20 +191,22 @@ describe('RBAC property tests', () => {
           try {
             switch (op.type) {
               case 'invite':
-                await service.inviteMember(orgId, op.userId, op.role);
+                // 'system' actor — the actor's role is irrelevant to RBAC
+                // enforcement, which is the route handler's responsibility.
+                await service.inviteMember(orgId, op.userId, op.role, 'system');
                 break;
               case 'changeRole': {
                 const currentMembers = members.filter((m) => m.organizationId === orgId);
                 if (currentMembers.length === 0) break;
                 const target = currentMembers[op.targetIndex % currentMembers.length];
-                await service.changeMemberRole(orgId, target.id, op.newRole);
+                await service.changeMemberRole(orgId, target.id, op.newRole, 'system');
                 break;
               }
               case 'remove': {
                 const currentMembers = members.filter((m) => m.organizationId === orgId);
                 if (currentMembers.length === 0) break;
                 const target = currentMembers[op.targetIndex % currentMembers.length];
-                await service.removeMember(orgId, target.id);
+                await service.removeMember(orgId, target.id, 'system');
                 break;
               }
             }

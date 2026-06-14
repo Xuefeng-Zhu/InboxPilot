@@ -43,6 +43,7 @@ export const queryKeys = {
   knowledgeDocs: () => ['knowledge-documents'] as const,
   knowledgeDoc: (id: string) => ['knowledge-document', id] as const,
   teamMembers: () => ['team-members'] as const,
+  teamMemberInfo: (orgId: string) => ['team-member-info', orgId] as const,
   organization: (orgId: string) => ['organization', orgId] as const,
   aiDecision: (conversationId: string) => ['ai-decision', conversationId] as const,
   orgMembership: (userId: string) => ['org-membership', userId] as const,

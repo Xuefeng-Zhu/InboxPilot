@@ -1,12 +1,11 @@
 'use client';
 
 import { Suspense, useCallback, useMemo } from 'react';
-import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { AppShell } from '@/components/layout';
-import { Card } from '@/components/ui';
 import { useAuth } from '@/lib/auth-context';
 import { useOrgMembership, useOrganization } from '@/lib/queries';
+import { TeamPanel } from '@/components/team/TeamPanel';
 import AiSettingsPanel from './_components/AiSettingsPanel';
 import AuditLogSettingsPanel from './_components/AuditLogSettingsPanel';
 import EmailSettingsPanel from './_components/EmailSettingsPanel';
@@ -76,27 +75,7 @@ function SettingsTabs() {
         {activeTab === 'email' && <EmailSettingsPanel />}
         {activeTab === 'sms' && <SmsSettingsPanel />}
         {activeTab === 'webchat' && <WebchatSettingsPanel />}
-        {activeTab === 'team' && (
-          <Card
-            header={
-              <h2 className="text-[18px] font-semibold tracking-tight text-[var(--m03-fg)]">
-                Team
-              </h2>
-            }
-          >
-            <p className="m-0 text-[13px] text-[var(--m03-fg-2)]">
-              Manage members and roles on the team page.
-            </p>
-            <div className="mt-4">
-              <Link
-                href="/team"
-                className="inline-flex h-8 items-center justify-center rounded-md border border-[var(--m03-fg)] bg-[var(--m03-fg)] px-3.5 text-[13px] font-medium text-[var(--m03-bg)] transition-colors duration-150 hover:bg-[var(--m03-fg-2)] focus:outline-none focus:ring-1 focus:ring-[var(--m03-fg)]"
-              >
-                Open team page →
-              </Link>
-            </div>
-          </Card>
-        )}
+        {activeTab === 'team' && <TeamPanel />}
         {activeTab === 'billing' && (
           <PlaceholderCard
             title="Billing"

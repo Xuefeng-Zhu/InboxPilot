@@ -16,7 +16,13 @@ export {
   useAuthReady,
 } from './helpers';
 
-export { useOrganization, useOrgMembership, type Organization } from './hooks/useOrganization';
+export {
+  useOrganization,
+  useOrgMembership,
+  useCurrentMembership,
+  type Organization,
+  type CurrentMembership,
+} from './hooks/useOrganization';
 
 export {
   useConversation,
@@ -33,6 +39,7 @@ export { useKnowledgeDoc, useKnowledgeDocs } from './hooks/useKnowledge';
 export { useAiDecision } from './hooks/useAiDecision';
 
 export { useTeamMembers } from './hooks/useTeamMembers';
+export { useTeamMemberInfo, type TeamMemberInfo } from './hooks/useTeamMemberInfo';
 
 export {
   useAuditLogs,

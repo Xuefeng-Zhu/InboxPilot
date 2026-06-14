@@ -10,6 +10,11 @@ export interface Organization {
   sla_thresholds: { greenMs: number; amberMs: number };
 }
 
+export interface CurrentMembership {
+  organizationId: string;
+  role: 'owner' | 'admin' | 'agent' | 'viewer';
+}
+
 export function useOrgMembership(userId: string | undefined) {
   const authReady = useAuthReady();
   return useQuery({
@@ -25,6 +30,32 @@ export function useOrgMembership(userId: string | undefined) {
       const arr = Array.isArray(data) ? data : data ? [data] : [];
       if (arr.length === 0) return null;
       return (arr[0] as { organization_id: string }).organization_id;
+    },
+    enabled: authReady && !!userId,
+  });
+}
+
+/**
+ * Resolve the current user's full membership record (org id + role) in their
+ * first organization. Useful when a component needs to gate UI or
+ * permissions based on the caller's own role.
+ */
+export function useCurrentMembership(userId: string | undefined) {
+  const authReady = useAuthReady();
+  return useQuery({
+    queryKey: [...queryKeys.orgMembership(userId ?? ''), 'full'] as const,
+    queryFn: async (): Promise<CurrentMembership | null> => {
+      const { data, error } = await insforge.database
+        .from('organization_members')
+        .select('organization_id,role')
+        .eq('user_id', userId!)
+        .limit(1);
+
+      if (error) throw new Error(error.message);
+      const arr = Array.isArray(data) ? data : data ? [data] : [];
+      if (arr.length === 0) return null;
+      const row = arr[0] as { organization_id: string; role: CurrentMembership['role'] };
+      return { organizationId: row.organization_id, role: row.role };
     },
     enabled: authReady && !!userId,
   });

@@ -39,6 +39,7 @@ next-env.d.ts
 .github/copilot*
 .kilocode
 .omo
+.qa
 .qoder
 .qwen
 .roo
@@ -47,3 +48,14 @@ next-env.d.ts
 
 # MCP settings (contains API keys)
 .kiro/settings/mcp.json
+
+# Playwright (MCP microsoft/playwright-mcp + CLI)
+page-*.png
+page-*.jpeg
+page-*.webp
+console-*.log
+.playwright-mcp/
+/playwright-mcp-output/
+.playwright-cli/
+/playwright-cli-output/
+*.playwright-temp

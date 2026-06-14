@@ -33,3 +33,20 @@ export { useKnowledgeDoc, useKnowledgeDocs } from './hooks/useKnowledge';
 export { useAiDecision } from './hooks/useAiDecision';
 
 export { useTeamMembers } from './hooks/useTeamMembers';
+
+export {
+  useSymphonyConversations,
+  useSymphonyCounts,
+  computeSymphonyWindow,
+  getAxisTicks,
+  relativeTimeLabel,
+  conversationInitial,
+  truncate,
+  pillForAiState,
+  barToneForAiState,
+  positionPct,
+  type Zoom,
+  type SymphonyWindow,
+  type PillDescriptor,
+  type BarTone,
+} from './hooks/useSymphony';

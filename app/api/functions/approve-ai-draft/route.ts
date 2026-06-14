@@ -9,9 +9,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { conversationId, aiDecisionId } = await req.json();
+    const { conversationId, aiDecisionId, body: bodyOverride } = await req.json();
     if (!conversationId || !aiDecisionId) {
       return NextResponse.json({ error: 'Missing conversationId or aiDecisionId' }, { status: 400 });
+    }
+    if (bodyOverride !== undefined && (typeof bodyOverride !== 'string' || bodyOverride.trim() === '')) {
+      return NextResponse.json({ error: 'body override must be a non-empty string when provided' }, { status: 400 });
     }
 
     // Load AI decision
@@ -58,7 +61,7 @@ export async function POST(req: NextRequest) {
         sender_id: user.id,
         direction: 'outbound',
         channel: conversation.channel,
-        body: decision.response_text,
+        body: bodyOverride ?? decision.response_text,
         provider: conversation.channel === 'webchat' ? 'webchat' : 'mock',
         external_message_id: `approved_${Date.now()}`,
         delivery_status: conversation.channel === 'webchat' ? 'sent' : 'queued',
@@ -116,7 +119,7 @@ export async function POST(req: NextRequest) {
         action: 'ai_draft_approved',
         resource_type: 'ai_decision',
         resource_id: aiDecisionId,
-        metadata: { conversationId, messageId: message?.id },
+        metadata: { conversationId, messageId: message?.id, body_preview: (bodyOverride ?? decision.response_text).slice(0, 200) },
       }]);
 
     return NextResponse.json({ status: 'ok', data: { message } });

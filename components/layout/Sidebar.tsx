@@ -103,6 +103,11 @@ const Icon = {
       <path d="M6 1.5v1.5M6 9v1.5M1.5 6h1.5M9 6h1.5M3 3l1 1M8 8l1 1M3 9l1-1M8 4l1-1" />
     </svg>
   ),
+  wave: (
+    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M1 7c1 0 1-2 2-2s1 2 2 2 1-2 2-2 1 2 2 2 1-2 2-2" />
+    </svg>
+  ),
 };
 
 function NavRow({
@@ -268,6 +273,11 @@ export function Sidebar() {
         icon: Icon.bolt,
         count: counts?.escalated,
         countTone: 'escalated',
+      },
+      {
+        href: '/symphony',
+        label: 'Symphony',
+        icon: Icon.wave,
       },
       {
         href: '/inbox?assigned=me',

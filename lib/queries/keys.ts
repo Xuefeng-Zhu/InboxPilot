@@ -46,4 +46,8 @@ export const queryKeys = {
   aiDecision: (conversationId: string) => ['ai-decision', conversationId] as const,
   orgMembership: (userId: string) => ['org-membership', userId] as const,
   conversationCounts: (orgId: string) => ['conversation-counts', orgId] as const,
+  symphonyConversations: (orgId: string, zoom: string) =>
+    ['symphony-conversations', orgId, zoom] as const,
+  symphonyCounts: (orgId: string, zoom: string) =>
+    ['symphony-counts', orgId, zoom] as const,
 };

@@ -63,6 +63,9 @@
   --m03-green: #00aa55;
   --m03-red: #ee0000;
   --m03-orange: #ff8800;
+  --m03-blue: #0070f3;
+  --m03-blue-fill: #eff6ff;
+  --m03-blue-line: #bfdbfe;
 
   /* Tinted fills + borders that pair with the accent colors above. */
   --m03-red-fill: #fef2f2;

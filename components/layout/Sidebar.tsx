@@ -12,14 +12,10 @@ import { cn } from '@/components/ui/cn';
 // Sidebar — M03 monochrome (design-mock-3.html lines 73-93)
 //
 // Sections:
-//   WORKSPACE  → Inbox, Escalated, Mine*, Unassigned*
+//   WORKSPACE  → Inbox, Escalated, Symphony, Kanban
 //   CHANNELS   → SMS, Email, Webchat
-//   MANAGE     → Knowledge, Customers, Analytics
+//   MANAGE     → Knowledge, Customers, Analytics, Settings
 //   footer     → user chip
-//
-// * Mine / Unassigned are dimmed with a "Coming soon" tooltip until the
-//   `?assigned=` URL param is wired into app/inbox/page.tsx (tracked in
-//   TODO(3.2): plumb `assigned_to` filter from sidebar URL params).
 // ---------------------------------------------------------------------------
 
 interface SectionLink {
@@ -56,14 +52,6 @@ const Icon = {
     <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
       <circle cx="6" cy="4.5" r="2" />
       <path d="M2 10.5c0-2 1.7-3.5 4-3.5s4 1.5 4 3.5" />
-    </svg>
-  ),
-  userPlus: (
-    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="5" cy="4" r="1.8" />
-      <path d="M1.5 10.2c0-1.8 1.5-3.2 3.5-3.2s3.5 1.4 3.5 3.2" />
-      <line x1="10" y1="4" x2="10" y2="7" />
-      <line x1="8.5" y1="5.5" x2="11.5" y2="5.5" />
     </svg>
   ),
   sms: (
@@ -260,20 +248,6 @@ const WORKSPACE_LINKS: SectionLink[] = [
   },
   { href: '/symphony', label: 'Symphony', icon: Icon.wave },
   { href: '/inbox/kanban', label: 'Kanban', icon: Icon.kanban },
-  {
-    href: '/inbox?assigned=me',
-    label: 'Mine',
-    icon: Icon.user,
-    disabled: true,
-    disabledReason: 'Coming soon — wire ?assigned= into the inbox page',
-  },
-  {
-    href: '/inbox?assigned=none',
-    label: 'Unassigned',
-    icon: Icon.userPlus,
-    disabled: true,
-    disabledReason: 'Coming soon — wire ?assigned= into the inbox page',
-  },
 ];
 
 const CHANNELS_LINKS: SectionLink[] = [
@@ -386,7 +360,7 @@ function SidebarBody() {
 
   const sections: Section[] = [
     { label: 'Workspace', links: workspaceLinks },
-    { label: 'Channels', topRule: true, links: CHANNELS_LINKS },
+    { label: 'Channels', links: CHANNELS_LINKS },
     { label: 'Manage', topRule: true, links: MANAGE_LINKS },
   ];
 
@@ -406,7 +380,7 @@ function SidebarBody() {
 function SidebarFallback() {
   const sections: Section[] = [
     { label: 'Workspace', links: WORKSPACE_LINKS },
-    { label: 'Channels', topRule: true, links: CHANNELS_LINKS },
+    { label: 'Channels', links: CHANNELS_LINKS },
     { label: 'Manage', topRule: true, links: MANAGE_LINKS },
   ];
   return (

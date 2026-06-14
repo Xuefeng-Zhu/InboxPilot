@@ -45,4 +45,5 @@ export const queryKeys = {
   organization: (orgId: string) => ['organization', orgId] as const,
   aiDecision: (conversationId: string) => ['ai-decision', conversationId] as const,
   orgMembership: (userId: string) => ['org-membership', userId] as const,
+  conversationCounts: (orgId: string) => ['conversation-counts', orgId] as const,
 };

@@ -3,10 +3,9 @@
 import { FormEvent, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Logo } from '@/components/ui/Logo';
+import { BrandMark } from '@/components/BrandMark';
 import { useAuth } from '@/lib/auth-context';
 import { createOrganizationWithOwner } from '@/lib/onboarding';
-import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 
@@ -41,7 +40,6 @@ export default function RegisterPage() {
     try {
       const { error: signUpError } = await signUp(email, password);
       if (signUpError) {
-        // Generic error message — never reveal whether the email exists
         setError('Unable to create account. Please try again.');
         return;
       }
@@ -63,83 +61,86 @@ export default function RegisterPage() {
   }
 
   return (
-    <main className="min-h-screen bg-surface-background flex items-center justify-center px-4">
-      <div className="w-full max-w-md">
-        <Card className="p-8">
-          <div className="text-center mb-6 flex flex-col items-center gap-2">
-            <Logo size="lg" />
-            <h1 className="text-display-sm text-gray-900">InboxPilot</h1>
-            <p className="mt-1 text-body-sm text-gray-500">
-              Create your account
-            </p>
+    <main className="flex min-h-screen items-center justify-center bg-white px-6">
+      <div className="w-full max-w-[420px] rounded-lg border border-[var(--m03-line)] bg-white p-8">
+        <div className="mb-6 flex flex-col items-center gap-2">
+          <div className="flex items-center gap-2 text-[18px] font-medium tracking-tight text-[var(--m03-fg)]">
+            <BrandMark size={20} className="text-[var(--m03-fg)]" />
+            InboxPilot
           </div>
-
-          <form onSubmit={handleSubmit} className="space-y-4" noValidate>
-            {error && (
-              <p role="alert" className="text-red-500 text-body-sm text-center">
-                {error}
-              </p>
-            )}
-
-            <Input
-              label="Workspace Name"
-              value={workspaceName}
-              onChange={(e) => setWorkspaceName(e.target.value)}
-              placeholder="My Workspace"
-              required
-            />
-
-            <Input
-              label="Email"
-              type="email"
-              autoComplete="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@example.com"
-              required
-            />
-
-            <Input
-              label="Password"
-              type="password"
-              autoComplete="new-password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
-              required
-            />
-
-            <Input
-              label="Confirm Password"
-              type="password"
-              autoComplete="new-password"
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              placeholder="••••••••"
-              required
-            />
-
-            <Button
-              type="submit"
-              variant="primary"
-              size="lg"
-              disabled={loading}
-              className="w-full"
-            >
-              {loading ? 'Signing up…' : 'Sign up'}
-            </Button>
-          </form>
-
-          <p className="text-center text-body-sm text-gray-500 mt-4">
-            Already have an account?{' '}
-            <Link
-              href="/login"
-              className="font-medium text-primary hover:text-primary-600 cursor-pointer"
-            >
-              Sign in
-            </Link>
+          <h1 className="m-0 text-[18px] font-medium tracking-tight text-[var(--m03-fg)]">
+            Create your account
+          </h1>
+          <p className="m-0 text-center text-[13px] text-[var(--m03-fg-2)]">
+            Start your free workspace in 30 seconds.
           </p>
-        </Card>
+        </div>
+
+        {error && (
+          <p
+            role="alert"
+            className="mb-3 rounded border border-[var(--m03-red-line)] bg-[var(--m03-red-fill)] px-3 py-2 text-center text-[13px] text-[var(--m03-red)]"
+          >
+            {error}
+          </p>
+        )}
+
+        <form onSubmit={handleSubmit} className="flex flex-col gap-3.5" noValidate>
+          <Input
+            label="Workspace Name"
+            value={workspaceName}
+            onChange={(e) => setWorkspaceName(e.target.value)}
+            placeholder="My Workspace"
+            required
+          />
+
+          <Input
+            label="Email"
+            type="email"
+            autoComplete="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="you@company.com"
+            required
+          />
+
+          <Input
+            label="Password"
+            type="password"
+            autoComplete="new-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="••••••••"
+            required
+          />
+
+          <Input
+            label="Confirm Password"
+            type="password"
+            autoComplete="new-password"
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            placeholder="••••••••"
+            required
+          />
+
+          <Button
+            type="submit"
+            variant="primary"
+            size="lg"
+            disabled={loading}
+            className="mt-1 w-full"
+          >
+            {loading ? 'Signing up…' : 'Sign up'}
+          </Button>
+        </form>
+
+        <p className="mt-5 text-center text-[12px] text-[var(--m03-fg-2)]">
+          Already have an account?{' '}
+          <Link href="/login" className="text-[var(--m03-fg)] hover:underline">
+            Sign in
+          </Link>
+        </p>
       </div>
     </main>
   );

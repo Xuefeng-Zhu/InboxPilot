@@ -14,13 +14,7 @@ const demoWidgetId = process.env.NEXT_PUBLIC_DEMO_WIDGET_ID ?? '';
 
 export default function HomePage() {
   return (
-    <div
-      className="m03 flex min-h-screen flex-col bg-white text-[var(--m03-fg)]"
-      style={{
-        fontFamily: 'var(--font-inter), Inter, system-ui, -apple-system, sans-serif',
-        fontFeatureSettings: "'cv02', 'cv03', 'cv04', 'cv11'",
-      }}
-    >
+    <div className="flex min-h-screen flex-col bg-white text-[var(--m03-fg)]">
       <Topbar nav={[{ label: 'Features', href: '#features' }]} />
 
       <main className="flex-1">
@@ -70,7 +64,7 @@ export default function HomePage() {
 
         {/* Product preview */}
         <section className="px-6 pb-20">
-          <div className="mx-auto max-w-[1100px] overflow-hidden rounded-lg border border-[var(--m03-line)] bg-white shadow-[0_30px_80px_rgba(0,0,0,0.08)]">
+          <div className="mx-auto max-w-[1100px] overflow-hidden rounded-lg border border-[var(--m03-line)] bg-white shadow-level-3">
             {/* Browser bar */}
             <div className="flex items-center gap-2 border-b border-[var(--m03-line)] bg-[var(--m03-line-2)] px-4 py-2.5">
               <div className="flex gap-1.5">
@@ -137,7 +131,7 @@ export default function HomePage() {
                 className="rounded-lg border border-[var(--m03-line)] bg-white p-6"
               >
                 <div className="mb-4 flex h-8 w-8 items-center justify-center rounded bg-[var(--m03-line-2)] text-[var(--m03-fg)]">
-                  <f.icon size={16} strokeWidth={1.75} />
+                  <f.icon size={16} strokeWidth={1.5} />
                 </div>
                 <h3 className="mb-1.5 text-[14px] font-semibold text-[var(--m03-fg)]">
                   {f.title}

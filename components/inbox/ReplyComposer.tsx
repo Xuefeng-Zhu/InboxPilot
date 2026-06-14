@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { getAccessToken } from '@/lib/insforge';
 
 // ---------------------------------------------------------------------------
@@ -9,12 +9,28 @@ import { getAccessToken } from '@/lib/insforge';
 
 interface ReplyComposerProps {
   conversationId: string;
+  /** External pre-fill source. When the value changes, the composer adopts it. */
+  prefillBody?: string | null;
+  /** Notifies the parent that the prefill has been consumed. */
+  onPrefillConsumed?: () => void;
 }
 
-export function ReplyComposer({ conversationId }: ReplyComposerProps) {
+export function ReplyComposer({
+  conversationId,
+  prefillBody,
+  onPrefillConsumed,
+}: ReplyComposerProps) {
   const [body, setBody] = useState('');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Adopt external prefill (e.g. "Approve & send" from the right panel)
+  useEffect(() => {
+    if (typeof prefillBody === 'string' && prefillBody.trim().length > 0) {
+      setBody(prefillBody);
+      onPrefillConsumed?.();
+    }
+  }, [prefillBody, onPrefillConsumed]);
 
   const handleSubmit = useCallback(
     async (e: React.FormEvent) => {
@@ -53,7 +69,6 @@ export function ReplyComposer({ conversationId }: ReplyComposerProps) {
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-      // Submit on Enter (without Shift)
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
         handleSubmit(e as unknown as React.FormEvent);
@@ -65,49 +80,69 @@ export function ReplyComposer({ conversationId }: ReplyComposerProps) {
   return (
     <form
       onSubmit={handleSubmit}
-      className="border-t border-surface-border bg-white"
+      className="border-t border-[var(--m03-line)] bg-white"
       aria-label="Reply composer"
     >
       {/* Error */}
       {error && (
-        <p className="px-4 pt-2 text-label-sm text-red-600" role="alert">{error}</p>
+        <p className="px-6 pt-2 font-mono text-[10px] text-[var(--m03-red)]" role="alert">
+          {error}
+        </p>
       )}
 
       {/* Textarea */}
-      <div className="px-4 py-3">
+      <div className="px-6 py-3.5">
         <textarea
           value={body}
           onChange={(e) => setBody(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Type your reply here..."
-          rows={3}
+          placeholder="Reply to customer, or edit the AI draft…"
+          rows={2}
           disabled={sending}
-          className="w-full resize-none rounded border-0 p-0 text-body-md text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-0 disabled:opacity-50"
+          className="block w-full resize-none rounded-md border border-[var(--m03-line)] bg-white px-3 py-2.5 text-[13px] leading-[1.55] text-[var(--m03-fg)] placeholder:text-[var(--m03-fg-3)] focus:border-[var(--m03-fg)] focus:outline-none disabled:opacity-50"
           aria-label="Reply message"
         />
       </div>
 
-      {/* Send button */}
-      <div className="flex items-center justify-end px-4 pb-3">
+      {/* Action row */}
+      <div className="flex items-center gap-2 px-6 pb-4">
+        <button
+          type="button"
+          className="h-7 rounded-md border border-[var(--m03-line)] bg-white px-3 text-[12px] font-medium text-[var(--m03-fg)] transition-colors hover:bg-[var(--m03-line-2)]"
+        >
+          Save draft
+        </button>
+        <button
+          type="button"
+          className="h-7 rounded-md border border-[var(--m03-line)] bg-white px-3 text-[12px] font-medium text-[var(--m03-fg)] transition-colors hover:bg-[var(--m03-line-2)]"
+        >
+          Internal note
+        </button>
+        <button
+          type="button"
+          className="h-7 rounded-md border border-[var(--m03-line)] bg-white px-3 text-[12px] font-medium text-[var(--m03-fg)] transition-colors hover:bg-[var(--m03-line-2)]"
+        >
+          Escalate
+        </button>
+
+        <span className="ml-auto font-mono text-[10px] text-[var(--m03-fg-3)]">
+          <kbd className="rounded-[3px] border border-[var(--m03-line)] bg-[var(--m03-line-2)] px-1.5 py-px font-sans text-[10px]">
+            Enter
+          </kbd>{' '}
+          to send ·{' '}
+          <kbd className="rounded-[3px] border border-[var(--m03-line)] bg-[var(--m03-line-2)] px-1.5 py-px font-sans text-[10px]">
+            Shift+Enter
+          </kbd>{' '}
+          newline
+        </span>
+
         <button
           type="submit"
           disabled={!body.trim() || sending}
-          className="inline-flex items-center gap-1.5 rounded bg-primary px-4 py-1.5 text-body-sm font-medium text-white transition-colors hover:bg-primary-600 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+          className="h-7 rounded-md border border-[var(--m03-fg)] bg-[var(--m03-fg)] px-3 text-[12px] font-semibold text-[var(--m03-bg)] transition-colors hover:bg-[var(--m03-fg-2)] disabled:cursor-not-allowed disabled:opacity-50"
           aria-label="Send reply"
         >
-          {sending ? (
-            <svg className="h-3.5 w-3.5 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" aria-hidden="true">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-            </svg>
-          ) : (
-            <>
-              Send
-              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d="M1 6h10M7 2l4 4-4 4" />
-              </svg>
-            </>
-          )}
+          {sending ? 'Sending…' : 'Send'}
         </button>
       </div>
     </form>

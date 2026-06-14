@@ -13,16 +13,16 @@ export function MarkdownEditor({ value, onChange, rows = 12 }: MarkdownEditorPro
   const [tab, setTab] = useState<'write' | 'preview'>('write');
 
   return (
-    <div className="rounded-lg border border-surface-border overflow-hidden">
+    <div className="overflow-hidden rounded-md border border-[var(--m03-line)]">
       {/* Tab bar */}
-      <div className="flex border-b border-surface-border bg-gray-50">
+      <div className="flex items-center border-b border-[var(--m03-line)] bg-[var(--m03-line-2)]">
         <button
           type="button"
           onClick={() => setTab('write')}
-          className={`px-4 py-2 text-label-sm font-medium transition-colors ${
+          className={`cursor-pointer px-3 py-1.5 text-[13px] font-medium transition-colors ${
             tab === 'write'
-              ? 'text-gray-900 border-b-2 border-primary -mb-px bg-white'
-              : 'text-gray-500 hover:text-gray-700'
+              ? 'border-b-2 border-[var(--m03-fg)] -mb-px bg-white text-[var(--m03-fg)]'
+              : 'text-[var(--m03-fg-2)] hover:text-[var(--m03-fg)]'
           }`}
         >
           Write
@@ -30,15 +30,15 @@ export function MarkdownEditor({ value, onChange, rows = 12 }: MarkdownEditorPro
         <button
           type="button"
           onClick={() => setTab('preview')}
-          className={`px-4 py-2 text-label-sm font-medium transition-colors ${
+          className={`cursor-pointer px-3 py-1.5 text-[13px] font-medium transition-colors ${
             tab === 'preview'
-              ? 'text-gray-900 border-b-2 border-primary -mb-px bg-white'
-              : 'text-gray-500 hover:text-gray-700'
+              ? 'border-b-2 border-[var(--m03-fg)] -mb-px bg-white text-[var(--m03-fg)]'
+              : 'text-[var(--m03-fg-2)] hover:text-[var(--m03-fg)]'
           }`}
         >
           Preview
         </button>
-        <span className="ml-auto self-center pr-3 text-label-sm text-gray-400">
+        <span className="ml-auto pr-3 text-[12px] text-[var(--m03-fg-3)]">
           Markdown supported
         </span>
       </div>
@@ -50,14 +50,14 @@ export function MarkdownEditor({ value, onChange, rows = 12 }: MarkdownEditorPro
           onChange={(e) => onChange(e.target.value)}
           rows={rows}
           placeholder="Write your content using Markdown…"
-          className="block w-full px-4 py-3 text-body-sm font-mono text-gray-800 placeholder:text-gray-400 focus:outline-none resize-y min-h-[200px]"
+          className="block w-full resize-y bg-white px-3 py-3 font-mono text-[13px] text-[var(--m03-fg)] placeholder:text-[var(--m03-fg-3)] focus:outline-none min-h-[200px]"
         />
       ) : (
-        <div className="px-4 py-3 min-h-[200px]">
+        <div className="min-h-[200px] px-3 py-3 text-[13px] text-[var(--m03-fg-2)]">
           {value.trim() ? (
             <MarkdownRenderer content={value} />
           ) : (
-            <p className="text-body-sm text-gray-400 italic">Nothing to preview</p>
+            <p className="italic text-[var(--m03-fg-3)]">Nothing to preview</p>
           )}
         </div>
       )}

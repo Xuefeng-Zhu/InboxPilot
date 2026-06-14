@@ -2,6 +2,7 @@
 
 import React from 'react';
 import type { SenderType } from '@support-core/types';
+import { cn } from '@/components/ui/cn';
 
 // ---------------------------------------------------------------------------
 // Types — PostgREST row shape (snake_case from the database)
@@ -36,26 +37,15 @@ const senderLabels: Record<SenderType, string> = {
   system: 'System',
 };
 
-const senderInitials: Record<SenderType, string> = {
-  contact: '',
-  user: 'AG',
-  ai: 'AI',
-  system: 'SY',
-};
-
 function formatMessageTime(dateStr: string): string {
   const date = new Date(dateStr);
-  return date.toLocaleString(undefined, {
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true,
-  });
-}
-
-function formatChannelLabel(channel: string): string {
-  if (channel === 'sms') return 'SMS';
-  if (channel === 'webchat') return 'Web';
-  return 'Email';
+  const yyyy = date.getUTCFullYear();
+  const mm = String(date.getUTCMonth() + 1).padStart(2, '0');
+  const dd = String(date.getUTCDate()).padStart(2, '0');
+  const hh = String(date.getUTCHours()).padStart(2, '0');
+  const mi = String(date.getUTCMinutes()).padStart(2, '0');
+  const ss = String(date.getUTCSeconds()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}T${hh}:${mi}:${ss}Z`;
 }
 
 // ---------------------------------------------------------------------------
@@ -64,17 +54,18 @@ function formatChannelLabel(channel: string): string {
 
 interface MessageBubbleProps {
   message: MessageRow;
+  contactName?: string | null;
 }
 
-export function MessageBubble({ message }: MessageBubbleProps) {
-  const { sender_type, body, created_at, channel } = message;
+export function MessageBubble({ message, contactName }: MessageBubbleProps) {
+  const { sender_type, body, created_at, direction } = message;
 
   // System messages — centered, subtle
   if (sender_type === 'system') {
     return (
-      <div className="flex justify-center py-2">
-        <div className="flex items-center gap-2 rounded-full bg-gray-100 px-3 py-1">
-          <p className="text-label-sm text-gray-500">{body}</p>
+      <div className="flex justify-center py-1">
+        <div className="rounded-full bg-[var(--m03-line-2)] px-3 py-1">
+          <p className="font-mono text-[10px] text-[var(--m03-fg-3)]">{body}</p>
         </div>
       </div>
     );
@@ -82,62 +73,74 @@ export function MessageBubble({ message }: MessageBubbleProps) {
 
   const isContact = sender_type === 'contact';
   const isAi = sender_type === 'ai';
+  // Visual alignment depends on the author:
+  //   contact (customer) → always left-aligned (inbound)
+  //   user (agent)       → right-aligned (outbound)
+  //   ai                 → left-aligned (proposed draft)
+  const isOutbound = !isContact && !isAi;
+
+  // Sender display: 'ContactName · Customer' for contact, else role label.
+  const senderName =
+    sender_type === 'contact'
+      ? `${contactName ?? 'Customer'} · Customer`
+      : senderLabels[sender_type];
 
   return (
-    <div className="flex gap-3">
-      {/* Avatar */}
-      <div className={`flex items-center justify-center w-8 h-8 rounded-full shrink-0 text-label-sm font-semibold ${
-        isContact
-          ? 'bg-gray-200 text-gray-600'
-          : isAi
-            ? 'bg-ai-50 text-ai'
-            : 'bg-primary-50 text-primary'
-      }`}>
-        {isContact ? (
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="7" cy="5" r="2.5" />
-            <path d="M3 13c0-2.5 1.8-4 4-4s4 1.5 4 4" />
-          </svg>
-        ) : (
-          senderInitials[sender_type]
-        )}
-      </div>
-
-      {/* Message card */}
-      <div className="flex-1 min-w-0">
-        {/* Sender info + time */}
-        <div className="flex items-center gap-2 mb-1">
-          <span className="text-body-sm font-medium text-gray-900">
-            {senderLabels[sender_type]}
+    <div
+      className={cn(
+        'flex w-full',
+        isOutbound && !isAi ? 'justify-end' : 'justify-start',
+      )}
+    >
+      <div className={cn('flex max-w-[72%] flex-col gap-1')}>
+        {/* Sender block */}
+        <div
+          className={cn(
+            'flex items-baseline gap-2',
+            isOutbound && !isAi ? 'flex-row-reverse' : 'flex-row',
+          )}
+        >
+          <span
+            className={cn(
+              'text-[11px] font-semibold uppercase tracking-[0.04em]',
+              isAi ? 'text-[var(--m03-orange)]' : 'text-[var(--m03-fg)]',
+            )}
+          >
+            {senderName}
           </span>
-          <span className="text-label-sm text-gray-400">
-            via {formatChannelLabel(channel)}
-          </span>
-          <span className="ml-auto text-label-sm text-gray-400">
-            {formatMessageTime(created_at)}
-          </span>
+          {isAi && (
+            <span className="inline-flex items-center gap-1 rounded-[3px] border border-[var(--m03-orange-line)] bg-[var(--m03-orange-fill)] px-1.5 py-px font-mono text-[10px] font-semibold uppercase tracking-[0.04em] text-[var(--m03-orange)]">
+              <span
+                className="h-1.5 w-1.5 rounded-full bg-[var(--m03-orange)]"
+                aria-hidden="true"
+              />
+              Drafted
+            </span>
+          )}
         </div>
 
-        {/* Message body */}
-        <div className={`rounded border p-3 ${
-          isContact
-            ? 'bg-white border-surface-border'
-            : isAi
-              ? 'bg-ai-50/50 border-ai-200'
-              : 'bg-white border-surface-border'
-        }`}>
-          <p className="whitespace-pre-wrap text-body-md text-gray-800">{body}</p>
+        {/* Bubble */}
+        <div
+          className={cn(
+            'rounded-lg px-3.5 py-2.5 text-[13px] leading-[1.55]',
+            isContact && 'bg-[var(--m03-line-2)] text-[var(--m03-fg)]',
+            isAi && 'border border-[var(--m03-orange)] bg-white text-[var(--m03-fg)]',
+            isOutbound && !isAi && !isContact && 'bg-[var(--m03-fg)] text-[var(--m03-bg)]',
+          )}
+        >
+          {body}
         </div>
 
-        {/* AI confidence indicator */}
-        {isAi && (
-          <div className="mt-1.5 flex items-center gap-1.5">
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className="text-ai">
-              <path d="M6 1l1.5 3 3.5.5-2.5 2.5.5 3.5L6 9l-3 1.5.5-3.5L1 4.5 4.5 4 6 1z" fill="currentColor" />
-            </svg>
-            <span className="text-label-sm text-ai font-medium">AI Generated</span>
-          </div>
-        )}
+        {/* Meta */}
+        <div
+          className={cn(
+            'mt-1 font-mono text-[10px] uppercase tracking-[0.04em] text-[var(--m03-fg-3)]',
+            isOutbound && !isAi ? 'text-right' : 'text-left',
+          )}
+        >
+          {formatMessageTime(created_at)}
+          {isAi && ' · awaiting approval'}
+        </div>
       </div>
     </div>
   );

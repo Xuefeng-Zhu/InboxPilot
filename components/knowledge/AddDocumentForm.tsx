@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Button } from '@/components/ui';
+import { Button, Input } from '@/components/ui';
 import { SOURCE_TYPES, ACCEPTED_FILE_TYPES, MAX_FILE_SIZE_MB } from './types';
 import { MarkdownEditor } from './MarkdownEditor';
 
@@ -32,7 +32,6 @@ export function AddDocumentForm({ onSubmit, onClose, adding }: AddDocumentFormPr
     ((mode === 'text' && body.trim()) || (mode === 'file' && file)) &&
     !adding;
 
-  // Close on Escape
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
       if (e.key === 'Escape' && !adding) onClose();
@@ -41,7 +40,6 @@ export function AddDocumentForm({ onSubmit, onClose, adding }: AddDocumentFormPr
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [onClose, adding]);
 
-  // Focus first input on mount
   useEffect(() => {
     dialogRef.current?.querySelector<HTMLInputElement>('input')?.focus();
   }, []);
@@ -66,57 +64,57 @@ export function AddDocumentForm({ onSubmit, onClose, adding }: AddDocumentFormPr
     });
   };
 
+  const fieldLabel = 'mb-1 block text-[11px] font-medium uppercase tracking-wider text-[var(--m03-fg-2)]';
+  const fieldHelp = 'mt-1 text-[12px] text-[var(--m03-fg-3)]';
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
       <div
         ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="add-doc-title"
-        className="w-full max-w-lg rounded-lg border border-surface-border bg-white shadow-level-2 overflow-hidden"
+        className="w-full max-w-lg overflow-hidden rounded-lg border border-[var(--m03-line)] bg-white shadow-[0_30px_80px_rgba(0,0,0,0.08)]"
       >
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-surface-border px-6 py-4">
-          <h2 id="add-doc-title" className="text-headline-sm text-gray-900">
-            Add Document
+        <div className="flex items-center justify-between border-b border-[var(--m03-line)] px-6 py-4">
+          <h2 id="add-doc-title" className="m-0 text-[16px] font-semibold text-[var(--m03-fg)]">
+            Add document
           </h2>
           <button
+            type="button"
             onClick={onClose}
             disabled={adding}
-            className="rounded p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
             aria-label="Close"
+            className="flex h-7 w-7 cursor-pointer items-center justify-center rounded text-[var(--m03-fg-2)] hover:bg-[var(--m03-line-2)] hover:text-[var(--m03-fg)] disabled:opacity-50"
           >
-            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+            <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
               <path d="M5 5l10 10M15 5L5 15" />
             </svg>
           </button>
         </div>
 
         {/* Body */}
-        <div className="px-6 py-5 space-y-4 max-h-[70vh] overflow-y-auto">
+        <div className="max-h-[70vh] space-y-4 overflow-y-auto px-6 py-5">
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
-              <label htmlFor="doc-title" className="block text-label-md text-gray-700">
-                Title
-              </label>
+              <label htmlFor="doc-title" className={fieldLabel}>Title</label>
               <input
                 id="doc-title"
                 type="text"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="e.g. Return Policy FAQ"
-                className="mt-1 block w-full rounded border border-surface-border px-3 py-2 text-body-md placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                className="block w-full rounded-md border border-[var(--m03-line)] bg-white px-3 py-2 text-[13px] text-[var(--m03-fg)] placeholder:text-[var(--m03-fg-3)] focus:border-[var(--m03-fg)] focus:outline-none focus:ring-1 focus:ring-[var(--m03-fg)]"
               />
             </div>
             <div>
-              <label htmlFor="doc-source-type" className="block text-label-md text-gray-700">
-                Source Type
-              </label>
+              <label htmlFor="doc-source-type" className={fieldLabel}>Source type</label>
               <select
                 id="doc-source-type"
                 value={sourceType}
                 onChange={(e) => setSourceType(e.target.value)}
-                className="mt-1 block w-full rounded border border-surface-border px-3 py-2 text-body-md focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                className="block w-full rounded-md border border-[var(--m03-line)] bg-white px-3 py-2 text-[13px] text-[var(--m03-fg)] focus:border-[var(--m03-fg)] focus:outline-none focus:ring-1 focus:ring-[var(--m03-fg)]"
               >
                 {SOURCE_TYPES.map((t) => (
                   <option key={t} value={t}>
@@ -129,15 +127,15 @@ export function AddDocumentForm({ onSubmit, onClose, adding }: AddDocumentFormPr
 
           {/* Mode toggle */}
           <div>
-            <span className="block text-label-md text-gray-700 mb-2">Content Source</span>
-            <div className="flex items-center gap-1 rounded-lg bg-gray-100 p-1 w-fit">
+            <span className={`${fieldLabel} mb-2`}>Content source</span>
+            <div className="inline-flex rounded-md border border-[var(--m03-line)] bg-white p-0.5">
               <button
                 type="button"
                 onClick={() => handleModeSwitch('text')}
-                className={`rounded-md px-3 py-1.5 text-label-sm font-medium transition-colors ${
+                className={`cursor-pointer rounded px-3 py-1 text-[13px] font-medium transition-colors ${
                   mode === 'text'
-                    ? 'bg-white text-gray-900 shadow-sm'
-                    : 'text-gray-500 hover:text-gray-700'
+                    ? 'bg-[var(--m03-fg)] text-[var(--m03-bg)]'
+                    : 'text-[var(--m03-fg-2)] hover:text-[var(--m03-fg)]'
                 }`}
               >
                 Text
@@ -145,13 +143,13 @@ export function AddDocumentForm({ onSubmit, onClose, adding }: AddDocumentFormPr
               <button
                 type="button"
                 onClick={() => handleModeSwitch('file')}
-                className={`rounded-md px-3 py-1.5 text-label-sm font-medium transition-colors ${
+                className={`cursor-pointer rounded px-3 py-1 text-[13px] font-medium transition-colors ${
                   mode === 'file'
-                    ? 'bg-white text-gray-900 shadow-sm'
-                    : 'text-gray-500 hover:text-gray-700'
+                    ? 'bg-[var(--m03-fg)] text-[var(--m03-bg)]'
+                    : 'text-[var(--m03-fg-2)] hover:text-[var(--m03-fg)]'
                 }`}
               >
-                File Upload
+                File upload
               </button>
             </div>
           </div>
@@ -159,9 +157,7 @@ export function AddDocumentForm({ onSubmit, onClose, adding }: AddDocumentFormPr
           {/* Text mode */}
           {mode === 'text' && (
             <div>
-              <label className="block text-label-md text-gray-700 mb-1">
-                Content
-              </label>
+              <label className={`${fieldLabel} mb-1`}>Content</label>
               <MarkdownEditor value={body} onChange={setBody} rows={8} />
             </div>
           )}
@@ -169,55 +165,53 @@ export function AddDocumentForm({ onSubmit, onClose, adding }: AddDocumentFormPr
           {/* File mode */}
           {mode === 'file' && (
             <div>
-              <label htmlFor="doc-file" className="block text-label-md text-gray-700">
-                Upload File
-              </label>
+              <label htmlFor="doc-file" className={fieldLabel}>Upload file</label>
               {!file ? (
                 <div
-                  className="mt-1 flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-surface-border p-8 text-center hover:border-primary/40 transition-colors cursor-pointer"
+                  className="mt-1 flex cursor-pointer flex-col items-center justify-center rounded-md border-2 border-dashed border-[var(--m03-line)] p-8 text-center transition-colors hover:border-[var(--m03-fg-2)]"
                   onClick={() => fileInputRef.current?.click()}
                 >
                   <svg
-                    width="32"
-                    height="32"
+                    width="28"
+                    height="28"
                     viewBox="0 0 24 24"
                     fill="none"
                     stroke="currentColor"
                     strokeWidth="1.5"
                     strokeLinecap="round"
                     strokeLinejoin="round"
-                    className="text-gray-400 mb-2"
+                    className="mb-2 text-[var(--m03-fg-3)]"
                   >
                     <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
                     <polyline points="17 8 12 3 7 8" />
                     <line x1="12" y1="3" x2="12" y2="15" />
                   </svg>
-                  <p className="text-body-sm text-gray-600">
+                  <p className="text-[13px] text-[var(--m03-fg-2)]">
                     Click to choose a file
                   </p>
-                  <p className="mt-1 text-label-sm text-gray-400">
+                  <p className={fieldHelp}>
                     PDF, TXT, Markdown, DOCX, or CSV. Max {MAX_FILE_SIZE_MB}MB.
                   </p>
                 </div>
               ) : (
-                <div className="mt-1 flex items-center gap-3 rounded-lg border border-surface-border p-3">
+                <div className="mt-1 flex items-center gap-3 rounded-md border border-[var(--m03-line)] p-3">
                   <svg
-                    width="20"
-                    height="20"
+                    width="18"
+                    height="18"
                     viewBox="0 0 24 24"
                     fill="none"
                     stroke="currentColor"
                     strokeWidth="1.5"
                     strokeLinecap="round"
                     strokeLinejoin="round"
-                    className="text-primary shrink-0"
+                    className="shrink-0 text-[var(--m03-fg-2)]"
                   >
                     <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
                     <polyline points="14 2 14 8 20 8" />
                   </svg>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-body-sm font-medium text-gray-900 truncate">{file.name}</p>
-                    <p className="text-label-sm text-gray-400">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[13px] font-medium text-[var(--m03-fg)]">{file.name}</p>
+                    <p className="text-[12px] text-[var(--m03-fg-3)]">
                       {(file.size / 1024).toFixed(1)} KB
                     </p>
                   </div>
@@ -227,7 +221,7 @@ export function AddDocumentForm({ onSubmit, onClose, adding }: AddDocumentFormPr
                       setFile(null);
                       if (fileInputRef.current) fileInputRef.current.value = '';
                     }}
-                    className="text-label-sm text-gray-500 hover:text-red-600 transition-colors shrink-0"
+                    className="shrink-0 cursor-pointer text-[12px] text-[var(--m03-fg-2)] hover:text-[var(--m03-red)]"
                   >
                     Remove
                   </button>
@@ -246,7 +240,7 @@ export function AddDocumentForm({ onSubmit, onClose, adding }: AddDocumentFormPr
         </div>
 
         {/* Footer */}
-        <div className="flex justify-end gap-2 border-t border-surface-border px-6 py-4">
+        <div className="flex justify-end gap-2 border-t border-[var(--m03-line)] px-6 py-4">
           <Button variant="secondary" size="md" onClick={onClose} disabled={adding}>
             Cancel
           </Button>
@@ -256,7 +250,7 @@ export function AddDocumentForm({ onSubmit, onClose, adding }: AddDocumentFormPr
             onClick={handleSubmit}
             disabled={!canSubmit}
           >
-            {adding ? 'Adding…' : 'Add Document'}
+            {adding ? 'Adding…' : 'Add document'}
           </Button>
         </div>
       </div>

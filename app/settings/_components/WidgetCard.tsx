@@ -25,35 +25,39 @@ export function WidgetCard({ widget, onRefresh }: WidgetCardProps) {
   };
 
   return (
-    <div className="rounded-lg border border-surface-border bg-white p-4">
+    <div className="rounded-lg border border-[var(--m03-line)] bg-white p-4">
       <div className="flex items-start justify-between">
         <div>
-          <h3 className="text-body-md font-medium text-gray-900">{widget.name}</h3>
-          <p className="mt-0.5 text-label-sm text-gray-400">
+          <h3 className="text-[14px] font-medium text-[var(--m03-fg)]">{widget.name}</h3>
+          <p className="mt-0.5 font-mono text-[10px] text-[var(--m03-fg-3)]">
             {widget.allowed_domains.length > 0
               ? widget.allowed_domains.join(', ')
               : 'All origins (dev mode)'}
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-label-sm font-medium ${
-            widget.is_active ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-500'
-          }`}>
+          <span
+            className={`inline-flex items-center rounded-[3px] border px-1.5 py-px font-mono text-[9px] font-semibold uppercase tracking-[0.04em] ${
+              widget.is_active
+                ? 'border-[var(--m03-green-line)] bg-[var(--m03-green-fill)] text-[var(--m03-green)]'
+                : 'border-[var(--m03-line)] bg-white text-[var(--m03-fg-2)]'
+            }`}
+          >
             {widget.is_active ? 'Active' : 'Inactive'}
           </span>
           <button
             onClick={handleToggleActive}
             disabled={toggling}
-            className="text-label-sm text-gray-500 hover:text-gray-700 disabled:opacity-50"
+            className="text-[12px] text-[var(--m03-fg-2)] transition-colors hover:text-[var(--m03-fg)] disabled:opacity-50"
           >
             {widget.is_active ? 'Disable' : 'Enable'}
           </button>
         </div>
       </div>
 
-      <div className="mt-3 flex items-center gap-3 text-label-sm text-gray-500">
+      <div className="mt-3 flex items-center gap-3 font-mono text-[10px] text-[var(--m03-fg-3)]">
         <span className="flex items-center gap-1">
-          <span className="w-3 h-3 rounded-full" style={{ backgroundColor: widget.primary_color ?? '#2563eb' }} />
+          <span className="h-3 w-3 rounded-full" style={{ backgroundColor: widget.primary_color ?? '#2563eb' }} />
           {widget.primary_color ?? '#2563eb'}
         </span>
         <span>{widget.position}</span>
@@ -63,7 +67,7 @@ export function WidgetCard({ widget, onRefresh }: WidgetCardProps) {
       <div className="mt-3 flex items-center gap-2">
         <button
           onClick={() => setShowSnippet(!showSnippet)}
-          className="rounded border border-surface-border px-3 py-1.5 text-label-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+          className="rounded-md border border-[var(--m03-line)] bg-white px-3 py-1.5 text-[12px] font-medium text-[var(--m03-fg)] transition-colors hover:bg-[var(--m03-line-2)]"
         >
           {showSnippet ? 'Hide snippet' : 'Embed snippet'}
         </button>

@@ -7,12 +7,14 @@ export interface Contact {
   updated_at: string;
 }
 
+// Avatar palette uses m03 design tokens only (no purple/ai/blue legacy classes).
+// Each entry pairs a tinted background with a foreground that meets contrast on it.
 export const AVATAR_COLORS = [
-  'bg-primary-50 text-primary',
-  'bg-ai-50 text-ai',
-  'bg-green-50 text-green-700',
-  'bg-orange-50 text-orange-700',
-  'bg-blue-50 text-blue-700',
+  'bg-[var(--m03-line-2)] text-[var(--m03-fg)]',
+  'bg-[#e6f4ec] text-[var(--m03-green)]',
+  'bg-[#fce8d4] text-[#a55a00]',
+  'bg-[#fde2e2] text-[var(--m03-red)]',
+  'bg-[var(--m03-line-2)] text-[var(--m03-fg-2)]',
 ];
 
 export function getAvatarColor(id: string): string {
@@ -38,10 +40,10 @@ export function formatRelativeDate(iso: string): string {
   const diffHours = Math.floor(diffMs / 3_600_000);
   const diffDays = Math.floor(diffMs / 86_400_000);
 
-  if (diffMins < 1) return 'Just now';
-  if (diffMins < 60) return `${diffMins} mins ago`;
-  if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
-  if (diffDays < 7) return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
-  if (diffDays < 30) return `${Math.floor(diffDays / 7)} week${Math.floor(diffDays / 7) > 1 ? 's' : ''} ago`;
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  if (diffMins < 1) return 'just now';
+  if (diffMins < 60) return `${diffMins}m ago`;
+  if (diffHours < 24) return `${diffHours}h ago`;
+  if (diffDays < 7) return `${diffDays}d ago`;
+  if (diffDays < 30) return `${Math.floor(diffDays / 7)}w ago`;
+  return date.toLocaleDateString();
 }

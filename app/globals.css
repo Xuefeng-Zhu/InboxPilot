@@ -63,9 +63,18 @@
   --m03-green: #00aa55;
   --m03-red: #ee0000;
   --m03-orange: #ff8800;
+
+  /* Tinted fills + borders that pair with the accent colors above. */
+  --m03-red-fill: #fef2f2;
+  --m03-red-line: #fecaca;
+  --m03-green-fill: #f0fdf4;
+  --m03-green-line: #bbf7d0;
+  --m03-orange-fill: #fff7ed;
+  --m03-orange-line: #fed7aa;
 }
 
 body {
+  font-family: var(--font-inter), Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
   color: var(--foreground);
   background: var(--background);
   font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
@@ -73,7 +82,7 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Respect reduced-motion preference (UX Pro Max §7) */
+/* Respect reduced-motion preference */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -85,7 +94,7 @@ body {
   }
 }
 
-/* Ensure minimum 44x44px touch targets on mobile viewports (< 1024px) — Req 12.4 */
+/* Minimum 44x44px touch targets on mobile */
 @layer base {
   @media (max-width: 1023px) {
     button,

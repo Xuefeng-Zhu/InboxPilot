@@ -1,8 +1,4 @@
 export { AddDocumentForm } from './AddDocumentForm';
-export { DocumentContent } from './DocumentContent';
-export { DocumentHeader } from './DocumentHeader';
-export { KnowledgeFilters } from './KnowledgeFilters';
-export { KnowledgeTable } from './KnowledgeTable';
 export { MarkdownEditor } from './MarkdownEditor';
 export { MarkdownRenderer } from './MarkdownRenderer';
 export type { KnowledgeDocument } from './types';

@@ -11,10 +11,9 @@ export interface InputProps
 }
 
 const baseClasses =
-  'w-full border border-surface-border rounded px-3 py-2 text-body-md focus:border-primary focus:ring-2 focus:ring-primary/20 focus:ring-offset-1 focus:outline-none transition-colors duration-150';
+  'block w-full rounded-md border border-[var(--m03-line)] bg-white px-3 py-2 text-[13px] text-[var(--m03-fg)] placeholder:text-[var(--m03-fg-3)] focus:border-[var(--m03-fg)] focus:outline-none focus:ring-1 focus:ring-[var(--m03-fg)] disabled:opacity-50';
 
-const errorClasses =
-  'border-red-500 focus:border-red-500 focus:ring-red-500/20';
+const errorClasses = 'border-[var(--m03-red)] focus:border-[var(--m03-red)] focus:ring-[var(--m03-red)]';
 
 export const Input = forwardRef<HTMLInputElement, InputProps>(
   ({ label, error, className, id, ...props }, ref) => {
@@ -27,7 +26,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
         {label && (
           <label
             htmlFor={inputId}
-            className="text-label-md text-gray-700 mb-1 block"
+            className="mb-1 block text-[11px] font-medium uppercase tracking-wider text-[var(--m03-fg-2)]"
           >
             {label}
           </label>
@@ -37,20 +36,17 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
           id={inputId}
           aria-describedby={errorId}
           aria-invalid={error ? true : undefined}
-          className={cn(
-            baseClasses,
-            error && errorClasses
-          )}
+          className={cn(baseClasses, error && errorClasses)}
           {...props}
         />
         {error && (
-          <p id={errorId} className="text-sm text-red-500 mt-1">
+          <p id={errorId} className="mt-1 text-[12px] text-[var(--m03-red)]">
             {error}
           </p>
         )}
       </div>
     );
-  }
+  },
 );
 
 Input.displayName = 'Input';

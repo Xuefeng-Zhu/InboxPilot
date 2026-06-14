@@ -2,7 +2,7 @@
 
 import { Suspense, useCallback, useMemo } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { DashboardShell } from '@/components/DashboardShell';
+import { AppShell } from '@/components/layout';
 import { useAuth } from '@/lib/auth-context';
 import { useOrgMembership, useOrganization } from '@/lib/queries';
 import AiSettingsPanel from './_components/AiSettingsPanel';
@@ -111,12 +111,8 @@ export default function SettingsPage() {
   const { data: org } = useOrganization(orgId ?? undefined);
 
   return (
-    <DashboardShell>
-      <div
-        style={{
-          fontFamily: 'var(--font-inter), Inter, system-ui, -apple-system, sans-serif',
-        }}
-      >
+    <AppShell>
+      <div>
         <div className="mb-5">
           <h1 className="m-0 text-[24px] font-medium tracking-[-0.02em]">Settings</h1>
           <p className="mt-1 mb-0 text-[13px] text-[var(--m03-fg-2)]">
@@ -128,6 +124,6 @@ export default function SettingsPage() {
           <SettingsTabs />
         </Suspense>
       </div>
-    </DashboardShell>
+    </AppShell>
   );
 }

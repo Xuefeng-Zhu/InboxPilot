@@ -52,7 +52,7 @@ function getFormElement(container: HTMLElement, componentType: ComponentType): H
 }
 
 describe('Feature: stitch-ui-implementation, Property 4: Input error state rendering', () => {
-  it('renders error border class (border-red-500) for any non-empty error string', () => {
+  it('renders error border class (border-[var(--m03-red)]) for any non-empty error string', () => {
     fc.assert(
       fc.property(
         fc.constantFrom<ComponentType>('Input', 'Select', 'Textarea'),
@@ -62,7 +62,7 @@ describe('Feature: stitch-ui-implementation, Property 4: Input error state rende
           const element = getFormElement(container, componentType);
 
           expect(element).toBeDefined();
-          expect(element.className).toContain('border-red-500');
+          expect(element.className).toContain('border-[var(--m03-red)]');
 
           cleanup();
         }

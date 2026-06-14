@@ -2,7 +2,7 @@
 
 import { useTeamMembers } from '@/lib/queries';
 import { AppShell } from '@/components/layout';
-import { Button, Card } from '@/components/ui';
+import { Card } from '@/components/ui';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -43,10 +43,10 @@ export default function TeamPage() {
   if (isLoading) {
     return (
       <AppShell>
-        <div className="p-container-margin">
-          <h1 className="text-headline-sm text-gray-900">Team</h1>
-          <p className="mt-1 text-body-md text-gray-500">Manage your team members and roles.</p>
-          <p className="mt-4 text-body-md text-gray-500">Loading team members…</p>
+        <div>
+          <h1 className="m-0 text-[24px] font-medium tracking-[-0.02em]">Team</h1>
+          <p className="mt-1 mb-0 text-[13px] text-[var(--m03-fg-2)]">Manage your team members and roles.</p>
+          <p className="mt-4 text-[13px] text-[var(--m03-fg-2)]">Loading team members…</p>
         </div>
       </AppShell>
     );
@@ -54,45 +54,52 @@ export default function TeamPage() {
 
   return (
     <AppShell>
-      <div className="p-container-margin">
-        {/* Page header */}
-        <h1 className="text-headline-sm text-gray-900">Team</h1>
-        <p className="mt-1 text-body-md text-gray-500">Manage your team members and roles.</p>
+      <div>
+        <h1 className="m-0 text-[24px] font-medium tracking-[-0.02em]">Team</h1>
+        <p className="mt-1 mb-0 text-[13px] text-[var(--m03-fg-2)]">Manage your team members and roles.</p>
 
         {error && (
-          <div className="mt-4 rounded-md bg-red-50 p-3" role="alert">
-            <p className="text-body-md text-red-700">{error.message}</p>
+          <div
+            className="mt-4 rounded border border-[var(--m03-red-line)] bg-[var(--m03-red-fill)] p-3 text-[13px] text-[var(--m03-red)]"
+            role="alert"
+          >
+            {error.message}
           </div>
         )}
 
-        {/* Team Members List */}
-        <div className="mt-6 space-y-element-gap">
+        <div className="mt-6 flex flex-col gap-3">
           {members.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-surface-border p-8 text-center">
-              <p className="text-body-md text-gray-500">No team members found.</p>
-              <p className="mt-1 text-body-sm text-gray-400">
+            <div className="rounded-lg border border-dashed border-[var(--m03-line)] p-8 text-center">
+              <p className="text-[13px] text-[var(--m03-fg-2)]">No team members found.</p>
+              <p className="mt-1 text-[12px] text-[var(--m03-fg-3)]">
                 Invite team members to start collaborating.
               </p>
             </div>
           ) : (
             members.map((member) => (
               <Card key={(member as TeamMember).id}>
-                <div className="flex items-center justify-between gap-element-gap">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-body-md font-medium text-gray-900 truncate">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[14px] font-medium text-[var(--m03-fg)]">
                       {(member as TeamMember).user_id}
                     </p>
-                    <p className="text-body-sm text-gray-500">
+                    <p className="text-[12px] text-[var(--m03-fg-2)]">
                       {formatRole((member as TeamMember).role)} · Joined {formatDate((member as TeamMember).created_at)}
                     </p>
                   </div>
-                  <div className="flex items-center gap-tight-gap flex-shrink-0">
-                    <Button variant="secondary" size="sm">
+                  <div className="flex shrink-0 items-center gap-2">
+                    <button
+                      type="button"
+                      className="rounded-md border border-[var(--m03-line)] bg-white px-3 py-1.5 text-[13px] font-medium text-[var(--m03-fg)] hover:bg-[var(--m03-line-2)]"
+                    >
                       Edit Role
-                    </Button>
-                    <Button variant="secondary" size="sm">
+                    </button>
+                    <button
+                      type="button"
+                      className="rounded-md border border-[var(--m03-line)] bg-white px-3 py-1.5 text-[13px] font-medium text-[var(--m03-fg)] hover:bg-[var(--m03-line-2)]"
+                    >
                       Remove
-                    </Button>
+                    </button>
                   </div>
                 </div>
               </Card>

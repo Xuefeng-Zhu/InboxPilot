@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { insforge } from '@/lib/insforge';
-import { Card, Button } from '@/components/ui';
+import { Card, Button, cn } from '@/components/ui';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -73,7 +73,6 @@ export default function AiSettingsPanel() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  // Form state
   const [aiMode, setAiMode] = useState<AiSettings['ai_mode']>('draft_only');
   const [confidenceThreshold, setConfidenceThreshold] = useState(0.75);
   const [contextWindowSize, setContextWindowSize] = useState(20);
@@ -82,7 +81,6 @@ export default function AiSettingsPanel() {
   const [systemPrompt, setSystemPrompt] = useState('');
   const [model, setModel] = useState('openai/gpt-4o-mini');
 
-  // Fetch AI settings
   const fetchSettings = useCallback(async () => {
     if (!user) return;
 
@@ -177,7 +175,6 @@ export default function AiSettingsPanel() {
     }
   }, [authLoading, user, fetchSettings]);
 
-  // Save settings
   const handleSave = async () => {
     if (!settings) return;
     setSaving(true);
@@ -203,7 +200,6 @@ export default function AiSettingsPanel() {
         return;
       }
 
-      // Record audit log entry for settings change
       await insforge.database
         .from('audit_logs')
         .insert([{
@@ -226,7 +222,6 @@ export default function AiSettingsPanel() {
     }
   };
 
-  // Keyword management
   const addKeyword = () => {
     const trimmed = keywordInput.trim().toLowerCase();
     if (trimmed && !escalationKeywords.includes(trimmed)) {
@@ -247,40 +242,39 @@ export default function AiSettingsPanel() {
   };
 
   if (authLoading || loading) {
-    return <p className="text-body-md text-gray-500">Loading settings…</p>;
+    return <p className="text-[14px] text-[var(--m03-fg-2)]">Loading settings…</p>;
   }
 
   if (!user) {
-    return <p className="text-body-md text-red-600">Please sign in to manage AI settings.</p>;
+    return <p className="text-[14px] text-[var(--m03-red)]">Please sign in to manage AI settings.</p>;
   }
 
   if (!settings) {
     return (
       <div>
-        <p className="text-body-md text-gray-500">
+        <p className="text-[14px] text-[var(--m03-fg-2)]">
           No AI settings found for your organization. Please create an organization first.
         </p>
-        {error && <p className="mt-2 text-body-md text-red-600">{error}</p>}
+        {error && <p className="mt-2 text-[14px] text-[var(--m03-red)]">{error}</p>}
       </div>
     );
   }
 
   return (
     <div>
-      {/* Status messages */}
       {error && (
-        <div className="mb-4 rounded-md bg-red-50 border border-red-200 p-3" role="alert">
-          <p className="text-body-md text-red-700">{error}</p>
+        <div className="mb-4 rounded border border-[var(--m03-red-line)] bg-[var(--m03-red-fill)] p-3" role="alert">
+          <p className="text-[14px] text-[var(--m03-red)]">{error}</p>
         </div>
       )}
       {success && (
-        <div className="mb-4 rounded-md bg-green-50 border border-green-200 p-3" role="status">
-          <p className="text-body-md text-green-700">{success}</p>
+        <div className="mb-4 rounded border border-[var(--m03-green-line)] bg-[var(--m03-green-fill)] p-3" role="status">
+          <p className="text-[14px] text-[var(--m03-green)]">{success}</p>
         </div>
       )}
 
       <form
-        className="space-y-element-gap"
+        className="flex flex-col gap-3"
         onSubmit={(e) => {
           e.preventDefault();
           handleSave();
@@ -290,20 +284,19 @@ export default function AiSettingsPanel() {
         <Card
           header={
             <div>
-              <h2 className="text-headline-sm text-gray-900">AI Mode</h2>
-              <p className="mt-1 text-body-md text-gray-500">Choose how the AI handles inbound messages.</p>
+              <h2 className="text-[18px] font-semibold tracking-tight text-[var(--m03-fg)]">AI Mode</h2>
+              <p className="mt-1 text-[13px] text-[var(--m03-fg-2)]">Choose how the AI handles inbound messages.</p>
             </div>
           }
-          className="border-ai-200"
         >
-          <div className="space-y-2">
+          <div className="flex flex-col gap-2">
             {AI_MODE_OPTIONS.map((option) => (
               <label
                 key={option.value}
                 className={`flex cursor-pointer items-start rounded-md border p-3 transition-colors ${
                   aiMode === option.value
-                    ? 'border-ai-200 bg-ai-50'
-                    : 'border-surface-border hover:bg-gray-50'
+                    ? 'border-[var(--m03-fg)] bg-[var(--m03-line-2)]'
+                    : 'border-[var(--m03-line)] hover:bg-[var(--m03-line-2)]'
                 }`}
               >
                 <input
@@ -312,11 +305,20 @@ export default function AiSettingsPanel() {
                   value={option.value}
                   checked={aiMode === option.value}
                   onChange={() => setAiMode(option.value)}
-                  className="mt-0.5 h-4 w-4 text-ai-700 focus:ring-ai-500"
+                  className="mt-0.5 h-4 w-4 accent-[var(--m03-fg)] focus:ring-[var(--m03-fg)]"
                 />
                 <span className="ml-3">
-                  <span className="block text-body-md font-medium text-gray-900">{option.label}</span>
-                  <span className="block text-body-sm text-gray-500">{option.description}</span>
+                  <span className="block text-[14px] font-medium text-[var(--m03-fg)]">{option.label}</span>
+                  <span
+                    className={cn(
+                      'block text-[12px]',
+                      aiMode === option.value
+                        ? 'text-[var(--m03-fg)]'
+                        : 'text-[var(--m03-fg-2)]',
+                    )}
+                  >
+                    {option.description}
+                  </span>
                 </span>
               </label>
             ))}
@@ -327,17 +329,16 @@ export default function AiSettingsPanel() {
         <Card
           header={
             <div>
-              <h2 className="text-headline-sm text-gray-900">Model Selection</h2>
-              <p className="mt-1 text-body-md text-gray-500">Select the LLM model for AI responses.</p>
+              <h2 className="text-[18px] font-semibold tracking-tight text-[var(--m03-fg)]">Model Selection</h2>
+              <p className="mt-1 text-[13px] text-[var(--m03-fg-2)]">Select the LLM model for AI responses.</p>
             </div>
           }
-          className="border-ai-200"
         >
           <select
             id="model-select"
             value={model}
             onChange={(e) => setModel(e.target.value)}
-            className="block w-full rounded border border-ai-200 bg-ai-50 px-3 py-2 text-body-md text-ai-700 focus:border-ai-500 focus:outline-none focus:ring-2 focus:ring-ai-200 focus:ring-offset-1"
+            className="block w-full rounded-md border border-[var(--m03-line)] bg-white px-3 py-2 text-[13px] text-[var(--m03-fg)] focus:border-[var(--m03-fg)] focus:outline-none focus:ring-1 focus:ring-[var(--m03-fg)]"
           >
             {MODEL_OPTIONS.map((m) => (
               <option key={m} value={m}>
@@ -351,14 +352,13 @@ export default function AiSettingsPanel() {
         <Card
           header={
             <div>
-              <h2 className="text-headline-sm text-gray-900">Confidence Threshold</h2>
-              <p className="mt-1 text-body-md text-gray-500">
+              <h2 className="text-[18px] font-semibold tracking-tight text-[var(--m03-fg)]">Confidence Threshold</h2>
+              <p className="mt-1 text-[13px] text-[var(--m03-fg-2)]">
                 Minimum confidence score for auto-replies (0.0 – 1.0). Current:{' '}
-                <span className="font-medium text-ai-700">{confidenceThreshold.toFixed(2)}</span>
+                <span className="font-medium tabular-nums text-[var(--m03-fg)]">{confidenceThreshold.toFixed(2)}</span>
               </p>
             </div>
           }
-          className="border-ai-200"
         >
           <input
             id="confidence-threshold"
@@ -368,13 +368,13 @@ export default function AiSettingsPanel() {
             step="0.01"
             value={confidenceThreshold}
             onChange={(e) => setConfidenceThreshold(parseFloat(e.target.value))}
-            className="w-full accent-ai-500"
+            className="w-full accent-[var(--m03-fg)]"
             aria-valuemin={0}
             aria-valuemax={1}
             aria-valuenow={confidenceThreshold}
             aria-label="Confidence threshold"
           />
-          <div className="mt-1 flex justify-between text-label-sm text-gray-400">
+          <div className="mt-1 flex justify-between font-mono text-[10px] text-[var(--m03-fg-3)]">
             <span>0.00</span>
             <span>0.50</span>
             <span>1.00</span>
@@ -385,8 +385,8 @@ export default function AiSettingsPanel() {
         <Card
           header={
             <div>
-              <h2 className="text-headline-sm text-gray-900">Context Window</h2>
-              <p className="mt-1 text-body-md text-gray-500">
+              <h2 className="text-[18px] font-semibold tracking-tight text-[var(--m03-fg)]">Context Window</h2>
+              <p className="mt-1 text-[13px] text-[var(--m03-fg-2)]">
                 Number of recent messages to include in AI context.
               </p>
             </div>
@@ -399,7 +399,7 @@ export default function AiSettingsPanel() {
             max="100"
             value={contextWindowSize}
             onChange={(e) => setContextWindowSize(parseInt(e.target.value, 10) || 1)}
-            className="block w-32 rounded border border-surface-border px-3 py-2 text-body-md focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 focus:ring-offset-1"
+            className="block w-32 rounded-md border border-[var(--m03-line)] bg-white px-3 py-2 text-[14px] text-[var(--m03-fg)] focus:border-[var(--m03-fg)] focus:outline-none focus:ring-1 focus:ring-[var(--m03-fg)]"
             aria-label="Context window size"
           />
         </Card>
@@ -408,13 +408,12 @@ export default function AiSettingsPanel() {
         <Card
           header={
             <div>
-              <h2 className="text-headline-sm text-gray-900">System Prompt</h2>
-              <p className="mt-1 text-body-md text-gray-500">
+              <h2 className="text-[18px] font-semibold tracking-tight text-[var(--m03-fg)]">System Prompt</h2>
+              <p className="mt-1 text-[13px] text-[var(--m03-fg-2)]">
                 Custom instructions for the AI agent. Leave blank for default behavior.
               </p>
             </div>
           }
-          className="border-ai-200"
         >
           <textarea
             id="system-prompt"
@@ -422,7 +421,7 @@ export default function AiSettingsPanel() {
             value={systemPrompt}
             onChange={(e) => setSystemPrompt(e.target.value)}
             placeholder="You are a helpful customer support agent…"
-            className="block w-full rounded border border-ai-200 bg-ai-50 px-3 py-2 text-body-md text-ai-700 placeholder:text-ai-700/40 focus:border-ai-500 focus:outline-none focus:ring-2 focus:ring-ai-200 focus:ring-offset-1"
+            className="block w-full rounded-md border border-[var(--m03-line)] bg-white px-3 py-2 text-[14px] text-[var(--m03-fg)] placeholder:text-[var(--m03-fg-3)] focus:border-[var(--m03-fg)] focus:outline-none focus:ring-1 focus:ring-[var(--m03-fg)]"
           />
         </Card>
 
@@ -430,8 +429,8 @@ export default function AiSettingsPanel() {
         <Card
           header={
             <div>
-              <h2 className="text-headline-sm text-gray-900">Escalation Keywords</h2>
-              <p className="mt-1 text-body-md text-gray-500">
+              <h2 className="text-[18px] font-semibold tracking-tight text-[var(--m03-fg)]">Escalation Keywords</h2>
+              <p className="mt-1 text-[13px] text-[var(--m03-fg-2)]">
                 Messages containing these keywords will be escalated to a human agent.
               </p>
             </div>
@@ -445,7 +444,7 @@ export default function AiSettingsPanel() {
               onChange={(e) => setKeywordInput(e.target.value)}
               onKeyDown={handleKeywordKeyDown}
               placeholder="Type a keyword and press Enter"
-              className="block flex-1 rounded border border-surface-border px-3 py-2 text-body-md placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 focus:ring-offset-1"
+              className="block flex-1 rounded-md border border-[var(--m03-line)] bg-white px-3 py-2 text-[14px] text-[var(--m03-fg)] placeholder:text-[var(--m03-fg-3)] focus:border-[var(--m03-fg)] focus:outline-none focus:ring-1 focus:ring-[var(--m03-fg)]"
             />
             <Button type="button" variant="secondary" size="md" onClick={addKeyword}>
               Add
@@ -457,13 +456,13 @@ export default function AiSettingsPanel() {
                 <span
                   key={kw}
                   role="listitem"
-                  className="inline-flex items-center gap-1 rounded-full bg-ai-50 border border-ai-200 px-3 py-1 text-xs font-medium text-ai-700"
+                  className="inline-flex items-center gap-1 rounded-md border border-[var(--m03-line)] bg-[var(--m03-line-2)] px-2.5 py-1 font-mono text-[10px] font-semibold uppercase tracking-[0.04em] text-[var(--m03-fg)]"
                 >
                   {kw}
                   <button
                     type="button"
                     onClick={() => removeKeyword(kw)}
-                    className="ml-1 inline-flex h-4 w-4 items-center justify-center rounded-full text-ai-700 hover:bg-ai-200 hover:text-ai-900 focus:outline-none focus:ring-2 focus:ring-ai-500"
+                    className="ml-1 inline-flex h-4 w-4 cursor-pointer items-center justify-center rounded text-[var(--m03-fg-2)] hover:bg-[var(--m03-line)] hover:text-[var(--m03-fg)] focus:outline-none focus:ring-1 focus:ring-[var(--m03-fg)]"
                     aria-label={`Remove keyword ${kw}`}
                   >
                     ×
@@ -475,7 +474,7 @@ export default function AiSettingsPanel() {
         </Card>
 
         {/* Save Button */}
-        <div className="flex items-center gap-3 border-t border-surface-border pt-6">
+        <div className="flex items-center gap-3 border-t border-[var(--m03-line)] pt-4">
           <Button type="submit" variant="primary" size="md" disabled={saving}>
             {saving ? 'Saving…' : 'Save Changes'}
           </Button>

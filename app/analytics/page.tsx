@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { insforge } from '@/lib/insforge';
-import { DashboardShell } from '@/components/DashboardShell';
+import { AppShell } from '@/components/layout';
 import { Pill } from '@/components/ui';
 import { useAuth } from '@/lib/auth-context';
 import { useOrgMembership, useOrganization } from '@/lib/queries';
@@ -219,12 +219,8 @@ export default function AnalyticsPage() {
   const subline = `${endDate}${org?.name ? ` · ${org.name} workspace` : ''}`;
 
   return (
-    <DashboardShell>
-      <div
-        style={{
-          fontFamily: 'var(--font-inter), Inter, system-ui, -apple-system, sans-serif',
-        }}
-      >
+    <AppShell>
+      <div>
         <div className="mb-5 flex items-center justify-between">
           <div>
             <h1 className="m-0 text-[24px] font-medium tracking-[-0.02em]">Analytics</h1>
@@ -263,7 +259,7 @@ export default function AnalyticsPage() {
         </div>
 
         {error && (
-          <div className="mb-4 rounded border border-red-200 bg-red-50 p-3 text-[13px] text-red-700">
+          <div className="mb-4 rounded border border-[var(--m03-red-line)] bg-[var(--m03-red-fill)] p-3 text-[13px] text-[var(--m03-red)]">
             {error}
           </div>
         )}
@@ -349,7 +345,7 @@ export default function AnalyticsPage() {
           )
         )}
       </div>
-    </DashboardShell>
+    </AppShell>
   );
 }
 

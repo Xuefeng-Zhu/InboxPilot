@@ -7,7 +7,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth-context';
 import { useKnowledgeDoc, queryKeys } from '@/lib/queries';
 import { insforge } from '@/lib/insforge';
-import { DashboardShell } from '@/components/DashboardShell';
+import { AppShell } from '@/components/layout';
 import { Tag } from '@/components/ui';
 import { MarkdownEditor } from '@/components/knowledge/MarkdownEditor';
 import { MarkdownRenderer } from '@/components/knowledge/MarkdownRenderer';
@@ -223,16 +223,16 @@ export default function KnowledgeDetailPage({ params }: { params: Promise<{ id: 
 
   if (isLoading) {
     return (
-      <DashboardShell>
+      <AppShell>
         <p className="text-[13px] text-[var(--m03-fg-2)]">Loading document…</p>
-      </DashboardShell>
+      </AppShell>
     );
   }
 
   if (error || !doc) {
     return (
-      <DashboardShell>
-        <p className="text-[13px] text-red-600">{error?.message ?? 'Document not found.'}</p>
+      <AppShell>
+        <p className="text-[13px] text-[var(--m03-red)]">{error?.message ?? 'Document not found.'}</p>
         <button
           type="button"
           onClick={() => router.push('/knowledge')}
@@ -240,17 +240,13 @@ export default function KnowledgeDetailPage({ params }: { params: Promise<{ id: 
         >
           ← Back to Knowledge
         </button>
-      </DashboardShell>
+      </AppShell>
     );
   }
 
   return (
-    <DashboardShell>
-      <div
-        style={{
-          fontFamily: 'var(--font-inter), Inter, system-ui, -apple-system, sans-serif',
-        }}
-      >
+    <AppShell>
+      <div>
         {/* Breadcrumb */}
         <div className="mb-2 flex items-center gap-2 text-[12px] text-[var(--m03-fg-2)]">
           <Link href="/knowledge" className="text-[var(--m03-fg-2)] hover:text-[var(--m03-fg)]">
@@ -273,7 +269,7 @@ export default function KnowledgeDetailPage({ params }: { params: Promise<{ id: 
               <h1 className="m-0 text-[24px] font-medium tracking-[-0.02em]">{doc.title}</h1>
             )}
             <p className="mt-1.5 mb-0 flex items-center gap-2 text-[13px] text-[var(--m03-fg-2)]">
-              <span className="capitalize">{doc.source_type === 'url' || doc.source_type === 'file' ? doc.source_type : 'Manual'}</span>
+              <span className="capitalize">{doc.source_type.split('_').map((p: string) => p.charAt(0).toUpperCase() + p.slice(1)).join(' ')}</span>
               <span>·</span>
               <span>last updated {relativeTime(doc.updated_at)}</span>
               <span>·</span>
@@ -334,12 +330,12 @@ export default function KnowledgeDetailPage({ params }: { params: Promise<{ id: 
         </div>
 
         {saveError && (
-          <div className="mb-4 rounded border border-red-200 bg-red-50 p-3 text-[13px] text-red-700">
+          <div className="mb-4 rounded border border-[var(--m03-red-line)] bg-[var(--m03-red-fill)] p-3 text-[13px] text-[var(--m03-red)]">
             {saveError}
           </div>
         )}
         {success && (
-          <div className="mb-4 rounded border border-green-200 bg-green-50 p-3 text-[13px] text-green-700">
+          <div className="mb-4 rounded border border-[var(--m03-green-line)] bg-[var(--m03-green-fill)] p-3 text-[13px] text-[var(--m03-green)]">
             {success}
           </div>
         )}
@@ -374,7 +370,7 @@ export default function KnowledgeDetailPage({ params }: { params: Promise<{ id: 
             )}
 
             {doc.status === 'failed' && doc.error_message && (
-              <div className="mt-4 rounded border border-red-200 bg-red-50 p-3 text-[13px] text-red-700">
+              <div className="mt-4 rounded border border-[var(--m03-red-line)] bg-[var(--m03-red-fill)] p-3 text-[13px] text-[var(--m03-red)]">
                 {doc.error_message}
               </div>
             )}
@@ -415,7 +411,7 @@ export default function KnowledgeDetailPage({ params }: { params: Promise<{ id: 
           </aside>
         </div>
       </div>
-    </DashboardShell>
+    </AppShell>
   );
 }
 

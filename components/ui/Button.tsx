@@ -5,26 +5,29 @@ import { cn } from './cn';
 
 export interface ButtonProps
   extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: 'primary' | 'secondary' | 'ghost' | 'ai';
+  variant?: 'primary' | 'secondary' | 'ghost';
   size?: 'sm' | 'md' | 'lg';
   children: React.ReactNode;
   className?: string;
 }
 
 const variantClasses: Record<NonNullable<ButtonProps['variant']>, string> = {
-  primary: 'bg-primary text-white hover:bg-primary-600 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:ring-offset-1',
-  secondary: 'bg-white border border-surface-border text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:ring-offset-1',
-  ghost: 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:ring-offset-1',
-  ai: 'bg-ai-50 border border-ai-200 text-ai-700 hover:bg-ai-100 focus:outline-none focus:ring-2 focus:ring-ai/20 focus:ring-offset-1',
+  primary:
+    'border border-[var(--m03-fg)] bg-[var(--m03-fg)] text-[var(--m03-bg)] hover:bg-[var(--m03-fg-2)] focus:outline-none focus:ring-1 focus:ring-[var(--m03-fg)]',
+  secondary:
+    'border border-[var(--m03-line)] bg-white text-[var(--m03-fg)] hover:bg-[var(--m03-line-2)] focus:outline-none focus:ring-1 focus:ring-[var(--m03-fg)]',
+  ghost:
+    'border border-transparent bg-transparent text-[var(--m03-fg-2)] hover:bg-[var(--m03-line-2)] hover:text-[var(--m03-fg)] focus:outline-none focus:ring-1 focus:ring-[var(--m03-fg)]',
 };
 
 const sizeClasses: Record<NonNullable<ButtonProps['size']>, string> = {
-  sm: 'h-8 px-3 text-sm',
-  md: 'h-9 px-4 text-sm',
-  lg: 'h-10 px-5 text-base',
+  sm: 'h-7 px-3 text-[12px]',
+  md: 'h-8 px-3.5 text-[13px]',
+  lg: 'h-10 px-4 text-[14px]',
 };
 
-const baseClasses = 'inline-flex items-center justify-center rounded font-medium transition-colors duration-150 cursor-pointer';
+const baseClasses =
+  'inline-flex items-center justify-center rounded-md font-medium transition-colors duration-150 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50';
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
   ({ variant = 'primary', size = 'md', disabled, className, children, ...props }, ref) => {
@@ -32,19 +35,13 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       <button
         ref={ref}
         disabled={disabled}
-        className={cn(
-          baseClasses,
-          variantClasses[variant],
-          sizeClasses[size],
-          disabled && 'opacity-50 pointer-events-none cursor-not-allowed',
-          className
-        )}
+        className={cn(baseClasses, variantClasses[variant], sizeClasses[size], className)}
         {...props}
       >
         {children}
       </button>
     );
-  }
+  },
 );
 
 Button.displayName = 'Button';

@@ -152,11 +152,20 @@ export default function WidgetChatPage() {
   return (
     <Suspense
       fallback={
-        <div style={{ display: 'flex', minHeight: '100vh', flexDirection: 'column', background: '#ffffff', color: '#111827' }}>
-          <div style={{ padding: '14px 16px', background: '#4F46E5', color: '#ffffff', fontFamily: 'system-ui, sans-serif', fontSize: 15, fontWeight: 600 }}>
+        <div style={{ display: 'flex', minHeight: '100vh', flexDirection: 'column', background: 'var(--m03-bg)', color: 'var(--m03-fg)' }}>
+          <div
+            style={{
+              padding: '14px 16px',
+              background: 'var(--wchat-color, var(--m03-fg))',
+              color: 'var(--m03-bg)',
+              fontFamily: 'var(--font-inter), Inter, system-ui, sans-serif',
+              fontSize: 15,
+              fontWeight: 600,
+            }}
+          >
             <span>Chat with us</span>
           </div>
-          <div style={{ flex: 1, background: '#F9FAFB' }} />
+          <div style={{ flex: 1, background: 'var(--m03-bg)' }} />
         </div>
       }
     >
@@ -337,26 +346,26 @@ function WidgetChatContent() {
     <>
       <style>{`
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        .wchat-root { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; height: 100vh; display: flex; flex-direction: column; background: #fff; }
-        .wchat-header { padding: 12px 16px; border-bottom: 1px solid #e5e7eb; display: flex; align-items: center; gap: 8px; }
+        .wchat-root { font-family: var(--font-inter), Inter, system-ui, -apple-system, sans-serif; height: 100vh; display: flex; flex-direction: column; background: var(--m03-bg); }
+        .wchat-header { padding: 12px 16px; border-bottom: 1px solid var(--m03-line); display: flex; align-items: center; gap: 8px; }
         .wchat-header-dot { width: 8px; height: 8px; border-radius: 50%; }
-        .wchat-header-title { font-size: 14px; font-weight: 600; color: #111827; }
+        .wchat-header-title { font-size: 14px; font-weight: 600; color: var(--m03-fg); }
         .wchat-messages { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
-        .wchat-msg { max-width: 80%; padding: 8px 12px; border-radius: 12px; font-size: 14px; line-height: 1.4; word-wrap: break-word; }
+        .wchat-msg { max-width: 80%; padding: 8px 12px; border-radius: 8px; font-size: 14px; line-height: 1.4; word-wrap: break-word; }
         .wchat-msg-contact { align-self: flex-end; background: var(--wchat-color); color: white; border-bottom-right-radius: 4px; }
-        .wchat-msg-other { align-self: flex-start; background: #f3f4f6; color: #374151; border-bottom-left-radius: 4px; }
-        .wchat-msg-system { align-self: center; background: transparent; color: #9ca3af; font-size: 12px; font-style: italic; }
-        .wchat-composer { padding: 12px 16px; border-top: 1px solid #e5e7eb; display: flex; gap: 8px; }
-        .wchat-composer input { flex: 1; border: 1px solid #e5e7eb; border-radius: 20px; padding: 8px 16px; font-size: 14px; outline: none; }
+        .wchat-msg-other { align-self: flex-start; background: var(--m03-line-2); color: var(--m03-fg-2); border-bottom-left-radius: 4px; }
+        .wchat-msg-system { align-self: center; background: transparent; color: var(--m03-fg-3); font-size: 12px; font-style: italic; }
+        .wchat-composer { padding: 12px 16px; border-top: 1px solid var(--m03-line); display: flex; gap: 8px; }
+        .wchat-composer input { flex: 1; border: 1px solid var(--m03-line); border-radius: 6px; padding: 8px 12px; font-size: 14px; outline: none; }
         .wchat-composer input:focus { border-color: var(--wchat-color); box-shadow: 0 0 0 2px color-mix(in srgb, var(--wchat-color) 20%, transparent); }
-        .wchat-composer button { background: var(--wchat-color); color: white; border: none; border-radius: 50%; width: 36px; height: 36px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+        .wchat-composer button { background: var(--wchat-color); color: white; border: none; border-radius: 6px; width: 36px; height: 36px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
         .wchat-composer button:disabled { opacity: 0.5; cursor: not-allowed; }
-        .wchat-error { padding: 8px 16px; background: #fef2f2; color: #b91c1c; font-size: 12px; text-align: center; }
+        .wchat-error { padding: 8px 16px; background: var(--m03-bg); color: var(--m03-red); border-bottom: 1px solid var(--m03-red-line); font-size: 12px; text-align: center; }
         .wchat-prechat-form { display: flex; flex-direction: column; gap: 12px; padding: 24px 16px; flex: 1; justify-content: center; }
-        .wchat-prechat-title { font-size: 14px; font-weight: 500; color: #374151; text-align: center; margin-bottom: 4px; }
-        .wchat-prechat-input { border: 1px solid #e5e7eb; border-radius: 8px; padding: 10px 14px; font-size: 14px; outline: none; }
+        .wchat-prechat-title { font-size: 14px; font-weight: 500; color: var(--m03-fg-2); text-align: center; margin-bottom: 4px; }
+        .wchat-prechat-input { border: 1px solid var(--m03-line); border-radius: 6px; padding: 10px 14px; font-size: 14px; outline: none; }
         .wchat-prechat-input:focus { border-color: var(--wchat-color); box-shadow: 0 0 0 2px color-mix(in srgb, var(--wchat-color) 20%, transparent); }
-        .wchat-prechat-btn { border: none; border-radius: 8px; padding: 10px 16px; font-size: 14px; font-weight: 500; color: white; cursor: pointer; }
+        .wchat-prechat-btn { border: none; border-radius: 6px; padding: 10px 16px; font-size: 14px; font-weight: 500; color: white; cursor: pointer; }
         .wchat-prechat-btn:hover { opacity: 0.9; }
       `}</style>
       <div className="wchat-root" style={{ '--wchat-color': color } as React.CSSProperties}>

@@ -1,7 +1,7 @@
 'use client';
 
-import { StatusBadge, cn } from '@/components/ui';
-import { AiStateIndicator } from './StatusBadge';
+import { StatusBadge, AiStateIndicator } from '@/components/ui';
+import { cn } from '@/components/ui/cn';
 import type { ConversationStatus, AiState, Channel } from '@support-core/types';
 
 // ---------------------------------------------------------------------------
@@ -57,16 +57,9 @@ function getContactDisplayName(conversation: ConversationRow): string {
   if (contact.name) return contact.name;
   if (channel === 'sms' && contact.phone) return contact.phone;
   if (channel === 'email' && contact.email) return contact.email;
-  if (channel === 'webchat') return contact.email ?? `Visitor #${getShortIdentifier(contact.id)}`;
+  if (channel === 'webchat')
+    return contact.email ?? `Visitor #${getShortIdentifier(contact.id)}`;
   return contact.phone ?? contact.email ?? 'Unknown Contact';
-}
-
-function getConversationTitle(conversation: ConversationRow): string {
-  const subject = conversation.subject ?? conversation.latest_message?.subject;
-  if (subject?.trim()) return subject.trim();
-  if (conversation.channel === 'webchat') return 'Web chat conversation';
-  if (conversation.channel === 'sms') return 'SMS conversation';
-  return 'Email conversation';
 }
 
 function getConversationPreview(conversation: ConversationRow): string {
@@ -76,29 +69,39 @@ function getConversationPreview(conversation: ConversationRow): string {
 }
 
 function getConversationTimestamp(conversation: ConversationRow): string | null {
-  return conversation.last_message_at ?? conversation.latest_message?.created_at ?? conversation.created_at;
+  return (
+    conversation.last_message_at ??
+    conversation.latest_message?.created_at ??
+    conversation.created_at
+  );
 }
 
 function formatTimestamp(dateStr: string | null): string {
   if (!dateStr) return '';
   const date = new Date(dateStr);
+  if (isNaN(date.getTime())) return '';
   const now = new Date();
   const diffMs = now.getTime() - date.getTime();
+  // Future timestamps and timestamps older than 7 days fall through to a
+  // localized "Mon DD" form so the UI never shows blank.
+  if (diffMs < 0) {
+    return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  }
   const diffMins = Math.floor(diffMs / 60_000);
   const diffHours = Math.floor(diffMs / 3_600_000);
   const diffDays = Math.floor(diffMs / 86_400_000);
 
-  if (diffMins < 1) return 'Just now';
-  if (diffMins < 60) return `${diffMins}m ago`;
-  if (diffHours < 24) return `${diffHours}h ago`;
-  if (diffDays < 7) return `${diffDays}d ago`;
+  if (diffMins < 1) return 'now';
+  if (diffMins < 60) return `${diffMins}m`;
+  if (diffHours < 24) return `${diffHours}h`;
+  if (diffDays < 7) return `${diffDays}d`;
   return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
 function channelLabel(channel: Channel): string {
   if (channel === 'sms') return 'SMS';
-  if (channel === 'webchat') return 'Web';
-  return 'Email';
+  if (channel === 'webchat') return 'WEB';
+  return 'EMAIL';
 }
 
 // ---------------------------------------------------------------------------
@@ -119,9 +122,9 @@ export function ConversationItem({
   onSelect,
 }: ConversationItemProps) {
   const displayName = getContactDisplayName(conversation);
-  const title = getConversationTitle(conversation);
   const preview = getConversationPreview(conversation);
   const timestamp = getConversationTimestamp(conversation);
+  const showAiDraftBadge = conversation.ai_state === 'drafted';
 
   return (
     <button
@@ -129,60 +132,54 @@ export function ConversationItem({
       onClick={() => onSelect(conversation.id)}
       aria-current={isSelected ? 'true' : undefined}
       className={cn(
-        'w-full text-left px-4 py-3 border-b border-surface-border/50 transition-colors cursor-pointer',
-        'focus:outline-none focus:ring-2 focus:ring-inset focus:ring-primary',
+        'block w-full cursor-pointer border-b border-[var(--m03-line)] px-4 py-3 text-left transition-colors',
+        'focus:outline-none',
         isSelected
-          ? 'bg-surface-container border-l-[3px] border-l-primary'
-          : 'hover:bg-gray-50 border-l-[3px] border-l-transparent'
+          ? 'border-l-2 border-l-[var(--m03-fg)] bg-[var(--m03-line-2)] pl-[14px]'
+          : 'border-l-2 border-l-transparent hover:bg-[var(--m03-line-2)]',
       )}
     >
-      <div className="flex items-start gap-2">
-        {/* Unread dot */}
+      {/* Row 1: Contact name + timestamp */}
+      <div className="mb-1 flex items-baseline gap-2">
+        <span
+          className={cn(
+            'truncate text-[13px] font-semibold text-[var(--m03-fg)]',
+            'max-w-[180px]',
+          )}
+        >
+          {displayName}
+        </span>
+        <span className="ml-auto font-mono text-[10px] text-[var(--m03-fg-3)]">
+          {formatTimestamp(timestamp)}
+        </span>
+      </div>
+
+      {/* Row 2: Preview (1-line clamp) */}
+      <p className="mb-1.5 line-clamp-1 text-[12px] leading-[1.4] text-[var(--m03-fg-2)]">
+        {preview}
+      </p>
+
+      {/* Row 3: Status badge + channel + AI draft badge */}
+      <div className="flex items-center gap-1.5">
+        <StatusBadge status={conversation.status} />
+        <span className="font-mono text-[9px] uppercase tracking-[0.04em] text-[var(--m03-fg-3)]">
+          {channelLabel(conversation.channel)}
+        </span>
+        {showAiDraftBadge && (
+          <span className="font-mono text-[9px] uppercase tracking-[0.04em] text-[var(--m03-orange)]">
+            AI draft
+          </span>
+        )}
         {isUnread && (
           <span
-            className="mt-2 w-[6px] h-[6px] rounded-full bg-primary shrink-0"
+            className="ml-auto h-1.5 w-1.5 rounded-full bg-[var(--m03-fg)]"
             aria-label="Unread"
           />
         )}
-
-        <div className="min-w-0 flex-1">
-          {/* Row 1: Contact name + timestamp */}
-          <div className="flex items-center justify-between gap-2">
-            <span
-              className={cn(
-                'truncate text-body-md text-gray-900',
-                isUnread && 'font-semibold'
-              )}
-            >
-              {displayName}
-            </span>
-            <span className="shrink-0 text-label-sm text-gray-400">
-              {formatTimestamp(timestamp)}
-            </span>
-          </div>
-
-          {/* Row 2: Subject / preview (bold if unread) */}
-          <p className={cn(
-            'mt-0.5 text-body-sm text-gray-700 truncate',
-            isUnread && 'font-medium'
-          )}>
-            {title}
-          </p>
-
-          {/* Row 3: Preview text */}
-          <p className="mt-0.5 text-body-sm text-gray-500 line-clamp-1">
-            {preview}
-          </p>
-
-          {/* Row 4: Channel badge + Status badge */}
-          <div className="mt-2 flex items-center gap-1.5 flex-wrap">
-            <span className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-label-sm text-gray-600">
-              {channelLabel(conversation.channel)}
-            </span>
-            <StatusBadge status={conversation.status} />
-            <AiStateIndicator aiState={conversation.ai_state} />
-          </div>
-        </div>
+        {/* Hidden helper for the AI state indicator (still exported & used elsewhere) */}
+        <span className="hidden">
+          <AiStateIndicator aiState={conversation.ai_state} />
+        </span>
       </div>
     </button>
   );

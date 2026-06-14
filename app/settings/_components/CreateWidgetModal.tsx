@@ -62,69 +62,72 @@ export function CreateWidgetModal({ orgId, onClose, onCreated }: CreateWidgetMod
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4 p-6" onClick={(e) => e.stopPropagation()}>
-        <h2 className="text-headline-sm text-gray-900 mb-4">Create Widget</h2>
+      <div
+        className="mx-4 w-full max-w-md rounded-lg border border-[var(--m03-line)] bg-white p-6 shadow-level-3"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2 className="m-0 mb-4 text-[18px] font-semibold tracking-tight text-[var(--m03-fg)]">Create Widget</h2>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="flex flex-col gap-3">
           <div>
-            <label htmlFor="widget-name" className="block text-body-sm font-medium text-gray-700 mb-1">Name</label>
+            <label htmlFor="widget-name" className="mb-1 block text-[12px] font-medium text-[var(--m03-fg-2)]">Name</label>
             <input
               id="widget-name"
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="e.g. Marketing site"
-              className="w-full rounded border border-surface-border px-3 py-2 text-body-md focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+              className="w-full rounded-md border border-[var(--m03-line)] bg-white px-3 py-2 text-[13px] focus:border-[var(--m03-fg)] focus:outline-none focus:ring-1 focus:ring-[var(--m03-fg)]"
             />
           </div>
 
           <div>
-            <label htmlFor="widget-domains" className="block text-body-sm font-medium text-gray-700 mb-1">Allowed Domains (one per line)</label>
+            <label htmlFor="widget-domains" className="mb-1 block text-[12px] font-medium text-[var(--m03-fg-2)]">Allowed Domains (one per line)</label>
             <textarea
               id="widget-domains"
               value={domains}
               onChange={(e) => setDomains(e.target.value)}
               placeholder={"example.com\n*.example.com"}
               rows={3}
-              className="w-full rounded border border-surface-border px-3 py-2 text-body-md focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+              className="w-full rounded-md border border-[var(--m03-line)] bg-white px-3 py-2 text-[13px] focus:border-[var(--m03-fg)] focus:outline-none focus:ring-1 focus:ring-[var(--m03-fg)]"
             />
-            <p className="mt-1 text-label-sm text-gray-400">Leave empty to allow all origins (dev only)</p>
+            <p className="mt-1 font-mono text-[10px] text-[var(--m03-fg-3)]">Leave empty to allow all origins (dev only)</p>
           </div>
 
-          <div className="flex gap-4">
+          <div className="flex gap-3">
             <div className="flex-1">
-              <label htmlFor="widget-position" className="block text-body-sm font-medium text-gray-700 mb-1">Position</label>
+              <label htmlFor="widget-position" className="mb-1 block text-[12px] font-medium text-[var(--m03-fg-2)]">Position</label>
               <select
                 id="widget-position"
                 value={position}
                 onChange={(e) => setPosition(e.target.value as 'bottom-right' | 'bottom-left')}
-                className="w-full rounded border border-surface-border px-3 py-2 text-body-md focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                className="w-full rounded-md border border-[var(--m03-line)] bg-white px-3 py-2 text-[13px] focus:border-[var(--m03-fg)] focus:outline-none focus:ring-1 focus:ring-[var(--m03-fg)]"
               >
                 <option value="bottom-right">Bottom Right</option>
                 <option value="bottom-left">Bottom Left</option>
               </select>
             </div>
             <div>
-              <label htmlFor="widget-color" className="block text-body-sm font-medium text-gray-700 mb-1">Color</label>
+              <label htmlFor="widget-color" className="mb-1 block text-[12px] font-medium text-[var(--m03-fg-2)]">Color</label>
               <input
                 id="widget-color"
                 type="color"
                 value={color}
                 onChange={(e) => setColor(e.target.value)}
-                className="h-10 w-14 rounded border border-surface-border cursor-pointer"
+                className="h-10 w-14 cursor-pointer rounded-md border border-[var(--m03-line)]"
               />
             </div>
           </div>
 
           <div>
-            <label htmlFor="widget-greeting" className="block text-body-sm font-medium text-gray-700 mb-1">Greeting</label>
+            <label htmlFor="widget-greeting" className="mb-1 block text-[12px] font-medium text-[var(--m03-fg-2)]">Greeting</label>
             <input
               id="widget-greeting"
               type="text"
               value={greeting}
               onChange={(e) => setGreeting(e.target.value)}
               placeholder="Hi! How can we help?"
-              className="w-full rounded border border-surface-border px-3 py-2 text-body-md focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+              className="w-full rounded-md border border-[var(--m03-line)] bg-white px-3 py-2 text-[13px] focus:border-[var(--m03-fg)] focus:outline-none focus:ring-1 focus:ring-[var(--m03-fg)]"
             />
           </div>
 
@@ -134,23 +137,27 @@ export function CreateWidgetModal({ orgId, onClose, onCreated }: CreateWidgetMod
               type="checkbox"
               checked={preChatEnabled}
               onChange={(e) => setPreChatEnabled(e.target.checked)}
-              className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+              className="h-4 w-4 cursor-pointer rounded border-[var(--m03-line)] accent-[var(--m03-fg)]"
             />
-            <label htmlFor="widget-prechat" className="text-body-sm text-gray-700">Ask for name/email before first message</label>
+            <label htmlFor="widget-prechat" className="text-[12px] text-[var(--m03-fg-2)]">Ask for name/email before first message</label>
           </div>
 
           {error && (
-            <div role="alert" className="rounded-md bg-red-50 p-3 text-sm text-red-700">{error}</div>
+            <div role="alert" className="rounded-md border border-[var(--m03-red-line)] bg-[var(--m03-red-fill)] p-3 text-[13px] text-[var(--m03-red)]">{error}</div>
           )}
 
-          <div className="flex justify-end gap-3 pt-2">
-            <button type="button" onClick={onClose} className="rounded px-4 py-2 text-body-sm text-gray-600 hover:bg-gray-100">
+          <div className="flex justify-end gap-2 pt-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-md border border-[var(--m03-line)] bg-white px-3 py-1.5 text-[13px] font-medium text-[var(--m03-fg)] transition-colors hover:bg-[var(--m03-line-2)]"
+            >
               Cancel
             </button>
             <button
               type="submit"
               disabled={submitting}
-              className="rounded bg-primary px-4 py-2 text-body-sm font-medium text-white hover:bg-primary-600 disabled:opacity-50"
+              className="rounded-md border border-[var(--m03-fg)] bg-[var(--m03-fg)] px-3 py-1.5 text-[13px] font-medium text-[var(--m03-bg)] transition-colors hover:bg-[var(--m03-fg-2)] disabled:opacity-50"
             >
               {submitting ? 'Creating…' : 'Create Widget'}
             </button>

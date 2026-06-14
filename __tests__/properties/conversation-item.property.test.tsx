@@ -101,11 +101,11 @@ describe('Feature: stitch-ui-implementation, Property 7: Conversation item infor
           />,
         );
 
-        // The timestamp should be rendered as text content (e.g., "2m ago", "3d ago", etc.)
+        // The timestamp should be rendered as text content (e.g., "2m", "3d", or a date like "Jan 5")
         const textContent = container.textContent ?? '';
-        // Timestamp patterns: "Just now", "Xm ago", "Xh ago", "Xd ago", or a date like "Jan 5"
+        // M03 timestamp patterns: "now", "Xm", "Xh", "Xd", or a date like "Jan 5"
         const hasTimestamp =
-          /Just now|\d+m ago|\d+h ago|\d+d ago|[A-Z][a-z]{2} \d+/.test(textContent);
+          /\bnow\b|\b\d+m\b|\b\d+h\b|\b\d+d\b|[A-Z][a-z]{2} \d+/.test(textContent);
         expect(hasTimestamp).toBe(true);
       }),
       { numRuns: 100 },
@@ -127,7 +127,9 @@ describe('Feature: stitch-ui-implementation, Property 7: Conversation item infor
 
         const textContent = container.textContent ?? '';
         const hasChannelIndicator =
-          textContent.includes('Email') || textContent.includes('SMS') || textContent.includes('Web');
+          textContent.includes('EMAIL') ||
+          textContent.includes('SMS') ||
+          textContent.includes('WEB');
         expect(hasChannelIndicator).toBe(true);
       }),
       { numRuns: 100 },
@@ -175,8 +177,8 @@ describe('Feature: stitch-ui-implementation, Property 7: Conversation item infor
     );
 
     expect(getByText('Visitor #44444444')).toBeTruthy();
-    expect(getByText('Just now')).toBeTruthy();
-    expect(getByText('Web chat conversation')).toBeTruthy();
+    expect(getByText('now')).toBeTruthy();
+    expect(queryByText('Web chat conversation')).toBeNull();
     expect(getByText('order status')).toBeTruthy();
     expect(queryByText('No subject')).toBeNull();
     expect(queryByText('No preview available')).toBeNull();
@@ -195,8 +197,6 @@ describe('Feature: stitch-ui-implementation, Property 7: Conversation item infor
           />,
         );
 
-        // The StatusBadge renders with rounded-full class
-        const badges = container.querySelectorAll('.rounded-full');
         // At least one badge should have status text content
         const statusTexts = ['Open', 'Pending', 'Escalated', 'Resolved'];
         const textContent = container.textContent ?? '';
@@ -207,7 +207,7 @@ describe('Feature: stitch-ui-implementation, Property 7: Conversation item infor
     );
   });
 
-  it('shows unread dot (bg-primary) and bold text (font-semibold) when isUnread=true', () => {
+  it('shows unread dot (bg-[var(--m03-fg)]) and bold text (font-semibold) when isUnread=true', () => {
     fc.assert(
       fc.property(conversationArb, isSelectedArb, (conversation, isSelected) => {
         const onSelect = vi.fn();
@@ -220,8 +220,8 @@ describe('Feature: stitch-ui-implementation, Property 7: Conversation item infor
           />,
         );
 
-        // Check for unread dot: element with bg-primary class
-        const dotElement = container.querySelector('.bg-primary');
+        // Check for unread dot: element with rounded-full and 6x6 dimensions
+        const dotElement = container.querySelector('span[aria-label="Unread"]');
         expect(dotElement).not.toBeNull();
 
         // Check for bold text: element with font-semibold class
@@ -232,7 +232,7 @@ describe('Feature: stitch-ui-implementation, Property 7: Conversation item infor
     );
   });
 
-  it('shows active indicator styling (bg-surface-container and border-l-primary) when isSelected=true', () => {
+  it('shows active indicator styling (bg-[var(--m03-line-2)] and border-l-[var(--m03-fg)]) when isSelected=true', () => {
     fc.assert(
       fc.property(conversationArb, isUnreadArb, (conversation, isUnread) => {
         const onSelect = vi.fn();
@@ -245,12 +245,12 @@ describe('Feature: stitch-ui-implementation, Property 7: Conversation item infor
           />,
         );
 
-        // The container button should have bg-surface-container and border-l-primary classes
+        // The container button should have the active styling
         const button = container.querySelector('button');
         expect(button).not.toBeNull();
         const className = button!.className;
-        expect(className).toContain('bg-surface-container');
-        expect(className).toContain('border-l-primary');
+        expect(className).toContain('border-l-[var(--m03-fg)]');
+        expect(className).toContain('bg-[var(--m03-line-2)]');
       }),
       { numRuns: 100 },
     );

@@ -7,15 +7,13 @@ import {
   MESSAGE_PAGE_SIZE,
   useConversation,
   useInfiniteMessages,
-  useAiDecision,
   queryKeys,
 } from '@/lib/queries';
 import { useRealtime } from '@/lib/use-realtime';
 import { MessageBubble, type MessageRow } from './MessageBubble';
 import { ReplyComposer } from './ReplyComposer';
 import { AiDraftPanel } from './AiDraftPanel';
-import { ContactDetails } from './ContactDetails';
-import { StatusBadge } from './StatusBadge';
+import { StatusBadge, AiStateIndicator } from '@/components/ui';
 import type { ConversationRow } from './ConversationItem';
 
 // ---------------------------------------------------------------------------
@@ -24,13 +22,18 @@ import type { ConversationRow } from './ConversationItem';
 
 interface MessageThreadProps {
   conversationId: string;
+  /** Right-panel trigger — wires an external "Approve & send" to pre-fill composer. */
+  onApproveAiDraft?: (text: string) => void;
+  /** Toggles the right-panel drawer on <xl. */
+  onToggleRightPanel?: () => void;
 }
 
 function getRealtimeConversationId(payload: Record<string, unknown>): string | null {
   const nestedMessage = payload.message;
-  const message = nestedMessage && typeof nestedMessage === 'object'
-    ? nestedMessage as Record<string, unknown>
-    : null;
+  const message =
+    nestedMessage && typeof nestedMessage === 'object'
+      ? (nestedMessage as Record<string, unknown>)
+      : null;
 
   const candidate =
     payload.conversation_id ??
@@ -41,10 +44,14 @@ function getRealtimeConversationId(payload: Record<string, unknown>): string | n
   return typeof candidate === 'string' ? candidate : null;
 }
 
-export function MessageThread({ conversationId }: MessageThreadProps) {
+export function MessageThread({
+  conversationId,
+  onApproveAiDraft,
+  onToggleRightPanel,
+}: MessageThreadProps) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
-  const [rightTab, setRightTab] = useState<'insight' | 'customer' | 'audit'>('insight');
+  const [prefillBody, setPrefillBody] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const topSentinelRef = useRef<HTMLDivElement>(null);
   const hasInitialScrollRef = useRef(false);
@@ -53,7 +60,8 @@ export function MessageThread({ conversationId }: MessageThreadProps) {
   const previousScrollHeightRef = useRef(0);
   const previousScrollTopRef = useRef(0);
 
-  const { data: conversationData, isLoading: convoLoading, error: convoError } = useConversation(conversationId);
+  const { data: conversationData, isLoading: convoLoading, error: convoError } =
+    useConversation(conversationId);
   const {
     items: messagesData,
     isInitialLoading: msgsLoading,
@@ -66,6 +74,16 @@ export function MessageThread({ conversationId }: MessageThreadProps) {
 
   const conversation = conversationData as ConversationRow | undefined;
   const messages = (messagesData ?? []) as unknown as MessageRow[];
+
+  // If the parent exposes an approve handler, give AiDraftPanel a way to pre-fill
+  // the composer through it.
+  const handlePrefillFromDraft = (text: string) => {
+    if (onApproveAiDraft) {
+      onApproveAiDraft(text);
+    } else {
+      setPrefillBody(text);
+    }
+  };
 
   useEffect(() => {
     hasInitialScrollRef.current = false;
@@ -114,8 +132,6 @@ export function MessageThread({ conversationId }: MessageThreadProps) {
     return () => observer.disconnect();
   }, [fetchNextPage, hasNextPage, isFetchNextPageError, isFetchingNextPage]);
 
-  // Preserve top position when older messages prepend, otherwise keep the user
-  // at the bottom only on first load or when they were already near the bottom.
   useEffect(() => {
     if (msgsLoading || !scrollRef.current) return;
 
@@ -140,7 +156,6 @@ export function MessageThread({ conversationId }: MessageThreadProps) {
     }
   }, [conversationId, messages.length, msgsLoading]);
 
-  // Realtime: invalidate queries on new messages
   useRealtime({
     onNewMessage: (payload) => {
       const realtimeConversationId = getRealtimeConversationId(payload);
@@ -149,7 +164,9 @@ export function MessageThread({ conversationId }: MessageThreadProps) {
       if (scrollRef.current) {
         nearBottomRef.current = isNearBottom(scrollRef.current);
       }
-      queryClient.invalidateQueries({ queryKey: queryKeys.messagesInfinite(conversationId, MESSAGE_PAGE_SIZE) });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.messagesInfinite(conversationId, MESSAGE_PAGE_SIZE),
+      });
       queryClient.invalidateQueries({ queryKey: queryKeys.conversation(conversationId) });
       queryClient.invalidateQueries({ queryKey: queryKeys.aiDecision(conversationId) });
     },
@@ -170,7 +187,7 @@ export function MessageThread({ conversationId }: MessageThreadProps) {
   if (isLoading) {
     return (
       <div className="flex flex-1 items-center justify-center p-8">
-        <div className="flex items-center gap-2 text-body-sm text-gray-500">
+        <div className="flex items-center gap-2 text-[13px] text-[var(--m03-fg-2)]">
           <svg className="h-4 w-4 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" aria-hidden="true">
             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
@@ -184,7 +201,7 @@ export function MessageThread({ conversationId }: MessageThreadProps) {
   if (convoError || (msgsError && messages.length === 0)) {
     return (
       <div className="flex flex-1 items-center justify-center p-8">
-        <div role="alert" className="rounded bg-red-50 p-4 text-body-sm text-red-700">
+        <div role="alert" className="rounded bg-[var(--m03-red-fill)] p-4 text-[13px] text-[var(--m03-red)]">
           {convoError?.message ?? msgsError?.message}
         </div>
       </div>
@@ -193,272 +210,121 @@ export function MessageThread({ conversationId }: MessageThreadProps) {
 
   if (!conversation) return null;
 
-  const contactName = conversation.contacts?.name
-    ?? conversation.contacts?.email
-    ?? conversation.contacts?.phone
-    ?? 'Conversation';
-
-  const contactEmail = conversation.contacts?.email ?? '';
-  const contactInitials = contactName.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+  const contactName = conversation.contacts?.name ?? 'Conversation';
+  const subject = conversation.subject ?? `${conversation.channel} conversation`;
+  const channelPhone =
+    conversation.channel === 'sms'
+      ? conversation.contacts?.phone ?? ''
+      : conversation.channel === 'email'
+        ? conversation.contacts?.email ?? ''
+        : conversation.channel;
 
   return (
-    <div className="flex flex-1 h-full overflow-hidden">
-      {/* Center: messages + composer */}
-      <div className="flex flex-1 flex-col min-w-0">
-        {/* Thread header */}
-        <header className="flex items-center gap-3 border-b border-surface-border bg-white px-4 py-3">
-          <div className="flex items-center justify-center w-9 h-9 rounded-full bg-primary-50 text-primary text-label-md font-semibold shrink-0">
-            {contactInitials}
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2">
-              <h2 className="text-body-md font-semibold text-gray-900 truncate">{contactName}</h2>
-              <StatusBadge status={conversation.status} />
-            </div>
-            <p className="text-label-sm text-gray-500 truncate">
-              {contactEmail}
-              {conversation.subject && ` • ID: #${conversation.id.slice(0, 5)}`}
-            </p>
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <button className="inline-flex items-center gap-1.5 rounded border border-surface-border bg-white px-3 py-1.5 text-body-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors" aria-label="Assign conversation">
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="7" cy="5" r="2.5" /><path d="M3 13c0-2.5 1.8-4 4-4s4 1.5 4 4" />
-              </svg>
-              Assign
-            </button>
-            <button className="p-1.5 rounded hover:bg-gray-50 text-gray-500 transition-colors" aria-label="More actions">
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                <circle cx="8" cy="3" r="1.5" /><circle cx="8" cy="8" r="1.5" /><circle cx="8" cy="13" r="1.5" />
-              </svg>
-            </button>
-          </div>
-        </header>
+    <div className="flex h-full min-w-0 flex-1 flex-col">
+      {/* Thread header */}
+      <header className="flex items-center gap-3 border-b border-[var(--m03-line)] bg-white px-6 py-3">
+        <h2 className="truncate text-[14px] font-semibold leading-tight tracking-[-0.01em] text-[var(--m03-fg)]">
+          {subject}
+        </h2>
 
-        {/* Messages */}
-        <div
-          ref={scrollRef}
-          onScroll={handleScroll}
-          className="flex-1 overflow-y-auto px-4 py-4 bg-surface-background"
-          role="log"
-          aria-label="Message history"
-          aria-live="polite"
-        >
-          {messages.length === 0 ? (
-            <div className="flex h-full items-center justify-center">
-              <p className="text-body-sm text-gray-400">No messages yet.</p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {hasNextPage && <div ref={topSentinelRef} className="h-1" aria-hidden="true" />}
-              {isFetchingNextPage && (
-                <div className="flex items-center justify-center gap-2 rounded border border-surface-border bg-white px-3 py-2 text-body-sm text-gray-500">
-                  <svg className="h-4 w-4 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" aria-hidden="true">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                  </svg>
-                  Loading older messages…
-                </div>
-              )}
-              {isFetchNextPageError && (
-                <div className="rounded border border-red-100 bg-red-50 px-3 py-2 text-center text-body-sm">
-                  <p role="alert" className="mb-2 text-red-700">{msgsError?.message ?? 'Could not load older messages.'}</p>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (scrollRef.current) {
-                        previousScrollHeightRef.current = scrollRef.current.scrollHeight;
-                        previousScrollTopRef.current = scrollRef.current.scrollTop;
-                        isPrependingRef.current = true;
-                      }
-                      void fetchNextPage();
-                    }}
-                    className="rounded border border-red-200 bg-white px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-50"
-                  >
-                    Retry
-                  </button>
-                </div>
-              )}
-              {messages.map((msg) => <MessageBubble key={msg.id} message={msg} />)}
-            </div>
+        <div className="ml-auto flex items-center gap-3.5 font-mono text-[11px] text-[var(--m03-fg-3)]">
+          <span>
+            {conversation.channel.toUpperCase()}
+            {channelPhone ? ` · ${channelPhone}` : ''}
+          </span>
+          <span>{messages.length} {messages.length === 1 ? 'message' : 'messages'}</span>
+          <AiStateIndicator aiState={conversation.ai_state} />
+        </div>
+
+        <div className="flex items-center gap-1.5 pl-3">
+          <StatusBadge status={conversation.status} />
+          {onToggleRightPanel && (
+            <button
+              type="button"
+              onClick={onToggleRightPanel}
+              className="ml-1 inline-flex h-7 items-center gap-1.5 rounded border border-[var(--m03-line)] bg-white px-2.5 text-[12px] font-medium text-[var(--m03-fg-2)] transition-colors hover:bg-[var(--m03-line-2)] xl:hidden"
+              aria-label="Open contact details"
+            >
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="6" cy="4.5" r="2" />
+                <path d="M2 11c0-2.2 1.8-3.5 4-3.5s4 1.3 4 3.5" />
+              </svg>
+              Contact
+            </button>
           )}
         </div>
+      </header>
 
-        {/* AI draft panel */}
-        <AiDraftPanel conversationId={conversationId} aiState={conversation.ai_state} />
-
-        {/* Reply composer */}
-        <ReplyComposer conversationId={conversationId} />
-      </div>
-
-      {/* Right sidebar */}
-      <aside className="hidden xl:flex w-72 shrink-0 flex-col border-l border-surface-border bg-white overflow-hidden">
-        <div className="flex border-b border-surface-border">
-          {(['insight', 'customer', 'audit'] as const).map((tab) => (
-            <button
-              key={tab}
-              onClick={() => setRightTab(tab)}
-              className={`flex-1 py-2.5 text-label-sm font-medium text-center transition-colors border-b-2 ${
-                rightTab === tab ? 'border-primary text-primary' : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              {tab === 'insight' ? 'AI Insight' : tab === 'customer' ? 'Customer' : 'Audit'}
-            </button>
-          ))}
-        </div>
-        <div className="flex-1 overflow-y-auto p-4">
-          {rightTab === 'insight' && <AiInsightPanel conversationId={conversationId} aiState={conversation.ai_state} lastMessageAt={conversation.last_message_at} />}
-          {rightTab === 'customer' && <ContactDetails conversation={conversation} />}
-          {rightTab === 'audit' && <div className="text-body-sm text-gray-500"><p>Audit trail will appear here.</p></div>}
-        </div>
-      </aside>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// AI Insight Panel (right sidebar) — uses React Query
-// ---------------------------------------------------------------------------
-
-function AiInsightPanel({ conversationId, aiState, lastMessageAt }: { conversationId: string; aiState: string; lastMessageAt: string | null }) {
-  const { data: decision, isLoading } = useAiDecision(aiState !== 'idle' ? conversationId : undefined);
-
-  const statusLabel = aiState === 'drafted' ? 'Draft Ready' :
-    aiState === 'thinking' ? 'Analyzing...' :
-    aiState === 'auto_replied' ? 'Auto Replied' :
-    aiState === 'needs_human' ? 'Needs Human' :
-    aiState === 'failed' ? 'Failed' : 'Idle';
-
-  const statusColor = aiState === 'drafted' ? 'text-green-600' :
-    aiState === 'thinking' ? 'text-ai' :
-    aiState === 'auto_replied' ? 'text-green-600' :
-    aiState === 'needs_human' ? 'text-orange-600' :
-    aiState === 'failed' ? 'text-red-600' : 'text-gray-400';
-
-  const confidencePercent = decision ? Math.round(Number(decision.confidence) * 100) : null;
-  const confidenceBg = confidencePercent !== null
-    ? confidencePercent >= 75 ? 'bg-green-50 text-green-700'
-      : confidencePercent >= 50 ? 'bg-yellow-50 text-yellow-700'
-      : 'bg-red-50 text-red-700'
-    : '';
-
-  if (aiState === 'idle') {
-    return (
-      <div className="flex flex-col items-center justify-center py-8 text-center">
-        <div className="h-10 w-10 rounded-full bg-gray-100 flex items-center justify-center mb-3">
-          <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-gray-400" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="9" cy="9" r="7" /><path d="M9 6v3l2 1.5" />
-          </svg>
-        </div>
-        <p className="text-body-sm text-gray-500">No AI activity yet</p>
-        <p className="text-label-sm text-gray-400 mt-1">AI insights will appear once the agent processes this conversation.</p>
-      </div>
-    );
-  }
-
-  if (isLoading) {
-    return (
-      <div className="flex items-center gap-2 py-4 text-body-sm text-gray-500">
-        <svg className="h-4 w-4 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" aria-hidden="true">
-          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-        </svg>
-        Loading insights…
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-4">
-      {/* Status + Confidence */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className={statusColor}>
-            <circle cx="7" cy="7" r="6" stroke="currentColor" strokeWidth="1.5" />
-            {(aiState === 'drafted' || aiState === 'auto_replied') && <path d="M4.5 7l2 2 3.5-3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />}
-            {aiState === 'needs_human' && <path d="M7 5v3M7 10h.01" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />}
-          </svg>
-          <span className={`text-body-sm font-medium ${statusColor}`}>{statusLabel}</span>
-        </div>
-        {confidencePercent !== null && (
-          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-label-sm font-medium ${confidenceBg}`}>{confidencePercent}%</span>
+      {/* Messages */}
+      <div
+        ref={scrollRef}
+        onScroll={handleScroll}
+        className="flex-1 overflow-y-auto bg-white px-6 py-5"
+        role="log"
+        aria-label="Message history"
+        aria-live="polite"
+      >
+        {messages.length === 0 ? (
+          <div className="flex h-full items-center justify-center">
+            <p className="text-[13px] text-[var(--m03-fg-3)]">No messages yet.</p>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-2.5">
+            {hasNextPage && <div ref={topSentinelRef} className="h-1" aria-hidden="true" />}
+            {isFetchingNextPage && (
+              <div className="flex items-center justify-center gap-2 rounded border border-[var(--m03-line)] bg-white px-3 py-2 text-[12px] text-[var(--m03-fg-2)]">
+                <svg className="h-4 w-4 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+                Loading older messages…
+              </div>
+            )}
+            {isFetchNextPageError && (
+              <div className="rounded border border-[var(--m03-red-line)] bg-[var(--m03-red-fill)] px-3 py-2 text-center text-[12px]">
+                <p role="alert" className="mb-2 text-[var(--m03-red)]">
+                  {msgsError?.message ?? 'Could not load older messages.'}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (scrollRef.current) {
+                      previousScrollHeightRef.current = scrollRef.current.scrollHeight;
+                      previousScrollTopRef.current = scrollRef.current.scrollTop;
+                      isPrependingRef.current = true;
+                    }
+                    void fetchNextPage();
+                  }}
+                  className="rounded border border-[var(--m03-red-line)] bg-white px-3 py-1.5 text-[12px] font-medium text-[var(--m03-red)] hover:bg-[var(--m03-red-fill)]"
+                >
+                  Retry
+                </button>
+              </div>
+            )}
+            {messages.map((msg) => (
+              <MessageBubble
+                key={msg.id}
+                message={msg}
+                contactName={conversation.contacts?.name ?? null}
+              />
+            ))}
+          </div>
         )}
       </div>
 
-      {decision?.decision_type && (
-        <div>
-          <h4 className="text-label-md text-gray-700 mb-1">Decision</h4>
-          <span className="inline-flex items-center rounded border border-surface-border bg-gray-50 px-2 py-0.5 text-label-sm text-gray-600 capitalize">
-            {(decision.decision_type as string).replace(/_/g, ' ')}
-          </span>
-        </div>
-      )}
+      {/* Inline AI draft panel */}
+      <AiDraftPanel
+        conversationId={conversationId}
+        aiState={conversation.ai_state}
+        onPrefillComposer={handlePrefillFromDraft}
+      />
 
-      {decision?.reasoning_summary && (
-        <div>
-          <h4 className="text-label-md text-gray-700 mb-1.5">Reasoning</h4>
-          <div className="rounded border border-surface-border bg-gray-50 p-3">
-            <p className="text-body-sm text-gray-600">{decision.reasoning_summary as string}</p>
-          </div>
-        </div>
-      )}
-
-      {decision?.tags && (decision.tags as string[]).length > 0 && (
-        <div>
-          <h4 className="text-label-md text-gray-700 mb-1.5">Tags</h4>
-          <div className="flex flex-wrap gap-1.5">
-            {(decision.tags as string[]).map((tag) => (
-              <span key={tag} className="inline-flex items-center rounded-full bg-ai-50 px-2 py-0.5 text-label-sm text-ai-700 font-medium">{tag}</span>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {decision?.created_at && (
-        <div>
-          <h4 className="text-label-md text-gray-700 mb-1">Response Time</h4>
-          <p className="text-body-sm text-gray-600 font-mono">{formatResponseTime(decision.created_at as string, lastMessageAt)}</p>
-        </div>
-      )}
-
-      {decision?.requires_human && (
-        <div className="rounded border border-orange-200 bg-orange-50 p-2.5">
-          <p className="text-body-sm text-orange-700 font-medium flex items-center gap-1.5">
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
-              <path d="M7 5v3M7 10h.01" /><circle cx="7" cy="7" r="6" />
-            </svg>
-            Human review recommended
-          </p>
-        </div>
-      )}
-
-      {decision?.tags && (decision.tags as string[]).length > 0 && (
-        <div>
-          <h4 className="text-label-md text-gray-700 mb-2">Suggested Actions</h4>
-          <div className="space-y-2">
-            {(decision.tags as string[]).slice(0, 3).map((tag) => (
-              <button key={tag} className="flex items-center justify-between w-full rounded border border-surface-border bg-white px-3 py-2 text-body-sm text-gray-700 hover:bg-gray-50 transition-colors">
-                <span>Apply &apos;{tag}&apos; tag</span>
-                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-gray-400">
-                  <circle cx="7" cy="7" r="5" /><path d="M7 5v4M5 7h4" />
-                </svg>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
+      {/* Reply composer */}
+      <ReplyComposer
+        conversationId={conversationId}
+        prefillBody={prefillBody}
+        onPrefillConsumed={() => setPrefillBody(null)}
+      />
     </div>
   );
-}
-
-function formatResponseTime(decisionCreatedAt: string, lastMessageAt: string | null): string {
-  if (!lastMessageAt) return '—';
-  const diffMs = new Date(decisionCreatedAt).getTime() - new Date(lastMessageAt).getTime();
-  if (diffMs < 0) return '—';
-  if (diffMs < 1000) return `${Math.round(diffMs)}ms`;
-  const seconds = diffMs / 1000;
-  if (seconds < 60) return `${seconds.toFixed(1)}s`;
-  const minutes = seconds / 60;
-  if (minutes < 60) return `${minutes.toFixed(1)}m`;
-  return `${(minutes / 60).toFixed(1)}h`;
 }

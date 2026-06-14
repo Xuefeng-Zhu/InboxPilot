@@ -6,7 +6,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth-context';
 import { useKnowledgeDocs, queryKeys } from '@/lib/queries';
 import { insforge } from '@/lib/insforge';
-import { DashboardShell } from '@/components/DashboardShell';
+import { AppShell } from '@/components/layout';
 import { Pill, Tag } from '@/components/ui';
 import {
   AddDocumentForm,
@@ -15,7 +15,7 @@ import {
   SOURCE_TYPES,
 } from '@/components/knowledge';
 
-type TypeFilter = 'all' | 'manual' | 'url' | 'file' | (typeof SOURCE_TYPES)[number];
+type TypeFilter = 'all' | (typeof SOURCE_TYPES)[number];
 
 function relativeTime(iso: string): string {
   const then = new Date(iso).getTime();
@@ -32,20 +32,11 @@ function relativeTime(iso: string): string {
   return new Date(iso).toLocaleDateString();
 }
 
-function typeBucket(t: string): TypeFilter {
-  if (t === 'manual' || t === 'article' || t === 'policy' || t === 'faq' || t === 'product_info' || t === 'other') {
-    return 'manual';
-  }
-  if (t === 'url') return 'url';
-  if (t === 'file') return 'file';
-  return 'manual';
-}
-
 function sourceTypeLabel(t: string): string {
-  if (t === 'faq' || t === 'article' || t === 'policy' || t === 'manual' || t === 'product_info' || t === 'other') {
-    return 'Manual';
-  }
-  return t.charAt(0).toUpperCase() + t.slice(1);
+  return t
+    .split('_')
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
 }
 
 export default function KnowledgePage() {
@@ -94,7 +85,7 @@ export default function KnowledgePage() {
   }, [documents]);
 
   const filteredDocuments = documents.filter((doc) => {
-    if (typeFilter !== 'all' && typeBucket(doc.source_type) !== typeFilter) return false;
+    if (typeFilter !== 'all' && doc.source_type !== typeFilter) return false;
     if (search.trim()) {
       const q = search.toLowerCase();
       if (!doc.title.toLowerCase().includes(q) && !doc.body.toLowerCase().includes(q)) return false;
@@ -241,12 +232,8 @@ export default function KnowledgePage() {
   const processingCount = documents.filter((d) => d.status === 'processing' || d.status === 'pending').length;
 
   return (
-    <DashboardShell>
-      <div
-        style={{
-          fontFamily: 'var(--font-inter), Inter, system-ui, -apple-system, sans-serif',
-        }}
-      >
+    <AppShell>
+      <div className="flex h-full min-h-0 flex-col">
         <div className="mb-5 flex items-center justify-between">
           <div>
             <h1 className="m-0 text-[24px] font-medium tracking-[-0.02em]">Knowledge</h1>
@@ -264,12 +251,12 @@ export default function KnowledgePage() {
         </div>
 
         {(error || queryError) && (
-          <div className="mb-4 rounded border border-red-200 bg-red-50 p-3 text-[13px] text-red-700">
+          <div className="mb-4 rounded border border-[var(--m03-red-line)] bg-[var(--m03-red-fill)] p-3 text-[13px] text-[var(--m03-red)]">
             {error || queryError?.message}
           </div>
         )}
         {success && (
-          <div className="mb-4 rounded border border-green-200 bg-green-50 p-3 text-[13px] text-green-700">
+          <div className="mb-4 rounded border border-[var(--m03-green-line)] bg-[var(--m03-green-fill)] p-3 text-[13px] text-[var(--m03-green)]">
             {success}
           </div>
         )}
@@ -299,8 +286,8 @@ export default function KnowledgePage() {
               All {documents.length}
             </button>
           </Pill>
-          {(['manual', 'url', 'file'] as const).map((t) => {
-            const count = documents.filter((d) => typeBucket(d.source_type) === t).length;
+          {SOURCE_TYPES.map((t) => {
+            const count = documents.filter((d) => d.source_type === t).length;
             return (
               <Pill key={t} active={typeFilter === t}>
                 <button
@@ -308,7 +295,7 @@ export default function KnowledgePage() {
                   onClick={() => setTypeFilter(t)}
                   style={{ all: 'unset', cursor: 'pointer' }}
                 >
-                  {t === 'manual' ? 'Manual' : t === 'url' ? 'URL' : 'File'} {count}
+                  {sourceTypeLabel(t)} {count}
                 </button>
               </Pill>
             );
@@ -318,7 +305,7 @@ export default function KnowledgePage() {
         {loading ? (
           <p className="text-[13px] text-[var(--m03-fg-2)]">Loading documents…</p>
         ) : filteredDocuments.length === 0 ? (
-          <div className="rounded-lg border border-dashed border-[var(--m03-line)] p-8 text-center">
+          <div className="min-h-0 flex-1 overflow-auto rounded-lg border border-dashed border-[var(--m03-line)] bg-white p-8 text-center">
             <p className="text-[13px] text-[var(--m03-fg-2)]">
               {documents.length === 0
                 ? 'No knowledge documents yet.'
@@ -326,26 +313,26 @@ export default function KnowledgePage() {
             </p>
           </div>
         ) : (
-          <div className="overflow-hidden rounded-lg border border-[var(--m03-line)] bg-white">
-            <table className="w-full border-collapse text-[13px]">
+          <div className="min-h-0 flex-1 overflow-auto rounded-lg border border-[var(--m03-line)] bg-white">
+            <table className="w-full min-w-[720px] border-collapse text-[13px]">
               <thead>
                 <tr>
-                  <th className="border-b border-[var(--m03-line)] px-3 py-2.5 text-left text-[11px] font-medium uppercase tracking-wider text-[var(--m03-fg-2)]">
+                  <th className="sticky top-0 z-10 border-b border-[var(--m03-line)] bg-white px-3 py-2.5 text-left text-[11px] font-medium uppercase tracking-wider text-[var(--m03-fg-2)]">
                     Title
                   </th>
-                  <th className="border-b border-[var(--m03-line)] px-3 py-2.5 text-left text-[11px] font-medium uppercase tracking-wider text-[var(--m03-fg-2)]">
+                  <th className="sticky top-0 z-10 border-b border-[var(--m03-line)] bg-white px-3 py-2.5 text-left text-[11px] font-medium uppercase tracking-wider text-[var(--m03-fg-2)]">
                     Type
                   </th>
-                  <th className="border-b border-[var(--m03-line)] px-3 py-2.5 text-left text-[11px] font-medium uppercase tracking-wider text-[var(--m03-fg-2)]">
+                  <th className="sticky top-0 z-10 border-b border-[var(--m03-line)] bg-white px-3 py-2.5 text-left text-[11px] font-medium uppercase tracking-wider text-[var(--m03-fg-2)]">
                     Status
                   </th>
-                  <th className="border-b border-[var(--m03-line)] px-3 py-2.5 text-left text-[11px] font-medium uppercase tracking-wider text-[var(--m03-fg-2)]">
+                  <th className="sticky top-0 z-10 border-b border-[var(--m03-line)] bg-white px-3 py-2.5 text-left text-[11px] font-medium uppercase tracking-wider text-[var(--m03-fg-2)]">
                     Chunks
                   </th>
-                  <th className="border-b border-[var(--m03-line)] px-3 py-2.5 text-left text-[11px] font-medium uppercase tracking-wider text-[var(--m03-fg-2)]">
+                  <th className="sticky top-0 z-10 border-b border-[var(--m03-line)] bg-white px-3 py-2.5 text-left text-[11px] font-medium uppercase tracking-wider text-[var(--m03-fg-2)]">
                     Updated
                   </th>
-                  <th className="border-b border-[var(--m03-line)] px-3 py-2.5 text-left text-[11px] font-medium uppercase tracking-wider text-[var(--m03-fg-2)]"></th>
+                  <th className="sticky top-0 z-10 border-b border-[var(--m03-line)] bg-white px-3 py-2.5 text-left text-[11px] font-medium uppercase tracking-wider text-[var(--m03-fg-2)]"></th>
                 </tr>
               </thead>
               <tbody>
@@ -362,7 +349,7 @@ export default function KnowledgePage() {
           </div>
         )}
       </div>
-    </DashboardShell>
+    </AppShell>
   );
 }
 
@@ -401,21 +388,29 @@ function DocumentRow({
         {relativeTime(doc.updated_at)}
       </td>
       <td className="border-b border-[var(--m03-line)] px-3 py-3 text-right">
-        <div className="flex items-center justify-end gap-2">
+        <div className="flex items-center justify-end gap-1">
           <Link
             href={`/knowledge/${doc.id}`}
-            className="text-[var(--m03-fg)] hover:underline"
+            title={`Open ${doc.title}`}
+            aria-label={`Open ${doc.title}`}
+            className="flex h-7 w-7 items-center justify-center rounded text-[var(--m03-fg-2)] hover:bg-[var(--m03-line-2)] hover:text-[var(--m03-fg)]"
           >
-            Open
+            <svg width="14" height="14" viewBox="0 0 15 15" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M9.5 2.5l3 3M2 9l6.5-6.5 3 3L5 12H2V9z" />
+            </svg>
           </Link>
           <button
             type="button"
             onClick={() => onDelete(doc.id)}
-            className="cursor-pointer text-[var(--m03-fg-2)] hover:text-[var(--m03-red)]"
             title={`Delete ${doc.title}`}
             aria-label={`Delete ${doc.title}`}
+            className="flex h-7 w-7 cursor-pointer items-center justify-center rounded text-[var(--m03-fg-2)] hover:bg-[var(--m03-line-2)] hover:text-[var(--m03-red)]"
           >
-            ×
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M2.5 4h9M5 4V2.5h4V4M3.5 4v8a1 1 0 0 0 1 1h5a1 1 0 0 0 1-1V4" />
+              <line x1="6" y1="6.5" x2="6" y2="10.5" />
+              <line x1="8" y1="6.5" x2="8" y2="10.5" />
+            </svg>
           </button>
         </div>
       </td>

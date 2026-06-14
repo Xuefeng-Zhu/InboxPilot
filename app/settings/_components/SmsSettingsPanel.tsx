@@ -50,22 +50,18 @@ export default function SmsSettingsPanel() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  // Add account form
   const [showAddForm, setShowAddForm] = useState(false);
   const [newProvider, setNewProvider] = useState('mock');
   const [newLabel, setNewLabel] = useState('');
   const [newCredentialsId, setNewCredentialsId] = useState('');
   const [addingAccount, setAddingAccount] = useState(false);
 
-  // Edit state
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editLabel, setEditLabel] = useState('');
 
-  // Test connection state
   const [testingId, setTestingId] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<{ id: string; success: boolean; message: string } | null>(null);
 
-  // Fetch accounts and phone numbers
   const fetchData = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -105,7 +101,6 @@ export default function SmsSettingsPanel() {
     }
   }, [authLoading, user, fetchData]);
 
-  // Add account
   const handleAddAccount = async () => {
     if (!newLabel.trim() || !newCredentialsId.trim()) return;
     setAddingAccount(true);
@@ -127,7 +122,6 @@ export default function SmsSettingsPanel() {
         return;
       }
 
-      // Record audit log for provider account modification
       if (accounts.length > 0) {
         await insforge.database
           .from('audit_logs')
@@ -157,7 +151,6 @@ export default function SmsSettingsPanel() {
     }
   };
 
-  // Edit account label
   const handleSaveEdit = async (accountId: string) => {
     if (!editLabel.trim()) return;
     setError(null);
@@ -173,7 +166,6 @@ export default function SmsSettingsPanel() {
         return;
       }
 
-      // Record audit log for provider account modification
       const account = accounts.find((a) => a.id === accountId);
       if (account) {
         await insforge.database
@@ -199,7 +191,6 @@ export default function SmsSettingsPanel() {
     }
   };
 
-  // Remove account
   const handleRemoveAccount = async (accountId: string) => {
     if (!window.confirm('Are you sure you want to remove this SMS provider account? This will also remove associated phone numbers.')) {
       return;
@@ -216,7 +207,6 @@ export default function SmsSettingsPanel() {
         return;
       }
 
-      // Record audit log for provider account removal
       const account = accounts.find((a) => a.id === accountId);
       if (account) {
         await insforge.database
@@ -241,7 +231,6 @@ export default function SmsSettingsPanel() {
     }
   };
 
-  // Test connection
   const handleTestConnection = async (accountId: string) => {
     setTestingId(accountId);
     setTestResult(null);
@@ -269,16 +258,15 @@ export default function SmsSettingsPanel() {
   };
 
   if (authLoading || loading) {
-    return <p className="text-body-md text-gray-500">Loading SMS settings…</p>;
+    return <p className="text-[14px] text-[var(--m03-fg-2)]">Loading SMS settings…</p>;
   }
 
   if (!user) {
-    return <p className="text-body-md text-red-600">Please sign in to manage SMS settings.</p>;
+    return <p className="text-[14px] text-[var(--m03-red)]">Please sign in to manage SMS settings.</p>;
   }
 
   return (
-    <div className="space-y-element-gap">
-      {/* Header with Add button */}
+    <div className="flex flex-col gap-3">
       <div className="flex items-center justify-end">
         <Button
           variant={showAddForm ? 'secondary' : 'primary'}
@@ -289,22 +277,20 @@ export default function SmsSettingsPanel() {
         </Button>
       </div>
 
-      {/* Status messages */}
       {error && (
-        <div className="rounded-md bg-red-50 p-3" role="alert">
-          <p className="text-body-md text-red-700">{error}</p>
+        <div className="rounded border border-[var(--m03-red-line)] bg-[var(--m03-red-fill)] p-3" role="alert">
+          <p className="text-[14px] text-[var(--m03-red)]">{error}</p>
         </div>
       )}
       {success && (
-        <div className="rounded-md bg-green-50 p-3" role="status">
-          <p className="text-body-md text-green-700">{success}</p>
+        <div className="rounded border border-[var(--m03-green-line)] bg-[var(--m03-green-fill)] p-3" role="status">
+          <p className="text-[14px] text-[var(--m03-green)]">{success}</p>
         </div>
       )}
 
-      {/* Add Account Form */}
       {showAddForm && (
-        <Card header={<h2 className="text-headline-sm text-gray-900">Add SMS Provider Account</h2>}>
-          <div className="grid gap-element-gap sm:grid-cols-2">
+        <Card header={<h2 className="text-[18px] font-semibold tracking-tight text-[var(--m03-fg)]">Add SMS Provider Account</h2>}>
+          <div className="grid gap-3 sm:grid-cols-2">
             <Select
               label="Provider"
               id="sms-provider"
@@ -330,7 +316,7 @@ export default function SmsSettingsPanel() {
               className="sm:col-span-2"
             />
           </div>
-          <div className="mt-element-gap flex justify-end">
+          <div className="mt-3 flex justify-end">
             <Button
               variant="primary"
               size="md"
@@ -343,12 +329,11 @@ export default function SmsSettingsPanel() {
         </Card>
       )}
 
-      {/* Accounts List */}
       {accounts.length === 0 ? (
         <Card>
           <div className="py-8 text-center">
-            <p className="text-body-md text-gray-500">No SMS provider accounts configured.</p>
-            <p className="mt-1 text-body-sm text-gray-400">Click &quot;Add Account&quot; to get started.</p>
+            <p className="text-[14px] text-[var(--m03-fg-2)]">No SMS provider accounts configured.</p>
+            <p className="mt-1 text-[12px] text-[var(--m03-fg-3)]">Click &quot;Add Account&quot; to get started.</p>
           </div>
         </Card>
       ) : (
@@ -364,7 +349,7 @@ export default function SmsSettingsPanel() {
               <div className="flex items-start justify-between">
                 <div className="flex-1">
                   {isEditing ? (
-                    <div className="flex items-center gap-tight-gap">
+                    <div className="flex items-center gap-2">
                       <label htmlFor={`edit-label-${account.id}`} className="sr-only">
                         Account label
                       </label>
@@ -391,10 +376,12 @@ export default function SmsSettingsPanel() {
                       </Button>
                     </div>
                   ) : (
-                    <h3 className="text-headline-sm text-gray-900">{account.label}</h3>
+                    <h3 className="text-[18px] font-semibold tracking-tight text-[var(--m03-fg)]">
+                      {account.label}
+                    </h3>
                   )}
-                  <div className="mt-1 flex items-center gap-element-gap">
-                    <span className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700">
+                  <div className="mt-1 flex items-center gap-2">
+                    <span className="inline-flex items-center rounded-md border border-[var(--m03-line)] bg-[var(--m03-line-2)] px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-[0.04em] text-[var(--m03-fg-2)]">
                       {account.provider}
                     </span>
                     <StatusBadge
@@ -402,7 +389,7 @@ export default function SmsSettingsPanel() {
                     />
                   </div>
                 </div>
-                <div className="flex items-center gap-tight-gap">
+                <div className="flex items-center gap-2">
                   <Button
                     variant="secondary"
                     size="sm"
@@ -430,18 +417,18 @@ export default function SmsSettingsPanel() {
                     size="sm"
                     onClick={() => handleRemoveAccount(account.id)}
                     aria-label={`Remove ${account.label}`}
-                    className="text-red-600 hover:text-red-800 hover:bg-red-50"
                   >
                     Remove
                   </Button>
                 </div>
               </div>
 
-              {/* Test result */}
               {result && (
                 <div
-                  className={`mt-element-gap rounded-md p-3 text-body-md ${
-                    result.success ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
+                  className={`mt-3 rounded-md border p-3 text-[13px] ${
+                    result.success
+                      ? 'border-[var(--m03-green-line)] bg-[var(--m03-green-fill)] text-[var(--m03-green)]'
+                      : 'border-[var(--m03-red-line)] bg-[var(--m03-red-fill)] text-[var(--m03-red)]'
                   }`}
                   role="status"
                 >
@@ -449,16 +436,15 @@ export default function SmsSettingsPanel() {
                 </div>
               )}
 
-              {/* Phone numbers */}
               {accountPhones.length > 0 && (
-                <div className="mt-element-gap border-t border-surface-border pt-element-gap">
-                  <p className="text-label-md text-gray-500">Phone Numbers</p>
-                  <ul className="mt-1 space-y-1" aria-label={`Phone numbers for ${account.label}`}>
+                <div className="mt-3 border-t border-[var(--m03-line)] pt-3">
+                  <p className="text-[12px] font-semibold uppercase tracking-wider text-[var(--m03-fg-2)]">Phone Numbers</p>
+                  <ul className="mt-1 flex flex-col gap-1" aria-label={`Phone numbers for ${account.label}`}>
                     {accountPhones.map((phone) => (
-                      <li key={phone.id} className="flex items-center gap-tight-gap text-body-sm text-gray-700">
+                      <li key={phone.id} className="flex items-center gap-2 text-[13px] text-[var(--m03-fg-2)]">
                         <span className="font-mono">{phone.phone_number}</span>
                         {phone.is_default && (
-                          <span className="inline-flex items-center rounded-full bg-primary-50 px-2 py-0.5 text-xs font-medium text-primary-700">
+                          <span className="inline-flex items-center rounded border border-[var(--m03-line)] bg-[var(--m03-line-2)] px-1.5 py-px font-mono text-[9px] font-semibold uppercase tracking-[0.04em] text-[var(--m03-fg-2)]">
                             Default
                           </span>
                         )}

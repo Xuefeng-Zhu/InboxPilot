@@ -37,28 +37,27 @@ export function DeleteCustomerModal({ customerId, onClose, onDeleted }: DeleteCu
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="w-full max-w-sm rounded-lg border border-surface-border bg-white p-6 shadow-level-2">
-        <h2 className="text-headline-sm text-gray-900">Delete Customer</h2>
-        <p className="mt-2 text-body-md text-gray-600">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="w-full max-w-sm rounded-lg border border-[var(--m03-line)] bg-white p-6 shadow-[0_30px_80px_rgba(0,0,0,0.08)]">
+        <h2 className="m-0 text-[16px] font-semibold text-[var(--m03-fg)]">Delete customer</h2>
+        <p className="mt-2 mb-0 text-[13px] text-[var(--m03-fg-2)]">
           Are you sure you want to delete this customer? This action cannot be undone.
         </p>
 
         {error && (
-          <p className="mt-3 text-body-sm text-red-600">{error}</p>
+          <p className="mt-3 text-[12px] text-[var(--m03-red)]">{error}</p>
         )}
 
         <div className="mt-5 flex justify-end gap-2">
           <Button variant="secondary" size="md" onClick={onClose} disabled={deleting}>Cancel</Button>
-          <Button
-            variant="primary"
-            size="md"
+          <button
+            type="button"
             onClick={handleDelete}
             disabled={deleting}
-            className="!bg-red-600 hover:!bg-red-700"
+            className="cursor-pointer rounded-md border border-transparent bg-[var(--m03-red)] px-3.5 py-1.5 text-[13px] font-medium text-white hover:opacity-90 disabled:opacity-60"
           >
             {deleting ? 'Deleting…' : 'Delete'}
-          </Button>
+          </button>
         </div>
       </div>
     </div>

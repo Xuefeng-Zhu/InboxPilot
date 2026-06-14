@@ -27,13 +27,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className={`${inter.variable} ${jetbrainsMono.variable}`}>
-      <head>
-        <link
-          href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap"
-          rel="stylesheet"
-        />
-      </head>
-      <body className="min-h-screen bg-white text-gray-900 antialiased">
+      <body className="min-h-screen bg-white text-[var(--m03-fg)] antialiased">
         <QueryProvider>
           <AuthProvider>{children}</AuthProvider>
         </QueryProvider>

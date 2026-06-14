@@ -36,13 +36,7 @@ export default function LoginPage() {
   }
 
   return (
-    <div
-      className="m03 flex min-h-screen flex-col bg-white text-[var(--m03-fg)]"
-      style={{
-        fontFamily: 'var(--font-inter), Inter, system-ui, -apple-system, sans-serif',
-        fontFeatureSettings: "'cv02', 'cv03', 'cv04', 'cv11'",
-      }}
-    >
+    <div className="flex min-h-screen flex-col bg-white text-[var(--m03-fg)]">
       <Topbar />
 
       <main className="flex flex-1 items-center justify-center px-6 py-15">
@@ -61,7 +55,7 @@ export default function LoginPage() {
           {error && (
             <p
               role="alert"
-              className="mb-3 rounded border border-red-200 bg-red-50 px-3 py-2 text-center text-[13px] text-red-700"
+              className="mb-3 rounded border border-[var(--m03-red-line)] bg-[var(--m03-red-fill)] px-3 py-2 text-center text-[13px] text-[var(--m03-red)]"
             >
               {error}
             </p>

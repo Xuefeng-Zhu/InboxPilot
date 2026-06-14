@@ -21,12 +21,12 @@ export function EmbedSnippet({ widget }: EmbedSnippetProps) {
 
   return (
     <div className="mt-3">
-      <pre className="rounded bg-gray-50 border border-surface-border p-3 text-xs font-mono text-gray-700 overflow-x-auto whitespace-pre-wrap break-all">
+      <pre className="overflow-x-auto whitespace-pre-wrap break-all rounded-md border border-[var(--m03-line)] bg-[var(--m03-line-2)] p-3 font-mono text-[12px] text-[var(--m03-fg-2)]">
         {snippet}
       </pre>
       <button
         onClick={handleCopy}
-        className="mt-2 text-label-sm font-medium text-primary hover:text-primary-600 transition-colors"
+        className="mt-2 text-[12px] font-medium text-[var(--m03-fg)] transition-colors hover:underline"
       >
         {copied ? '✓ Copied!' : 'Copy snippet'}
       </button>

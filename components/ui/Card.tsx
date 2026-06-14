@@ -12,15 +12,13 @@ export function Card({ children, header, elevated, className }: CardProps) {
   return (
     <div
       className={cn(
-        'bg-white border border-surface-border rounded-lg p-section-padding',
+        'rounded-lg border border-[var(--m03-line)] bg-white p-4',
         elevated && 'shadow-level-2',
-        className
+        className,
       )}
     >
       {header && (
-        <div className="border-b border-surface-border pb-3 mb-3">
-          {header}
-        </div>
+        <div className="mb-3 border-b border-[var(--m03-line)] pb-3">{header}</div>
       )}
       {children}
     </div>

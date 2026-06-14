@@ -55,12 +55,12 @@ export function EditCustomerModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="w-full max-w-md rounded-lg border border-surface-border bg-white p-6 shadow-level-2">
-        <h2 className="text-headline-sm text-gray-900 mb-4">Edit Customer</h2>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="w-full max-w-md rounded-lg border border-[var(--m03-line)] bg-white p-6 shadow-[0_30px_80px_rgba(0,0,0,0.08)]">
+        <h2 className="m-0 mb-4 text-[16px] font-semibold text-[var(--m03-fg)]">Edit customer</h2>
 
         {error && (
-          <p className="mb-3 text-body-sm text-red-600">{error}</p>
+          <p className="mb-3 text-[12px] text-[var(--m03-red)]">{error}</p>
         )}
 
         <div className="space-y-3">

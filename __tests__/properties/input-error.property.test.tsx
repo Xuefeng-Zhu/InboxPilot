@@ -45,7 +45,7 @@ function renderComponent(componentType: ComponentType, error: string) {
 function getFormElement(container: HTMLElement, componentType: ComponentType): HTMLElement {
   const tagMap: Record<ComponentType, string> = {
     Input: 'input',
-    Select: 'select',
+    Select: 'button',
     Textarea: 'textarea',
   };
   return container.querySelector(tagMap[componentType])!;

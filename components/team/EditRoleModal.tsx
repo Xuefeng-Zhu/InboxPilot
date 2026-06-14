@@ -117,7 +117,7 @@ export function EditRoleModal({
         <Select
           label="Role"
           value={newRole}
-          onChange={(e) => setNewRole(e.target.value as MemberRole)}
+          onValueChange={(v) => setNewRole(v as MemberRole)}
           options={roleOptions.map((o) => ({ value: o.value, label: o.label }))}
         />
 

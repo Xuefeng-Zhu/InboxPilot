@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { insforge } from '@/lib/insforge';
-import { Card, Button, cn } from '@/components/ui';
+import { Card, Button, Select, cn } from '@/components/ui';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -334,18 +334,12 @@ export default function AiSettingsPanel() {
             </div>
           }
         >
-          <select
+          <Select
             id="model-select"
             value={model}
-            onChange={(e) => setModel(e.target.value)}
-            className="block w-full rounded-md border border-[var(--m03-line)] bg-white px-3 py-2 text-[13px] text-[var(--m03-fg)] focus:border-[var(--m03-fg)] focus:outline-none focus:ring-1 focus:ring-[var(--m03-fg)]"
-          >
-            {MODEL_OPTIONS.map((m) => (
-              <option key={m} value={m}>
-                {m}
-              </option>
-            ))}
-          </select>
+            onValueChange={setModel}
+            options={MODEL_OPTIONS.map((m) => ({ value: m, label: m }))}
+          />
         </Card>
 
         {/* Confidence Threshold Card */}

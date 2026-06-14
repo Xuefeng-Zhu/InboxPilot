@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { insforge } from '@/lib/insforge';
+import { Select } from '@/components/ui';
 
 interface CreateWidgetModalProps {
   orgId: string;
@@ -96,16 +97,16 @@ export function CreateWidgetModal({ orgId, onClose, onCreated }: CreateWidgetMod
 
           <div className="flex gap-3">
             <div className="flex-1">
-              <label htmlFor="widget-position" className="mb-1 block text-[12px] font-medium text-[var(--m03-fg-2)]">Position</label>
-              <select
+              <Select
+                label="Position"
                 id="widget-position"
                 value={position}
-                onChange={(e) => setPosition(e.target.value as 'bottom-right' | 'bottom-left')}
-                className="w-full rounded-md border border-[var(--m03-line)] bg-white px-3 py-2 text-[13px] focus:border-[var(--m03-fg)] focus:outline-none focus:ring-1 focus:ring-[var(--m03-fg)]"
-              >
-                <option value="bottom-right">Bottom Right</option>
-                <option value="bottom-left">Bottom Left</option>
-              </select>
+                onValueChange={(v) => setPosition(v as 'bottom-right' | 'bottom-left')}
+                options={[
+                  { value: 'bottom-right', label: 'Bottom Right' },
+                  { value: 'bottom-left', label: 'Bottom Left' },
+                ]}
+              />
             </div>
             <div>
               <label htmlFor="widget-color" className="mb-1 block text-[12px] font-medium text-[var(--m03-fg-2)]">Color</label>

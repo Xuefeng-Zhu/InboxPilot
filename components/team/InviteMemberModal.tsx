@@ -109,7 +109,7 @@ export function InviteMemberModal({ orgId, onClose, onInvited }: InviteMemberMod
           <Select
             label="Role"
             value={role}
-            onChange={(e) => setRole(e.target.value as MemberRole)}
+            onValueChange={(v) => setRole(v as MemberRole)}
             options={ROLE_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
           />
           <p className="mt-1 text-[12px] text-[var(--m03-fg-2)]">

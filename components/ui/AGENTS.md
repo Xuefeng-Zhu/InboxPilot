@@ -29,7 +29,7 @@
 - **All primitives are forward-ref compatible** (so `ref` works through them).
 - **Tokens are CSS custom properties** — Tailwind config defers color/typography to `app/globals.css`. Components reference them as `text-[var(--m03-fg)]` etc.
 - **Component file naming:** PascalCase, one component per file. Co-locate types if small (`StatusBadge.tsx` exports its own `AiState` type).
-- **No `'use client'` here** — all primitives are server-renderable; the `Tooltip` wraps Radix which forces client, but the wrapper handles it.
+- **Radix-based primitives (`Tooltip`, `Select`) declare `'use client'`**. Other primitives (`Button`, `Input`, `Textarea`, `StatusBadge`, `Card`, `Chips`) are server-renderable.
 
 ## ANTI-PATTERNS
 - Adding hex values to `tailwind.config.ts` (use CSS variables).
@@ -40,5 +40,5 @@
 ## UNIQUE
 - **Two `Topbar.tsx` files exist on purpose** — `components/Topbar.tsx` (landing, accepts `nav[]` + `cta` slot) vs `components/layout/Topbar.tsx` (in-app, with auth). This is intentional, not a duplicate.
 - **`StatusBadge` doubles as the AI-state indicator** (it exports `AiStateIndicator` and `AiState` type).
-- **`Tooltip` uses Radix** but is the only component in the dir that pulls a third-party UI primitive directly.
+- **`Tooltip` and `Select` use Radix** — the two components in the dir that pull a third-party UI primitive directly.
 - **`Card` is generic** — no opinions about content, no padding variants, no shadow variants (use `shadow-level-2` / `shadow-level-3` from the Tailwind config).

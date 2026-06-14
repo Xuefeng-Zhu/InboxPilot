@@ -99,9 +99,8 @@ export default function AuditLogSettingsPanel() {
           id="audit-actor-type"
           label="Actor"
           value={actorType}
-          onChange={(e) => {
-            const value = e.target.value;
-            if (isActorTypeFilter(value)) setActorType(value);
+          onValueChange={(v) => {
+            if (isActorTypeFilter(v)) setActorType(v);
           }}
           options={ACTOR_TYPE_OPTIONS}
         />

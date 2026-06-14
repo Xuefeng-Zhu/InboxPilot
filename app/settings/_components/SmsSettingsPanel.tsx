@@ -295,7 +295,7 @@ export default function SmsSettingsPanel() {
               label="Provider"
               id="sms-provider"
               value={newProvider}
-              onChange={(e) => setNewProvider(e.target.value)}
+              onValueChange={setNewProvider}
               options={SMS_PROVIDER_OPTIONS}
             />
             <Input

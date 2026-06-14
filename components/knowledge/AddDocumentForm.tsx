@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Button, Input } from '@/components/ui';
+import { Button, Input, Select } from '@/components/ui';
 import { SOURCE_TYPES, ACCEPTED_FILE_TYPES, MAX_FILE_SIZE_MB } from './types';
 import { MarkdownEditor } from './MarkdownEditor';
 
@@ -109,19 +109,16 @@ export function AddDocumentForm({ onSubmit, onClose, adding }: AddDocumentFormPr
               />
             </div>
             <div>
-              <label htmlFor="doc-source-type" className={fieldLabel}>Source type</label>
-              <select
+              <Select
+                label="Source type"
                 id="doc-source-type"
                 value={sourceType}
-                onChange={(e) => setSourceType(e.target.value)}
-                className="block w-full rounded-md border border-[var(--m03-line)] bg-white px-3 py-2 text-[13px] text-[var(--m03-fg)] focus:border-[var(--m03-fg)] focus:outline-none focus:ring-1 focus:ring-[var(--m03-fg)]"
-              >
-                {SOURCE_TYPES.map((t) => (
-                  <option key={t} value={t}>
-                    {t.charAt(0).toUpperCase() + t.slice(1)}
-                  </option>
-                ))}
-              </select>
+                onValueChange={setSourceType}
+                options={SOURCE_TYPES.map((t) => ({
+                  value: t,
+                  label: t.charAt(0).toUpperCase() + t.slice(1),
+                }))}
+              />
             </div>
           </div>
 

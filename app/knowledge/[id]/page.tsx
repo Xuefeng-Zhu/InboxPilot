@@ -8,7 +8,7 @@ import { useAuth } from '@/lib/auth-context';
 import { useKnowledgeDoc, queryKeys } from '@/lib/queries';
 import { insforge } from '@/lib/insforge';
 import { AppShell } from '@/components/layout';
-import { Tag } from '@/components/ui';
+import { Tag, Select } from '@/components/ui';
 import { MarkdownEditor } from '@/components/knowledge/MarkdownEditor';
 import { MarkdownRenderer } from '@/components/knowledge/MarkdownRenderer';
 import { SOURCE_TYPES } from '@/components/knowledge/types';
@@ -344,20 +344,16 @@ export default function KnowledgeDetailPage({ params }: { params: Promise<{ id: 
           <article className="rounded-lg border border-[var(--m03-line)] bg-white p-[18px] text-[14px] leading-[1.65] text-[var(--m03-fg-2)]">
             {editing ? (
               <div>
-                <label className="mb-1 block text-[11px] font-medium uppercase tracking-wider text-[var(--m03-fg-2)]">
-                  Source type
-                </label>
-                <select
+                <Select
+                  label="Source type"
                   value={sourceType}
-                  onChange={(e) => setSourceType(e.target.value)}
-                  className="mb-4 block w-full max-w-xs rounded-md border border-[var(--m03-line)] bg-white px-3 py-2 text-[13px] focus:border-[var(--m03-fg)] focus:outline-none"
-                >
-                  {SOURCE_TYPES.map((t) => (
-                    <option key={t} value={t}>
-                      {t.charAt(0).toUpperCase() + t.slice(1)}
-                    </option>
-                  ))}
-                </select>
+                  onValueChange={setSourceType}
+                  options={SOURCE_TYPES.map((t) => ({
+                    value: t,
+                    label: t.charAt(0).toUpperCase() + t.slice(1),
+                  }))}
+                  className="mb-4 max-w-xs"
+                />
                 <label className="mb-1 block text-[11px] font-medium uppercase tracking-wider text-[var(--m03-fg-2)]">
                   Content
                 </label>

@@ -295,7 +295,7 @@ export default function EmailSettingsPanel() {
               label="Provider"
               id="email-provider"
               value={newProvider}
-              onChange={(e) => setNewProvider(e.target.value)}
+              onValueChange={setNewProvider}
               options={EMAIL_PROVIDER_OPTIONS}
             />
             <Input

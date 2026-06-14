@@ -8,8 +8,12 @@ import { useAuditLogs, type AuditLogRow } from '@/lib/queries';
 // Constants
 // ---------------------------------------------------------------------------
 
+// Use a non-empty sentinel for "no filter" — Radix's <Select.Item> rejects
+// empty-string values (it reserves the empty string to clear selection).
+const ALL_ACTORS = 'all';
+
 const ACTOR_TYPE_OPTIONS = [
-  { value: '', label: 'All actors' },
+  { value: ALL_ACTORS, label: 'All actors' },
   { value: 'user', label: 'User' },
   { value: 'system', label: 'System' },
   { value: 'ai', label: 'AI' },
@@ -21,10 +25,10 @@ const ACTOR_TYPE_BADGE: Record<'user' | 'system' | 'ai', string> = {
   ai: 'bg-[var(--m03-blue-fill)] text-[var(--m03-blue)] border border-[var(--m03-blue-line)]',
 };
 
-type ActorTypeFilter = '' | 'user' | 'system' | 'ai';
+type ActorTypeFilter = 'all' | 'user' | 'system' | 'ai';
 
 function isActorTypeFilter(value: string): value is ActorTypeFilter {
-  return value === '' || value === 'user' || value === 'system' || value === 'ai';
+  return value === 'all' || value === 'user' || value === 'system' || value === 'ai';
 }
 
 // ---------------------------------------------------------------------------
@@ -54,12 +58,12 @@ function actorDisplay(row: AuditLogRow): string {
 // ---------------------------------------------------------------------------
 
 export default function AuditLogSettingsPanel() {
-  const [actorType, setActorType] = useState<ActorTypeFilter>('');
+  const [actorType, setActorType] = useState<ActorTypeFilter>('all');
   const [search, setSearch] = useState('');
 
   const filters = useMemo(
     () => ({
-      ...(actorType ? { actorType } : {}),
+      ...(actorType !== 'all' ? { actorType } : {}),
       ...(search.trim() ? { search: search.trim() } : {}),
     }),
     [actorType, search],

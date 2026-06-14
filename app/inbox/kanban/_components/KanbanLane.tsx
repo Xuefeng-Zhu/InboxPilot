@@ -29,6 +29,7 @@
  */
 
 import type { LaneId } from '../_lib/lane-filters';
+import { KanbanEmptyState } from './KanbanEmptyState';
 
 type Accent = 'blue' | 'rose' | 'violet' | 'amber' | 'neutral';
 
@@ -99,9 +100,7 @@ export function KanbanLane({
         ) : children ? (
           children
         ) : (
-          <div className="p-4 text-center text-[12px] text-[var(--m03-fg-3)]">
-            No items
-          </div>
+          <KanbanEmptyState laneId={laneId} />
         )}
       </div>
     </div>

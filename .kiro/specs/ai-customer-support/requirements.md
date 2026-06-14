@@ -98,7 +98,7 @@ InboxPilot is an AI-powered customer support platform that handles inbound and o
 
 1. WHEN an inbound message arrives and no open Conversation exists for the Contact on the same channel, THE Platform SHALL create a new Conversation with status "open" and ai_state "idle".
 2. WHEN an inbound message arrives and an open Conversation exists for the Contact on the same channel, THE Platform SHALL append the message to the existing Conversation and update last_message_at.
-3. THE Platform SHALL track Conversation status using exactly one of: open, pending, resolved, or escalated.
+3. THE Platform SHALL track Conversation status using exactly one of: open, resolved, or escalated.
 4. THE Platform SHALL track Conversation ai_state using exactly one of: idle, thinking, drafted, auto_replied, needs_human, or failed.
 5. WHEN an agent resolves a Conversation, THE Platform SHALL set the status to "resolved" and the ai_state to "idle".
 6. WHEN an agent reopens a resolved Conversation, THE Platform SHALL set the status to "open".

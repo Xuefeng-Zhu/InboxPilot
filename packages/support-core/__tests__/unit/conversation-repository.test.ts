@@ -141,7 +141,7 @@ describe('ConversationRepository', () => {
       const emailRow = {
         ...SAMPLE_ROW,
         channel: 'email' as const,
-        status: 'pending' as const,
+        status: 'open' as const,
         ai_state: 'thinking' as const,
         subject: 'Help with order',
       };
@@ -153,7 +153,7 @@ describe('ConversationRepository', () => {
         organizationId: 'org1',
         contactId: 'c1',
         channel: 'email',
-        status: 'pending',
+        status: 'open',
         aiState: 'thinking',
         subject: 'Help with order',
       });
@@ -163,14 +163,14 @@ describe('ConversationRepository', () => {
           organization_id: 'org1',
           contact_id: 'c1',
           channel: 'email',
-          status: 'pending',
+          status: 'open',
           ai_state: 'thinking',
           subject: 'Help with order',
         }),
       );
 
       expect(result.channel).toBe('email');
-      expect(result.status).toBe('pending');
+      expect(result.status).toBe('open');
       expect(result.aiState).toBe('thinking');
       expect(result.subject).toBe('Help with order');
     });

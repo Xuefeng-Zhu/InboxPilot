@@ -608,7 +608,7 @@ erDiagram
 | organization_id | uuid | NOT NULL, FK → organizations(id) ON DELETE CASCADE |
 | contact_id | uuid | NOT NULL, FK → contacts(id) ON DELETE CASCADE |
 | channel | text | NOT NULL, CHECK (channel IN ('sms', 'email')) |
-| status | text | NOT NULL, DEFAULT 'open', CHECK (status IN ('open', 'pending', 'resolved', 'escalated')) |
+| status | text | NOT NULL, DEFAULT 'open', CHECK (status IN ('open', 'resolved', 'escalated')) |
 | ai_state | text | NOT NULL, DEFAULT 'idle', CHECK (ai_state IN ('idle', 'thinking', 'drafted', 'auto_replied', 'needs_human', 'failed')) |
 | subject | text | (email conversations) |
 | assigned_to | uuid | FK → organization_members(id) |
@@ -978,7 +978,7 @@ Email addresses are normalized before storage and lookup:
 
 ### Property 12: Conversation state machine invariant
 
-*For any* conversation at any point in its lifecycle, the status SHALL be exactly one of {open, pending, resolved, escalated} and the ai_state SHALL be exactly one of {idle, thinking, drafted, auto_replied, needs_human, failed}. No operation SHALL produce a status or ai_state value outside these sets.
+*For any* conversation at any point in its lifecycle, the status SHALL be exactly one of {open, resolved, escalated} and the ai_state SHALL be exactly one of {idle, thinking, drafted, auto_replied, needs_human, failed}. No operation SHALL produce a status or ai_state value outside these sets.
 
 **Validates: Requirements 5.3, 5.4**
 

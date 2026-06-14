@@ -12,7 +12,7 @@ import type { ConversationStatus, AiState } from '../../src/types/index.js';
 
 // ─── Valid value sets (from the design document / DB CHECK constraints) ───
 
-const VALID_STATUSES: ConversationStatus[] = ['open', 'pending', 'resolved', 'escalated'];
+const VALID_STATUSES: ConversationStatus[] = ['open', 'resolved', 'escalated'];
 const VALID_AI_STATES: AiState[] = ['idle', 'thinking', 'drafted', 'auto_replied', 'needs_human', 'failed'];
 
 // ─── Mock helpers ────────────────────────────────────────────────────
@@ -81,7 +81,7 @@ describe('Conversation state machine property tests', () => {
    * Property 12: Conversation state machine invariant
    *
    * For any conversation at any point, status is exactly one of
-   * {open, pending, resolved, escalated} and ai_state is exactly one of
+   * {open, resolved, escalated} and ai_state is exactly one of
    * {idle, thinking, drafted, auto_replied, needs_human, failed}.
    * No operation produces a value outside these sets.
    *
@@ -89,11 +89,11 @@ describe('Conversation state machine property tests', () => {
    *
    * Feature: ai-customer-support, Property 12: Conversation state machine invariant
    */
-  it('Property 12: valid status values are exactly {open, pending, resolved, escalated}', () => {
+  it('Property 12: valid status values are exactly {open, resolved, escalated}', () => {
     fc.assert(
       fc.property(arbitraryStringArb, (value) => {
         const isValid = VALID_STATUSES.includes(value as ConversationStatus);
-        const expectedValid = ['open', 'pending', 'resolved', 'escalated'].includes(value);
+        const expectedValid = ['open', 'resolved', 'escalated'].includes(value);
         expect(isValid).toBe(expectedValid);
       }),
       { numRuns: 100 },

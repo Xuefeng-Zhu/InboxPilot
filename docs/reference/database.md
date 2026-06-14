@@ -109,7 +109,7 @@ Notes:
 | `organization_id` | `uuid` | NOT NULL, FK → `organizations` (CASCADE) | |
 | `contact_id` | `uuid` | NOT NULL, FK → `contacts` (CASCADE) | |
 | `channel` | `text` | NOT NULL, CHECK `('sms','email','webchat')` (loosened in 005) | |
-| `status` | `text` | NOT NULL, default `'open'`, CHECK `('open','pending','resolved','escalated')` | |
+| `status` | `text` | NOT NULL, default `'open'`, CHECK `('open','resolved','escalated')` (updated in 010) | |
 | `ai_state` | `text` | NOT NULL, default `'idle'`, CHECK `('idle','thinking','drafted','auto_replied','needs_human','failed')` | |
 | `subject` | `text` | nullable | Email subject line |
 | `assigned_to` | `uuid` | nullable, FK → `organization_members` | |
@@ -123,8 +123,7 @@ Notes:
 **Status state machine** (see [`architecture.md`](architecture.md#conversation-status-state-machine)):
 
 ```text
-open → pending | resolved | escalated
-pending → open | resolved | escalated
+open → resolved | escalated
 escalated → open | resolved
 resolved → open (reopen)
 ```

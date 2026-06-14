@@ -76,7 +76,6 @@ describe('InboxFilters (collapse behavior)', () => {
     render(<Harness />);
     expect(screen.getByRole('button', { name: /^all$/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^open$/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /^pending$/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^escalated$/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^resolved$/i })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /show filters/i }));

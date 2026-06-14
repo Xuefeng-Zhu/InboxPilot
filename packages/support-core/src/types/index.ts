@@ -8,7 +8,7 @@
 
 export type Channel = 'sms' | 'email' | 'webchat';
 
-export type ConversationStatus = 'open' | 'pending' | 'resolved' | 'escalated';
+export type ConversationStatus = 'open' | 'resolved' | 'escalated';
 
 export type AiState =
   | 'idle'

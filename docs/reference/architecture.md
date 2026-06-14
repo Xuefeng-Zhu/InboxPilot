@@ -194,12 +194,8 @@ stateDiagram-v2
 ```mermaid
 stateDiagram-v2
   [*] --> Open: conversation created
-  Open --> Pending
   Open --> Resolved
   Open --> Escalated
-  Pending --> Open
-  Pending --> Resolved
-  Pending --> Escalated
   Escalated --> Open
   Escalated --> Resolved
   Resolved --> Open: reopen

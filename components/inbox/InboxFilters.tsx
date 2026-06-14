@@ -32,7 +32,6 @@ interface InboxFiltersProps {
 const statusOptions: { id: ConversationStatus | 'all'; label: string }[] = [
   { id: 'all', label: 'All' },
   { id: 'open', label: 'Open' },
-  { id: 'pending', label: 'Pending' },
   { id: 'escalated', label: 'Escalated' },
   { id: 'resolved', label: 'Resolved' },
 ];

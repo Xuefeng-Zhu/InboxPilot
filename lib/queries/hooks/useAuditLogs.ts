@@ -18,6 +18,22 @@ export type AuditLogRow = {
 export type AuditLogFilters = {
   actorType?: 'user' | 'system' | 'ai';
   search?: string;
+  /**
+   * Filter to a single resource type (e.g. `'conversation'`, `'ai_decision'`).
+   * Backed by PostgREST `.eq('resource_type', value)`.
+   */
+  resourceType?: string;
+  /**
+   * Filter by resource id. A string matches a single id (`.eq`); an array
+   * matches any id in the set (`.in`).
+   */
+  resourceId?: string | string[];
+  /**
+   * JSONB containment filter on the `metadata` column. Maps to PostgREST
+   * `.contains('metadata', value)` which uses the `@>` operator. Example:
+   * `{ conversationId: 'abc' }` becomes `metadata @> '{"conversationId":"abc"}'`.
+   */
+  metadataContains?: Record<string, string>;
 };
 
 /**
@@ -44,6 +60,20 @@ export function useAuditLogs(filters?: AuditLogFilters) {
 
       if (filters?.actorType) {
         query = query.eq('actor_type', filters.actorType);
+      }
+
+      if (filters?.resourceType) {
+        query = query.eq('resource_type', filters.resourceType);
+      }
+
+      if (filters?.resourceId) {
+        query = Array.isArray(filters.resourceId)
+          ? query.in('resource_id', filters.resourceId)
+          : query.eq('resource_id', filters.resourceId);
+      }
+
+      if (filters?.metadataContains) {
+        query = query.contains('metadata', filters.metadataContains);
       }
 
       const search = filters?.search?.trim();

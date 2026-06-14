@@ -105,27 +105,8 @@ export function ReplyComposer({
       </div>
 
       {/* Action row */}
-      <div className="flex items-center gap-2 px-6 pb-4">
-        <button
-          type="button"
-          className="h-7 rounded-md border border-[var(--m03-line)] bg-white px-3 text-[12px] font-medium text-[var(--m03-fg)] transition-colors hover:bg-[var(--m03-line-2)]"
-        >
-          Save draft
-        </button>
-        <button
-          type="button"
-          className="h-7 rounded-md border border-[var(--m03-line)] bg-white px-3 text-[12px] font-medium text-[var(--m03-fg)] transition-colors hover:bg-[var(--m03-line-2)]"
-        >
-          Internal note
-        </button>
-        <button
-          type="button"
-          className="h-7 rounded-md border border-[var(--m03-line)] bg-white px-3 text-[12px] font-medium text-[var(--m03-fg)] transition-colors hover:bg-[var(--m03-line-2)]"
-        >
-          Escalate
-        </button>
-
-        <span className="ml-auto font-mono text-[10px] text-[var(--m03-fg-3)]">
+      <div className="flex flex-wrap items-center gap-2 px-6 pb-4">
+        <span className="ml-auto whitespace-nowrap font-mono text-[10px] text-[var(--m03-fg-3)]">
           <kbd className="rounded-[3px] border border-[var(--m03-line)] bg-[var(--m03-line-2)] px-1.5 py-px font-sans text-[10px]">
             Enter
           </kbd>{' '}
@@ -139,7 +120,7 @@ export function ReplyComposer({
         <button
           type="submit"
           disabled={!body.trim() || sending}
-          className="h-7 rounded-md border border-[var(--m03-fg)] bg-[var(--m03-fg)] px-3 text-[12px] font-semibold text-[var(--m03-bg)] transition-colors hover:bg-[var(--m03-fg-2)] disabled:cursor-not-allowed disabled:opacity-50"
+          className="h-7 shrink-0 whitespace-nowrap rounded-md border border-[var(--m03-fg)] bg-[var(--m03-fg)] px-3 text-[12px] font-semibold text-[var(--m03-bg)] transition-colors hover:bg-[var(--m03-fg-2)] disabled:cursor-not-allowed disabled:opacity-50"
           aria-label="Send reply"
         >
           {sending ? 'Sending…' : 'Send'}

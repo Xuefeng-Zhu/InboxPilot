@@ -1,7 +1,7 @@
 'use client';
 
 import { Suspense, useEffect, useMemo, useRef, useState, useCallback } from 'react';
-import { useParams, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import { useRealtime } from '@/lib/use-realtime';
 
 /**
@@ -107,9 +107,7 @@ export default function WidgetChatPage() {
 }
 
 function WidgetChatContent() {
-  const params = useParams();
   const searchParams = useSearchParams();
-  const widgetId = params.widgetId as string;
   const initialToken = searchParams.get('t') ?? '';
 
   const [visitorToken, setVisitorToken] = useState(initialToken);
@@ -130,9 +128,14 @@ function WidgetChatContent() {
     setMessages((prev) => [...prev, msg]);
   }, []);
 
-  // Per-visitor realtime channel. The `jti` (from the visitor JWT) is the
-  // unguessable secret that scopes the channel to this thread — the
-  // `send-reply` route broadcasts to the same `widget:${widgetId}:${jti}`.
+  // Per-visitor realtime channel. Both `widget` (the widget's INTERNAL UUID
+  // — `webchat_widgets.id`, FK target of `webchat_threads.widget_id`) and
+  // `jti` come from the visitor JWT. The `send-reply` route broadcasts to
+  // `widget:${webchat_threads.widget_id}:${webchat_threads.visitor_token_jti}`,
+  // which is the same internal UUID + jti, so the channel name matches.
+  // IMPORTANT: do NOT use `params.widgetId` here — that is the PUBLIC
+  // `widget_token` (e.g. `wt_abc123`), a different value from the internal
+  // UUID, and would produce a channel that no broadcast ever targets.
   const realtimeChannel = useMemo(() => {
     if (!visitorToken) return undefined;
     try {
@@ -140,31 +143,37 @@ function WidgetChatContent() {
       if (parts.length !== 3) return undefined;
       const payload = JSON.parse(
         atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')),
-      ) as { jti?: unknown };
+      ) as { widget?: unknown; jti?: unknown };
+      if (typeof payload.widget !== 'string' || !payload.widget) return undefined;
       if (typeof payload.jti !== 'string' || !payload.jti) return undefined;
-      return `widget:${widgetId}:${payload.jti}`;
+      return `widget:${payload.widget}:${payload.jti}`;
     } catch {
       return undefined;
     }
-  }, [visitorToken, widgetId]);
+  }, [visitorToken]);
 
-  // The InsForge SDK Realtime delivers the inner publish payload
-  // (shape: { message, conversationId } — see realtimePublisher.publish).
+  // The InsForge SDK Realtime payload shape has been observed as
+  // `{ message, conversationId }` (the inner `realtimePublisher.publish`
+  // argument). Be defensive: if `.message` is missing, fall back to treating
+  // the payload itself as the message row.
   const onRealtime = useCallback(
     (payload: Record<string, unknown>) => {
-      const msg = payload.message;
-      if (!msg || typeof msg !== 'object') return;
-      const m = msg as Record<string, unknown>;
-      if (typeof m.body !== 'string' || !m.body) return;
+      const candidate =
+        payload.message && typeof payload.message === 'object'
+          ? (payload.message as Record<string, unknown>)
+          : payload;
+      if (typeof candidate.body !== 'string' || !candidate.body) return;
       handleRealtimeMessage({
-        id: (typeof m.id === 'string' ? m.id : undefined) ?? `rt_${Date.now()}`,
-        body: m.body,
+        id:
+          (typeof candidate.id === 'string' ? candidate.id : undefined) ??
+          `rt_${Date.now()}`,
+        body: candidate.body,
         sender_type:
-          (m.sender_type as ChatMessage['sender_type']) ??
-          (m.senderType as ChatMessage['sender_type']) ??
+          (candidate.sender_type as ChatMessage['sender_type']) ??
+          (candidate.senderType as ChatMessage['sender_type']) ??
           'user',
         created_at:
-          (m.created_at as string) ?? new Date().toISOString(),
+          (candidate.created_at as string) ?? new Date().toISOString(),
       });
     },
     [handleRealtimeMessage],

@@ -246,7 +246,13 @@ class PostgRestQueryBuilder implements QueryBuilder {
         return { data: null, error };
       }
 
-      const data = await res.json();
+      // PostgREST returns 204 No Content for DELETE / PATCH without
+      // `Prefer: return=representation`. `res.json()` throws on an empty
+      // body ("Unexpected end of JSON input"), so short-circuit here.
+      let data: unknown = null;
+      if (res.status !== 204) {
+        data = await res.json();
+      }
       return { data, error: null };
     } catch (err) {
       return {

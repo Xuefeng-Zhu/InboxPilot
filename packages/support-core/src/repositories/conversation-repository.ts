@@ -60,8 +60,10 @@ function toRow(fields: Partial<Conversation>): Record<string, unknown> {
   if (fields.aiState !== undefined) row.ai_state = fields.aiState;
   if (fields.subject !== undefined) row.subject = fields.subject;
   if (fields.assignedTo !== undefined) row.assigned_to = fields.assignedTo;
-  if (fields.lastMessageAt !== undefined) {
-    row.last_message_at = fields.lastMessageAt ? fields.lastMessageAt.toISOString() : null;
+  // != null excludes both undefined and null — null is silently ignored
+  // so the DB DEFAULT (now()) fills in instead. NOT NULL added in migration 011.
+  if (fields.lastMessageAt != null) {
+    row.last_message_at = fields.lastMessageAt.toISOString();
   }
   if (fields.metadata !== undefined) row.metadata = fields.metadata;
   if (fields.createdAt !== undefined) row.created_at = fields.createdAt.toISOString();
@@ -129,8 +131,10 @@ export class ConversationRepository {
     if (input.status !== undefined) row.status = input.status;
     if (input.aiState !== undefined) row.ai_state = input.aiState;
     if (input.subject !== undefined) row.subject = input.subject;
-    if (input.lastMessageAt !== undefined) {
-      row.last_message_at = input.lastMessageAt ? input.lastMessageAt.toISOString() : null;
+    // != null excludes both undefined and null — null is silently ignored
+    // so the DB DEFAULT (now()) fills in instead. NOT NULL added in migration 011.
+    if (input.lastMessageAt != null) {
+      row.last_message_at = input.lastMessageAt.toISOString();
     }
 
     const { data, error } = await this.db

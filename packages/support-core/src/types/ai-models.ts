@@ -13,13 +13,8 @@
 export const CHAT_MODEL_OPTIONS = [
   'openai/gpt-5-mini',
   'openai/gpt-4.1-mini',
-  'anthropic/claude-haiku-4.5',
-  'anthropic/claude-sonnet-4.5',
-  'openai/gpt-5',
   'google/gemini-2.5-flash',
-  'openai/gpt-4.1',
   'openai/o4-mini',
-  'google/gemini-2.5-pro',
   'meta-llama/llama-4-maverick',
   'mistralai/mistral-small-3.2-24b-instruct',
   'openai/gpt-4o-mini', // legacy — kept for backward compat with existing ai_settings rows

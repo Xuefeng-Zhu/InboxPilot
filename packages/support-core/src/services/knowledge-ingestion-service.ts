@@ -117,11 +117,21 @@ export class KnowledgeIngestionService {
         });
       }
 
-      // 6. Store all chunks with embeddings
-      await this.knowledgeRepo.insertChunks(chunkInputs);
+      // 6. Atomically replace existing chunks with the freshly embedded version.
+      await this.knowledgeRepo.replaceChunksByDocument(
+        documentId,
+        document.organizationId,
+        chunkInputs,
+      );
 
-      // 7. Set status to "ready"
-      await this.knowledgeRepo.updateDocument(documentId, { status: 'ready' });
+      // 7. Set status to "ready". Also clear any stale `error_message`
+      //    from a previous failed run — otherwise the row keeps the old
+      //    error even after a successful reprocess, and the UI renders
+      //    a red "Failed" badge on a doc that's actually ready.
+      await this.knowledgeRepo.updateDocument(documentId, {
+        status: 'ready',
+        errorMessage: null,
+      });
 
       // 9. Record audit log entry for success
       await this.auditLog.create({
@@ -133,13 +143,8 @@ export class KnowledgeIngestionService {
         metadata: { chunkCount: chunkInputs.length, status: 'ready' },
       });
     } catch (err) {
-      // 8. On error: clean up partial chunks and set status to "failed"
-      try {
-        await this.knowledgeRepo.deleteChunksByDocument(documentId);
-      } catch {
-        // Ignore cleanup errors — the primary error is more important
-      }
-
+      // 8. On error: set status to "failed". Chunk replacement is atomic, so
+      // old chunks remain intact if re-indexing fails before or during replace.
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
 
       try {

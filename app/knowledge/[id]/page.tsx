@@ -202,6 +202,33 @@ export default function KnowledgeDetailPage({ params }: { params: Promise<{ id: 
   const handleReprocess = async () => {
     if (!doc) return;
     try {
+      const { error: updateError } = await insforge.database
+        .from('knowledge_documents')
+        .update({
+          status: 'pending',
+          error_message: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', doc.id);
+
+      if (updateError) {
+        setSaveError(updateError.message);
+        return;
+      }
+
+      await insforge.database
+        .from('audit_logs')
+        .insert([{
+          organization_id: doc.organization_id,
+          actor_id: user?.id ?? null,
+          actor_type: 'user',
+          action: 'knowledge_document_updated',
+          resource_type: 'knowledge_document',
+          resource_id: doc.id,
+          metadata: { status: 'pending' },
+        }])
+        .select();
+
       await insforge.database
         .from('support_jobs')
         .insert([{
@@ -216,6 +243,8 @@ export default function KnowledgeDetailPage({ params }: { params: Promise<{ id: 
         .select();
       setSuccess('Queued for reprocessing');
       setTimeout(() => setSuccess(null), 3000);
+      queryClient.invalidateQueries({ queryKey: queryKeys.knowledgeDoc(doc.id) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.knowledgeDocs() });
     } catch {
       setSaveError('Failed to queue reprocess');
     }

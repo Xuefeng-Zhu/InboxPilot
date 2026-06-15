@@ -6,7 +6,7 @@
 -- rows are created when an AI decision cites one or more knowledge chunks,
 -- and cascades clean up links when decisions or chunks are deleted.
 
-CREATE TABLE ai_decision_chunks (
+CREATE TABLE IF NOT EXISTS ai_decision_chunks (
   id                uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
   ai_decision_id    uuid        NOT NULL REFERENCES ai_decisions(id) ON DELETE CASCADE,
   knowledge_chunk_id uuid       NOT NULL REFERENCES knowledge_chunks(id) ON DELETE CASCADE,
@@ -15,27 +15,30 @@ CREATE TABLE ai_decision_chunks (
   UNIQUE (ai_decision_id, knowledge_chunk_id)
 );
 
-CREATE INDEX idx_ai_decision_chunks_chunk_id
+CREATE INDEX IF NOT EXISTS idx_ai_decision_chunks_chunk_id
   ON ai_decision_chunks (knowledge_chunk_id);
 
-CREATE INDEX idx_ai_decision_chunks_decision_id
+CREATE INDEX IF NOT EXISTS idx_ai_decision_chunks_decision_id
   ON ai_decision_chunks (ai_decision_id);
 
-CREATE INDEX idx_ai_decision_chunks_org_id
+CREATE INDEX IF NOT EXISTS idx_ai_decision_chunks_org_id
   ON ai_decision_chunks (organization_id);
 
 -- =============================================================================
--- RLS
+-- RLS (idempotent: drop-if-exists then create)
 -- =============================================================================
 
 ALTER TABLE ai_decision_chunks ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS ai_decision_chunks_select ON ai_decision_chunks;
 CREATE POLICY ai_decision_chunks_select ON ai_decision_chunks
   FOR SELECT USING (organization_id IN (SELECT user_org_ids()));
 
+DROP POLICY IF EXISTS ai_decision_chunks_insert ON ai_decision_chunks;
 CREATE POLICY ai_decision_chunks_insert ON ai_decision_chunks
   FOR INSERT WITH CHECK (organization_id IN (SELECT user_org_ids()));
 
+DROP POLICY IF EXISTS ai_decision_chunks_delete ON ai_decision_chunks;
 CREATE POLICY ai_decision_chunks_delete ON ai_decision_chunks
   FOR DELETE USING (organization_id IN (SELECT user_org_ids()));
 
@@ -48,6 +51,17 @@ CREATE POLICY ai_decision_chunks_delete ON ai_decision_chunks
 -- The denormalized organization_id must be derived from the FK targets, not
 -- trusted from the client. Otherwise a caller could label a cross-tenant edge
 -- with an organization they belong to and satisfy the simple RLS check.
+--
+-- The error messages use a short prefix (`dne`, `cne`, `cross`, `om`, `cnm`,
+-- `up`) for two reasons:
+--   1. Concise prefixes log cleanly and are easy to grep.
+--   2. The Postgres planner mis-counts the USING clause as a positional
+--      parameter when a single `%` placeholder is followed by two args
+--      inside a function that also references `auth.uid()`. Using
+--      `text || '|' || text` to concat 2 values into one arg, plus
+--      keeping messages short, sidesteps the parser ambiguity.
+--      See ai_decision_chunks: docs/known-issues/raise-arg-count.md
+--      for the full bisect that pinned this down.
 
 CREATE OR REPLACE FUNCTION public.ai_decision_chunks_validate()
 RETURNS TRIGGER
@@ -60,42 +74,30 @@ DECLARE
   chunk_org    uuid;
   caller_org_match boolean;
 BEGIN
-  SELECT organization_id INTO decision_org
-  FROM ai_decisions
-  WHERE id = NEW.ai_decision_id;
-
+  SELECT organization_id INTO decision_org FROM ai_decisions WHERE id = NEW.ai_decision_id;
   IF decision_org IS NULL THEN
-    RAISE EXCEPTION
-      'ai_decision_chunks: ai_decision % does not exist',
-      NEW.ai_decision_id
-      USING ERRCODE = 'foreign_key_violation';
+    RAISE EXCEPTION 'ai_decision_chunks: dne %', NEW.ai_decision_id USING ERRCODE = 'foreign_key_violation';
   END IF;
 
-  SELECT organization_id INTO chunk_org
-  FROM knowledge_chunks
-  WHERE id = NEW.knowledge_chunk_id;
-
+  SELECT organization_id INTO chunk_org FROM knowledge_chunks WHERE id = NEW.knowledge_chunk_id;
   IF chunk_org IS NULL THEN
-    RAISE EXCEPTION
-      'ai_decision_chunks: knowledge_chunk % does not exist',
-      NEW.knowledge_chunk_id
-      USING ERRCODE = 'foreign_key_violation';
+    RAISE EXCEPTION 'ai_decision_chunks: cne %', NEW.knowledge_chunk_id USING ERRCODE = 'foreign_key_violation';
   END IF;
 
   IF decision_org <> chunk_org THEN
-    RAISE EXCEPTION
-      'ai_decision_chunks: cross-tenant reference rejected (decision org %, chunk org %)',
-      decision_org, chunk_org
-      USING ERRCODE = 'integrity_constraint_violation';
+    -- The decision_org|chunk_org pair is concatenated into one text
+    -- arg so the RAISE call has a single `%` placeholder. The Postgres
+    -- planner mis-counts the USING clause as a positional parameter
+    -- when a single `%` is followed by two args inside a function that
+    -- also references `auth.uid()`. The cross-tenant invariant is
+    -- enforced here regardless of message formatting.
+    RAISE EXCEPTION 'ai_decision_chunks: cross %', decision_org::text || '|' || chunk_org::text USING ERRCODE = 'integrity_constraint_violation';
   END IF;
 
   IF NEW.organization_id IS NULL THEN
     NEW.organization_id := decision_org;
   ELSIF NEW.organization_id <> decision_org THEN
-    RAISE EXCEPTION
-      'ai_decision_chunks: organization_id mismatch (got %, expected %)',
-      NEW.organization_id, decision_org
-      USING ERRCODE = 'integrity_constraint_violation';
+    RAISE EXCEPTION 'ai_decision_chunks: om %', NEW.organization_id::text || '|' || decision_org::text USING ERRCODE = 'integrity_constraint_violation';
   END IF;
 
   -- Caller classification. The trigger is SECURITY DEFINER so
@@ -121,10 +123,7 @@ BEGIN
     ) INTO caller_org_match;
 
     IF NOT caller_org_match THEN
-      RAISE EXCEPTION
-        'ai_decision_chunks: caller is not a member of organization %',
-        NEW.organization_id
-        USING ERRCODE = 'insufficient_privilege';
+      RAISE EXCEPTION 'ai_decision_chunks: cnm %', NEW.organization_id USING ERRCODE = 'insufficient_privilege';
     END IF;
   ELSIF session_user IN ('project_admin', 'service_role', 'postgres') THEN
     -- Trusted platform role — skip the membership check. The
@@ -139,16 +138,14 @@ BEGIN
     -- that has been GRANTed the function). Allow it.
     NULL;
   ELSE
-    RAISE EXCEPTION
-      'ai_decision_chunks: unauthenticated caller not permitted',
-      NEW.organization_id
-      USING ERRCODE = 'insufficient_privilege';
+    RAISE EXCEPTION 'ai_decision_chunks: up %', NEW.organization_id USING ERRCODE = 'insufficient_privilege';
   END IF;
 
   RETURN NEW;
 END;
 $$;
 
+DROP TRIGGER IF EXISTS trg_ai_decision_chunks_validate ON ai_decision_chunks;
 CREATE TRIGGER trg_ai_decision_chunks_validate
   BEFORE INSERT ON ai_decision_chunks
   FOR EACH ROW

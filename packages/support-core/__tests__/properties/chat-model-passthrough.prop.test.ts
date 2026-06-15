@@ -160,6 +160,7 @@ function buildServiceWithModel(model: ModelId): {
 
   const knowledgeRepo: KnowledgeRepository = {
     matchChunks: vi.fn().mockResolvedValue([]),
+    searchChunksByText: vi.fn().mockResolvedValue([]),
     getDocument: vi.fn(),
     createDocument: vi.fn(),
     updateDocument: vi.fn(),
@@ -211,9 +212,9 @@ function buildServiceWithModel(model: ModelId): {
 }
 
 describe('chat model passthrough (property)', () => {
-  // Sanity: ensure CHAT_MODEL_OPTIONS has at least 12 models (per T1 spec).
-  it('CHAT_MODEL_OPTIONS contains 12 models (sanity check for the arbitrary)', () => {
-    expect(CHAT_MODEL_OPTIONS.length).toBe(12);
+  // Sanity: ensure CHAT_MODEL_OPTIONS has exactly 7 models.
+  it('CHAT_MODEL_OPTIONS contains 7 models (sanity check for the arbitrary)', () => {
+    expect(CHAT_MODEL_OPTIONS.length).toBe(7);
   });
 
   /**

@@ -132,13 +132,29 @@ export class AiAgentService {
         knowledgeSimilarityThreshold,
       );
     } catch (err) {
-      // If embedding/knowledge retrieval fails, continue with empty chunks
-      // The MissingKnowledgeRule will handle escalation if needed.
-      // Log so the failure is visible — the AI turn itself still succeeds.
+      // If embedding/vector retrieval fails, try lexical fallback below before
+      // allowing MissingKnowledgeRule to escalate the conversation.
       console.warn(
         'embedding/knowledge retrieval failed; continuing with empty chunks',
         err instanceof Error ? err.message : String(err),
       );
+    }
+
+    if (knowledgeChunks.length === 0 && latestMessage.trim().length > 0) {
+      try {
+        knowledgeChunks = await this.knowledgeRepo.searchChunksByText(
+          orgId,
+          latestMessage,
+          5,
+        );
+      } catch (err) {
+        // A failed fallback should not hide the original AI turn. If both
+        // retrieval paths miss, MissingKnowledgeRule will still escalate.
+        console.warn(
+          'lexical knowledge retrieval failed; continuing with empty chunks',
+          err instanceof Error ? err.message : String(err),
+        );
+      }
     }
 
     // Chunk IDs that grounded this turn. Enqueued (not inserted inline)
@@ -429,20 +445,6 @@ export class AiAgentService {
             rawResponse: parsed as unknown as Record<string, unknown>,
           });
           await enqueueChunkRefs(autoDecision.id);
-
-          // Enqueue outbound message job
-          if (parsed.response_text) {
-            await this.jobQueue.enqueue(
-              'send_outbound_message',
-              {
-                conversation_id: conversationId,
-                body: parsed.response_text,
-                sender_type: 'ai',
-                ai_decision_id: autoDecision.id,
-              },
-              orgId,
-            );
-          }
 
           await this.auditLog.create({
             organizationId: orgId,

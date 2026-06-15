@@ -152,25 +152,47 @@ export default async function (req: Request): Promise<Response> {
     // 10. If widget has a greeting and no messages exist, insert greeting as system message
     if (widget.greeting && history.length === 0) {
       const greetingCreatedAt = new Date().toISOString();
-      await db.from('messages').insert({
-        conversation_id: result.conversation.id,
-        sender_type: 'system',
-        direction: 'outbound',
-        channel: 'webchat',
-        body: widget.greeting,
-        provider: 'webchat',
-        external_message_id: `wc_greeting_${result.thread.id}`,
-        delivery_status: 'sent',
-        created_at: greetingCreatedAt,
-      });
 
-      await db
+      const { error: greetingInsertError } = await db
+        .from('messages')
+        .insert({
+          conversation_id: result.conversation.id,
+          sender_type: 'system',
+          direction: 'outbound',
+          channel: 'webchat',
+          body: widget.greeting,
+          provider: 'webchat',
+          external_message_id: `wc_greeting_${result.thread.id}`,
+          delivery_status: 'sent',
+          created_at: greetingCreatedAt,
+        })
+        .select('*')
+        .single();
+
+      if (greetingInsertError) {
+        console.error('webchat-thread-init: Failed to insert greeting message', {
+          threadId: result.thread.id,
+          conversationId: result.conversation.id,
+          error: greetingInsertError,
+        });
+      }
+
+      const { error: conversationUpdateError } = await db
         .from('conversations')
         .update({
           last_message_at: greetingCreatedAt,
           updated_at: greetingCreatedAt,
         })
-        .eq('id', result.conversation.id);
+        .eq('id', result.conversation.id)
+        .select('*')
+        .single();
+
+      if (conversationUpdateError) {
+        console.error('webchat-thread-init: Failed to update conversation last_message_at', {
+          conversationId: result.conversation.id,
+          error: conversationUpdateError,
+        });
+      }
 
       history.push({
         id: 'greeting',

@@ -49,6 +49,65 @@ interface MatchChunkRow {
   similarity: number;
 }
 
+/** Raw row shape returned by lexical chunk fallback search. */
+interface TextSearchChunkRow {
+  id: string;
+  document_id: string;
+  organization_id: string;
+  content: string;
+  metadata: Record<string, unknown>;
+  created_at: string;
+}
+
+const TEXT_SEARCH_STOP_WORDS = new Set([
+  'about',
+  'after',
+  'again',
+  'also',
+  'are',
+  'can',
+  'could',
+  'does',
+  'for',
+  'from',
+  'have',
+  'how',
+  'into',
+  'our',
+  'please',
+  'the',
+  'their',
+  'there',
+  'this',
+  'what',
+  'when',
+  'where',
+  'which',
+  'with',
+  'would',
+  'you',
+  'your',
+]);
+
+function buildTextSearchTerms(query: string): string[] {
+  const words = query
+    .toLowerCase()
+    .match(/[a-z0-9]+/g)
+    ?.filter((word) => word.length >= 3 && !TEXT_SEARCH_STOP_WORDS.has(word)) ?? [];
+
+  const phrases: string[] = [];
+  for (let i = 0; i < words.length - 1; i++) {
+    phrases.push(`${words[i]} ${words[i + 1]}`);
+  }
+
+  const compactQuery = words.join(' ');
+  const terms = compactQuery.includes(' ')
+    ? [compactQuery, ...phrases, ...words]
+    : [...phrases, ...words];
+
+  return Array.from(new Set(terms)).slice(0, 8);
+}
+
 /** Convert a database row to a KnowledgeDocument entity. */
 function toDocument(row: DocumentRow): KnowledgeDocument {
   return {
@@ -190,6 +249,37 @@ export class KnowledgeRepository {
     return resultRows.map(toChunk);
   }
 
+  /** Atomically replace all chunks belonging to a document. */
+  async replaceChunksByDocument(
+    documentId: string,
+    organizationId: string,
+    chunks: CreateChunkInput[],
+  ): Promise<KnowledgeChunk[]> {
+    const mismatchedChunk = chunks.find(
+      (chunk) => chunk.documentId !== documentId || chunk.organizationId !== organizationId,
+    );
+    if (mismatchedChunk) {
+      throw new Error('KnowledgeRepository.replaceChunksByDocument failed: chunk document/org mismatch');
+    }
+
+    const { data, error } = await this.db.rpc('replace_knowledge_chunks', {
+      p_document_id: documentId,
+      p_organization_id: organizationId,
+      p_chunks: chunks.map((chunk) => ({
+        content: chunk.content,
+        embedding: chunk.embedding,
+        metadata: chunk.metadata ?? {},
+      })),
+    });
+
+    if (error) {
+      throw new Error(`KnowledgeRepository.replaceChunksByDocument failed: ${error.message}`);
+    }
+
+    const resultRows = (data ?? []) as ChunkRow[];
+    return resultRows.map(toChunk);
+  }
+
   /** Delete all chunks belonging to a document. */
   async deleteChunksByDocument(documentId: string): Promise<void> {
     const { error } = await this.db
@@ -236,5 +326,55 @@ export class KnowledgeRepository {
       metadata: row.metadata,
       createdAt: new Date(),
     }));
+  }
+
+  /**
+   * Fallback lexical search for short user questions where semantic similarity
+   * can miss exact knowledge-base wording such as plan names or feature labels.
+   */
+  async searchChunksByText(
+    orgId: string,
+    query: string,
+    limit: number,
+  ): Promise<KnowledgeChunk[]> {
+    const terms = buildTextSearchTerms(query);
+    if (terms.length === 0) return [];
+
+    const rowsById = new Map<string, TextSearchChunkRow>();
+
+    for (const term of terms) {
+      const { data, error } = await this.db
+        .from('knowledge_chunks')
+        .select('id,document_id,organization_id,content,metadata,created_at')
+        .eq('organization_id', orgId)
+        .ilike('content', `%${term}%`)
+        .order('created_at', { ascending: false })
+        .limit(limit);
+
+      if (error) {
+        throw new Error(`KnowledgeRepository.searchChunksByText failed: ${error.message}`);
+      }
+
+      const rows = (data ?? []) as TextSearchChunkRow[];
+      for (const row of rows) {
+        if (!rowsById.has(row.id)) {
+          rowsById.set(row.id, row);
+        }
+      }
+
+      if (rowsById.size >= limit) break;
+    }
+
+    return Array.from(rowsById.values())
+      .slice(0, limit)
+      .map((row) => ({
+        id: row.id,
+        documentId: row.document_id,
+        organizationId: row.organization_id,
+        content: row.content,
+        embedding: [],
+        metadata: row.metadata,
+        createdAt: new Date(row.created_at),
+      }));
   }
 }

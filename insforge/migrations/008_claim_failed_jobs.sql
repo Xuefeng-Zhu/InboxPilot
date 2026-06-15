@@ -13,9 +13,16 @@
 
 DROP INDEX IF EXISTS idx_support_jobs_pending;
 
-CREATE INDEX idx_support_jobs_claimable
+CREATE INDEX IF NOT EXISTS idx_support_jobs_claimable
   ON support_jobs (run_after, created_at)
   WHERE status IN ('pending', 'failed');
+
+-- The old claim_support_jobs(max_count integer) signature is dropped so the
+-- CREATE OR REPLACE below can rename the parameter to claim_limit. Postgres
+-- disallows renaming parameters in CREATE OR REPLACE — only the body can
+-- change. This DROP is a no-op on a fresh DB; it only fires when upgrading
+-- from a project that had migration 002 applied.
+DROP FUNCTION IF EXISTS public.claim_support_jobs(integer);
 
 CREATE OR REPLACE FUNCTION claim_support_jobs(claim_limit int DEFAULT 5)
 RETURNS SETOF support_jobs

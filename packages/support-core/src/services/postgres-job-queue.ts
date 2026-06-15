@@ -94,9 +94,17 @@ export class PostgresJobQueue implements JobQueue {
    * SELECT FOR UPDATE SKIP LOCKED.
    */
   async claim(limit: number): Promise<Job[]> {
-    const { data, error } = await this.db.rpc('claim_support_jobs', {
+    let { data, error } = await this.db.rpc('claim_support_jobs', {
       max_count: limit,
     });
+
+    if (error && error.message.includes('claim_support_jobs')) {
+      const fallback = await this.db.rpc('claim_support_jobs', {
+        claim_limit: limit,
+      });
+      data = fallback.data;
+      error = fallback.error;
+    }
 
     if (error) {
       throw new Error(`Failed to claim jobs: ${error.message}`);

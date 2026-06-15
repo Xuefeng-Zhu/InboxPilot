@@ -14,6 +14,7 @@ import type {
   Message,
   AiSettings,
   AiDecision,
+  CreateAiDecisionInput,
   AuditLog,
   Job,
 } from '../../src/types/index.js';
@@ -145,6 +146,7 @@ function createMockMessageRepo(): MessageRepository {
 function createMockKnowledgeRepo(): KnowledgeRepository {
   return {
     matchChunks: vi.fn().mockResolvedValue([]),
+    searchChunksByText: vi.fn().mockResolvedValue([]),
     getDocument: vi.fn(),
     createDocument: vi.fn(),
     updateDocument: vi.fn(),
@@ -164,7 +166,20 @@ function createMockAiSettingsRepo(settings: AiSettings | null = SAMPLE_AI_SETTIN
 
 function createMockAiDecisionRepo(): AiDecisionRepository {
   return {
-    create: vi.fn().mockResolvedValue(SAMPLE_AI_DECISION),
+    create: vi.fn().mockImplementation(async (input: CreateAiDecisionInput): Promise<AiDecision> => ({
+      id: SAMPLE_AI_DECISION.id,
+      conversationId: input.conversationId,
+      organizationId: input.organizationId,
+      messageId: input.messageId ?? null,
+      decisionType: input.decisionType,
+      confidence: input.confidence,
+      reasoningSummary: input.reasoningSummary ?? null,
+      responseText: input.responseText ?? null,
+      tags: input.tags ?? [],
+      requiresHuman: input.requiresHuman,
+      rawResponse: input.rawResponse ?? null,
+      createdAt: SAMPLE_AI_DECISION.createdAt,
+    })),
     findLatestByConversation: vi.fn(),
   } as unknown as AiDecisionRepository;
 }
@@ -298,19 +313,16 @@ describe('AiAgentService', () => {
       }));
       const service = createService();
 
-      await service.processMessage(CONV_ID, ORG_ID);
+      const result = await service.processMessage(CONV_ID, ORG_ID);
 
       // Should set ai_state to "auto_replied"
       expect(conversationRepo.update).toHaveBeenCalledWith(
         CONV_ID,
         expect.objectContaining({ aiState: 'auto_replied' }),
       );
-      // Should enqueue outbound message
-      expect(jobQueue.enqueue).toHaveBeenCalledWith(
-        'send_outbound_message',
-        expect.objectContaining({ conversation_id: CONV_ID }),
-        ORG_ID,
-      );
+      // Should return a decision with responseText (the caller sends it inline)
+      expect(result.responseText).toBe('Here is your answer.');
+      expect(result.requiresHuman).toBe(false);
     });
   });
 
@@ -342,6 +354,51 @@ describe('AiAgentService', () => {
         expect.objectContaining({
           decisionType: 'escalate',
           requiresHuman: true,
+        }),
+      );
+    });
+
+    it('does not trigger MissingKnowledgeRule when lexical fallback finds a matching chunk', async () => {
+      const { MissingKnowledgeRule } = await import('../../src/services/escalation-rules.js');
+      escalationEngine.register(new MissingKnowledgeRule());
+
+      vi.mocked(messageRepo.listByConversation).mockResolvedValue([
+        { ...SAMPLE_MESSAGE, body: 'free plan' },
+      ]);
+      vi.mocked(knowledgeRepo.searchChunksByText).mockResolvedValue([
+        {
+          id: 'chunk-free-plan',
+          documentId: 'doc-pricing',
+          organizationId: ORG_ID,
+          content: 'The free plan includes one inbox and basic webchat support.',
+          embedding: [],
+          metadata: {},
+          createdAt: new Date('2024-01-01'),
+        },
+      ]);
+
+      const service = createService();
+
+      await service.processMessage(CONV_ID, ORG_ID);
+
+      expect(knowledgeRepo.matchChunks).toHaveBeenCalled();
+      expect(knowledgeRepo.searchChunksByText).toHaveBeenCalledWith(
+        ORG_ID,
+        'free plan',
+        5,
+      );
+      expect(aiClient.chatCompletion).toHaveBeenCalled();
+      expect(aiDecisionRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          decisionType: 'respond',
+          requiresHuman: false,
+        }),
+      );
+      expect(conversationRepo.update).not.toHaveBeenCalledWith(
+        CONV_ID,
+        expect.objectContaining({
+          status: 'escalated',
+          aiState: 'needs_human',
         }),
       );
     });

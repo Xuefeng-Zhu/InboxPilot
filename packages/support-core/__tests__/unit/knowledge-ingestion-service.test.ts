@@ -50,11 +50,12 @@ function createMockKnowledgeRepo(): KnowledgeRepository {
   return {
     getDocument: vi.fn().mockResolvedValue(SAMPLE_DOCUMENT),
     updateDocument: vi.fn().mockResolvedValue(SAMPLE_DOCUMENT),
-    insertChunks: vi.fn().mockResolvedValue([]),
+    replaceChunksByDocument: vi.fn().mockResolvedValue([]),
     deleteChunksByDocument: vi.fn().mockResolvedValue(undefined),
     createDocument: vi.fn(),
     deleteDocumentWithChunks: vi.fn(),
     matchChunks: vi.fn(),
+    searchChunksByText: vi.fn(),
   } as unknown as KnowledgeRepository;
 }
 
@@ -109,9 +110,12 @@ describe('KnowledgeIngestionService', () => {
         status: 'processing',
       });
 
-      // Should set status to "ready" on success
+      // Should set status to "ready" on success (and clear any stale
+      // error_message from a previous failed run — see the dedicated
+      // "clears any previous errorMessage" test below).
       expect(knowledgeRepo.updateDocument).toHaveBeenCalledWith(DOC_ID, {
         status: 'ready',
+        errorMessage: null,
       });
 
       // Verify order: processing before ready
@@ -135,7 +139,9 @@ describe('KnowledgeIngestionService', () => {
     it('stores chunks with embeddings', async () => {
       await service.processDocument(DOC_ID);
 
-      expect(knowledgeRepo.insertChunks).toHaveBeenCalledWith(
+      expect(knowledgeRepo.replaceChunksByDocument).toHaveBeenCalledWith(
+        DOC_ID,
+        ORG_ID,
         expect.arrayContaining([
           expect.objectContaining({
             documentId: DOC_ID,
@@ -159,6 +165,29 @@ describe('KnowledgeIngestionService', () => {
         }),
       );
     });
+
+    it('clears any previous errorMessage when reprocessing succeeds', async () => {
+      // Simulate a doc that was previously failed (still has a stale
+      // error_message from the prior attempt). Reprocessing should not
+      // leave the stale error in the row — otherwise the UI will show a
+      // red "Failed" badge on a doc that actually succeeded.
+      const previouslyFailedDoc: KnowledgeDocument = {
+        ...SAMPLE_DOCUMENT,
+        status: 'pending',
+        errorMessage: 'KnowledgeRepository.deleteChunksByDocument failed: ...',
+      };
+      vi.mocked(knowledgeRepo.getDocument).mockResolvedValue(previouslyFailedDoc);
+
+      await service.processDocument(DOC_ID);
+
+      // The status='ready' call must also clear the stale error.
+      const calls = vi.mocked(knowledgeRepo.updateDocument).mock.calls;
+      const readyCall = calls.find(
+        (c) => (c[1] as Record<string, unknown>).status === 'ready',
+      );
+      expect(readyCall).toBeDefined();
+      expect((readyCall![1] as Record<string, unknown>).errorMessage).toBeNull();
+    });
   });
 
   describe('failure handling', () => {
@@ -174,13 +203,34 @@ describe('KnowledgeIngestionService', () => {
       });
     });
 
-    it('cleans up partial chunks on failure', async () => {
+    it('preserves existing chunks when embedding fails before replacement', async () => {
       aiClient.createEmbedding = vi.fn().mockRejectedValue(new Error('API error'));
 
       await expect(service.processDocument(DOC_ID)).rejects.toThrow();
 
-      // Should clean up chunks
-      expect(knowledgeRepo.deleteChunksByDocument).toHaveBeenCalledWith(DOC_ID);
+      expect(knowledgeRepo.replaceChunksByDocument).not.toHaveBeenCalled();
+      expect(knowledgeRepo.deleteChunksByDocument).not.toHaveBeenCalled();
+    });
+
+    it('sets status to "failed" when replaceChunksByDocument throws', async () => {
+      // Embedding succeeds, but the atomic replace RPC fails (e.g.,
+      // PostgREST 502 or a missing doc FK). The doc should land in
+      // 'failed' state and the error should be recorded — old chunks
+      // remain intact because the RPC is atomic and rolls back on error.
+      vi.mocked(knowledgeRepo.replaceChunksByDocument).mockRejectedValueOnce(
+        new Error('PostgREST 502: bad gateway'),
+      );
+
+      await expect(service.processDocument(DOC_ID)).rejects.toThrow('PostgREST 502');
+
+      expect(knowledgeRepo.updateDocument).toHaveBeenCalledWith(DOC_ID, {
+        status: 'failed',
+        errorMessage: 'PostgREST 502: bad gateway',
+      });
+
+      // No chunks were inserted (the RPC rolled back), so old chunks
+      // are preserved — verified by the not-called assertion.
+      expect(knowledgeRepo.deleteChunksByDocument).not.toHaveBeenCalled();
     });
 
     it('records audit log on failure', async () => {

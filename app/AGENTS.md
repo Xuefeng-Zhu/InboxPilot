@@ -3,7 +3,7 @@
 **Always loaded** for any work on a page, layout, or API route.
 
 ## OVERVIEW
-12 page routes + 7 API routes. Auth gating happens at three layers: `proxy.ts` (cookie check), `<AppShell>` (client wrapper), `_auth.ts` (server-side JWT verification for API routes). **No `loading.tsx` or `error.tsx` files** — loading via inline `<Suspense>`, errors via Next's default UI. **No nested `layout.tsx`** — every authed page wraps itself in `<AppShell>`.
+12 page routes + 8 API routes. Auth gating happens at three layers: `proxy.ts` (cookie check), `<AppShell>` (client wrapper), `_auth.ts` (server-side JWT verification for API routes). **No `loading.tsx` or `error.tsx` files** — loading via inline `<Suspense>`, errors via Next's default UI. **No nested `layout.tsx`** — every authed page wraps itself in `<AppShell>`.
 
 ## PAGES (12 total)
 | Path | Auth | Notes |
@@ -21,7 +21,7 @@
 | `/wchat/[widgetId]` | Public | Web chat widget iframe; visitor-token auth, no app shell |
 | `/not-found` | — | 404 handler (custom branded) |
 
-## API ROUTES (7 total — all POST-only, all in `api/functions/`)
+## API ROUTES (8 total — all POST-only, all in `api/functions/`)
 | Path | Body | Required perm | Side effects |
 |---|---|---|---|
 | `POST /api/functions/send-reply` | `{conversationId, body}` | `reply_conversations` | Insert outbound `messages`; for webchat, broadcast to `widget:{widgetId}:{jti}` |
@@ -31,6 +31,7 @@
 | `POST /api/functions/resolve-conversation` | `{conversationId}` | `reply_conversations` | `status=resolved, ai_state=idle` |
 | `POST /api/functions/reopen-conversation` | `{conversationId}` | `reply_conversations` | `status=open, ai_state=idle` |
 | `POST /api/functions/test-channel-connection` | `{channelType, providerAccountId}` | `manage_settings` | Read-only check; returns `{provider, active}` (does NOT ping the provider) |
+| `POST /api/functions/delete-widget` | `{organizationId, widgetId}` | `manage_settings` | Delete `webchat_widgets` row; FK cascade wipes linked `webchat_threads` (conversations/contacts are not cascade-deleted); audit `webchat_widget_deleted` (only surviving record) |
 
 ## AUTH GATING — 3 LAYERS
 1. **`proxy.ts`** at root: cookie-presence check. Public: `/`, `/login`, `/register`. Pass-through: `/_next/*`, `/api/*`, `/functions/*`, `/wchat/*`, anything with `.`. Gated: everything else (redirects to `/login` if cookie missing). **Note: cookie presence only, not JWT validation.**
@@ -70,4 +71,4 @@
 - **`/team` Edit Role/Remove buttons are presentational only.**
 - **No `middleware.ts`** — auth gate is `proxy.ts` (Next.js 16 convention). The legacy test `__tests__/middleware.test.ts` still references the old name.
 - **`app/symphony/page.tsx` uses `useSearchParams`** (for the `?zoom=` param), which requires the `<Suspense>` boundary.
-- **All 7 API routes are POST-only** — a deliberate consequence of "agent action" model.
+- **All 8 API routes are POST-only** — a deliberate consequence of "agent action" model.

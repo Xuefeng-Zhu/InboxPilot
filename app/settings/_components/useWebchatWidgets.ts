@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useState } from 'react';
-import { insforge } from '@/lib/insforge';
+import { insforge, getAccessToken } from '@/lib/insforge';
 
 export interface WebchatWidgetRow {
   id: string;
@@ -42,7 +42,33 @@ export function useWebchatWidgets(orgId: string | null) {
     setLoading(false);
   }, [orgId]);
 
+  const deleteWidget = useCallback(
+    async (widgetId: string): Promise<void> => {
+      if (!orgId) {
+        throw new Error('No active organization');
+      }
+      const token = getAccessToken();
+      const res = await fetch('/api/functions/delete-widget', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ organizationId: orgId, widgetId }),
+      });
+      const payload = (await res.json().catch(() => ({}))) as {
+        data?: unknown;
+        error?: string;
+      };
+      if (!res.ok) {
+        throw new Error(payload.error ?? `Delete failed (${res.status})`);
+      }
+      await refresh();
+    },
+    [orgId, refresh],
+  );
+
   useState(() => { refresh(); });
 
-  return { widgets, loading, error, refresh };
+  return { widgets, loading, error, refresh, deleteWidget };
 }

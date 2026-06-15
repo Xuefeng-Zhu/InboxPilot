@@ -4,14 +4,17 @@ import { useState } from 'react';
 import { insforge } from '@/lib/insforge';
 import type { WebchatWidgetRow } from './useWebchatWidgets';
 import { EmbedSnippet } from './EmbedSnippet';
+import { DeleteWidgetModal } from './DeleteWidgetModal';
 
 interface WidgetCardProps {
   widget: WebchatWidgetRow;
   onRefresh: () => void;
+  onDelete: (widgetId: string) => Promise<void>;
 }
 
-export function WidgetCard({ widget, onRefresh }: WidgetCardProps) {
+export function WidgetCard({ widget, onRefresh, onDelete }: WidgetCardProps) {
   const [showSnippet, setShowSnippet] = useState(false);
+  const [showDelete, setShowDelete] = useState(false);
   const [toggling, setToggling] = useState(false);
 
   const handleToggleActive = async () => {
@@ -22,6 +25,11 @@ export function WidgetCard({ widget, onRefresh }: WidgetCardProps) {
       .eq('id', widget.id);
     setToggling(false);
     onRefresh();
+  };
+
+  const handleConfirmDelete = async () => {
+    // The hook's deleteWidget already calls refresh() on success — don't double-fetch.
+    await onDelete(widget.id);
   };
 
   return (
@@ -64,16 +72,29 @@ export function WidgetCard({ widget, onRefresh }: WidgetCardProps) {
         {widget.pre_chat_enabled && <span>Pre-chat enabled</span>}
       </div>
 
-      <div className="mt-3 flex items-center gap-2">
+      <div className="mt-3 flex items-center justify-between gap-2">
         <button
           onClick={() => setShowSnippet(!showSnippet)}
           className="rounded-md border border-[var(--m03-line)] bg-white px-3 py-1.5 text-[12px] font-medium text-[var(--m03-fg)] transition-colors hover:bg-[var(--m03-line-2)]"
         >
           {showSnippet ? 'Hide snippet' : 'Embed snippet'}
         </button>
+        <button
+          onClick={() => setShowDelete(true)}
+          className="rounded-md border border-transparent px-3 py-1.5 text-[12px] font-medium text-[var(--m03-red)] transition-colors hover:bg-[var(--m03-red-fill)]"
+        >
+          Delete
+        </button>
       </div>
 
       {showSnippet && <EmbedSnippet widget={widget} />}
+      {showDelete && (
+        <DeleteWidgetModal
+          widgetName={widget.name}
+          onClose={() => setShowDelete(false)}
+          onConfirm={handleConfirmDelete}
+        />
+      )}
     </div>
   );
 }

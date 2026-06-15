@@ -13,7 +13,7 @@ Every significant action writes a row to `audit_logs`. The table is **append-onl
 | `actor_id` | User ID, contact ID, or system identifier (nullable) |
 | `actor_type` | `user` \| `system` \| `ai` |
 | `action` | Machine-readable string (see below) |
-| `resource_type` | `conversation` \| `message` \| `ai_decision` \| `organization` \| `organization_member` \| `webchat_thread` \| `knowledge_document` |
+| `resource_type` | `conversation` \| `message` \| `ai_decision` \| `organization` \| `organization_member` \| `webchat_thread` \| `webchat_widget` \| `knowledge_document` |
 | `resource_id` | The affected resource ID |
 | `metadata` | Free-form JSON |
 | `created_at` | Event timestamp |
@@ -62,6 +62,7 @@ The "off" path also sets `metadata.reason = 'ai_mode_off'`. The "low confidence"
 |---|---|---|---|---|
 | `webchat_thread_created` | `system` | `WebchatThreadService.initThread` | `webchat_thread` | A new webchat session was initialized. `metadata.widgetId`, `metadata.conversationId`, `metadata.contactId`, `metadata.identified = !!preChat?.email`. |
 | `webchat_thread_identified` | `system` | `WebchatThreadService.identifyThread` | `webchat_thread` | A visitor was identified (provided email). `metadata.email`. |
+| `webchat_widget_deleted` | `user` | `WebchatWidgetService.removeWidget` (called from `app/api/functions/delete-widget/route.ts`) | `webchat_widget` | A webchat widget was deleted. The service first asserts the widget's `organizationId` matches the caller's authorized org (cross-tenant guard). FK cascade wipes the widget's `webchat_thread`s; `conversations` and `contacts` are NOT cascade-deleted. The audit log is the only surviving record of the widget. `metadata.name`, `metadata.wasActive`. |
 
 ## Known gaps
 

@@ -18,6 +18,7 @@ export {
   createDefaultEscalationEngine,
 } from './escalation-rules.js';
 export { OrganizationService } from './organization-service.js';
+export { WebchatWidgetService } from './webchat-widget-service.js';
 export {
   hasPermission,
   checkPermission,

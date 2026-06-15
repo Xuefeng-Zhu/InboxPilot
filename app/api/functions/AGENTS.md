@@ -3,9 +3,9 @@
 **Always loaded** for any work on an agent-facing API endpoint.
 
 ## OVERVIEW
-11 Next.js Route Handlers. All `POST`, all JWT-authed via `_auth.ts`, all use the `insforgeAdmin` (service role) client. These are the "agent action" surface — frontend mutations all flow through here.
+12 Next.js Route Handlers. All `POST`, all JWT-authed via `_auth.ts`, all use the `insforgeAdmin` (service role) client. These are the "agent action" surface — frontend mutations all flow through here.
 
-## THE 11 ROUTES
+## THE 12 ROUTES
 | Route | InsForge tables touched | Audit log | Notes |
 |---|---|---|---|
 | `POST /api/functions/send-reply` | `conversations` (read), `messages` (insert outbound), `webchat_threads` (read for broadcast) | — | Permission: `reply_conversations` |
@@ -18,6 +18,7 @@
 | `POST /api/functions/change-member-role` | `organization_members`, `audit_logs` | `member_role_changed` | **Uses the support-core service layer.** Permission: `manage_members`, plus an owner-only gate when the target is currently an owner or the new role is `owner` (P1). |
 | `POST /api/functions/invite-member` | `organization_members`, `audit_logs` | `member_added` | **Uses the support-core service layer.** Takes an email, looks up the user via the InsForge admin REST endpoint, then calls `OrganizationService.inviteMember`. Permission: `manage_members`. |
 | `POST /api/functions/remove-member` | `organization_members`, `audit_logs` | `member_removed` | **Uses the support-core service layer.** Permission: `manage_members`, plus an owner-only gate when the target is an owner (P1). |
+| `POST /api/functions/delete-widget` | `webchat_widgets`, `audit_logs` | `webchat_widget_deleted` | **Uses the support-core service layer.** Permission: `manage_settings`. Service enforces that the widget's `organizationId` matches the caller's authorized org (cross-tenant guard — RLS is bypassed by the service-role client). FK cascade wipes `webchat_threads` only; conversations/contacts are not affected. The audit log is the only surviving record of the widget. |
 | `POST /api/functions/team-member-info` | `organization_members` (read), admin REST `GET /api/auth/users` | — | **Enrichment read for the team panel.** Returns `{ id, email, name, avatarUrl }` per team member. Permission: `manage_members` (the response includes member emails, so the directory is owner/admin-only). |
 
 ## SHARED AUTH (`_auth.ts`)
@@ -25,7 +26,7 @@
 - `userHasOrgPermission(userId, orgId, perm)` — looks up `organization_members` for the user, returns `hasPermission(role, perm)` from `@support-core/services/rbac`.
 
 ## SHARED ADAPTER (`_insforge-db-adapter.ts`)
-- `createInsforgeDbAdapter()` — adapts the InsForge Node SDK (PostgREST chainable) to the support-core `DatabaseClient` interface. Used by the four service-layer routes (`change-member-role`, `invite-member`, `remove-member`, and any future support-core-backed route). `rpc()` is not implemented and throws if called.
+- `createInsforgeDbAdapter()` — adapts the InsForge Node SDK (PostgREST chainable) to the support-core `DatabaseClient` interface. Used by the five service-layer routes (`change-member-role`, `invite-member`, `remove-member`, `delete-widget`, and any future support-core-backed route). `rpc()` is not implemented and throws if called.
 
 ## WHERE TO LOOK
 - **Add a new agent action** → `app/api/functions/<name>/route.ts`. Pattern:
@@ -56,10 +57,10 @@
 - Letting an admin promote to or demote from `owner` — `manage_members` is not sufficient.
 
 ## UNIQUE
-- **All 11 routes are POST-only.** No GET/PUT/DELETE. Consequence: no way to fetch conversation data via the local API — frontend uses the InsForge client.
+- **All 12 routes are POST-only.** No GET/PUT/DELETE. Consequence: no way to fetch conversation data via the local API — frontend uses the InsForge client.
 - **The 4 team routes use the support-core service layer** (`OrganizationService.inviteMember` / `changeMemberRole` / `removeMember`). All other routes call `insforgeAdmin.database.from(...)` directly. This is the only place in the app that bridges from a Next.js route handler to support-core.
 - **`test-channel-connection` is the only conversation-touching route with `manage_settings`** (others need `reply_conversations`).
 - **`team-member-info` is the only read route** — it doesn't mutate state, just enriches the team panel with email/name for display.
-- **`change-member-role`, `remove-member`, `invite-member` are the only routes that write to `audit_logs`** (the `approve-ai-draft` route also writes, so update this list when that changes).
+- **`change-member-role`, `remove-member`, `invite-member`, `delete-widget` are the routes that write to `audit_logs`** (the `approve-ai-draft` route also writes, so update this list when that changes).
 - **`regenerate-ai-draft` is the only route that fires a fire-and-forget POST to `${FUNCTIONS_URL}/process-jobs`** to trigger AI re-processing.
 - **All routes resolve `orgId` from the request body** (not from the user session) — multi-org users work transparently.

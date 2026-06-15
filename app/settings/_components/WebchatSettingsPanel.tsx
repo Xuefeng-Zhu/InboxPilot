@@ -10,7 +10,7 @@ import { WidgetCard } from './WidgetCard';
 export default function WebchatSettingsPanel() {
   const { user } = useAuth();
   const { data: orgId } = useOrgMembership(user?.id);
-  const { widgets, loading, error, refresh } = useWebchatWidgets(orgId ?? null);
+  const { widgets, loading, error, refresh, deleteWidget } = useWebchatWidgets(orgId ?? null);
   const [showCreate, setShowCreate] = useState(false);
 
   return (
@@ -53,7 +53,7 @@ export default function WebchatSettingsPanel() {
       ) : (
         <div className="mt-6 flex flex-col gap-3">
           {widgets.map((widget) => (
-            <WidgetCard key={widget.id} widget={widget} onRefresh={refresh} />
+            <WidgetCard key={widget.id} widget={widget} onRefresh={refresh} onDelete={deleteWidget} />
           ))}
         </div>
       )}

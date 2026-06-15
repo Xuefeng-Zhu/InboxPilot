@@ -5,7 +5,25 @@ import React, { act, useState } from 'react';
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { Sidebar } from '../../components/layout/Sidebar';
 import { SidebarCollapseToggle } from '../../components/layout/SidebarCollapseToggle';
+
+vi.mock('@/lib/auth-context', () => ({
+  useAuth: () => ({ user: { id: 'user-1', email: 'frank@example.com' } }),
+}));
+
+vi.mock('@/lib/queries', () => ({
+  queryKeys: {
+    conversationCounts: (orgId: string) => ['conversationCounts', orgId],
+  },
+  useOrgMembership: () => ({ data: undefined }),
+}));
+
+vi.mock('next/navigation', () => ({
+  usePathname: () => '/settings',
+  useSearchParams: () => new URLSearchParams(),
+}));
 
 // Radix's use-size hook needs ResizeObserver when the Tooltip portal mounts
 // after hover. jsdom does not provide it natively.
@@ -25,6 +43,8 @@ describe('SidebarCollapseToggle — expanded mode', () => {
     expect(toggle.getAttribute('aria-controls')).toBe('primary-sidebar');
     expect(toggle.getAttribute('data-testid')).toBe('sidebar-collapse-toggle');
     expect(toggle.getAttribute('data-state')).toBe('expanded');
+    expect(toggle).toHaveClass('justify-start', 'gap-2');
+    expect(toggle).not.toHaveClass('justify-between');
     expect(screen.getByText('Collapse')).toBeInTheDocument();
   });
 });
@@ -43,6 +63,7 @@ describe('SidebarCollapseToggle — collapsed mode', () => {
       expect(toggle.getAttribute('aria-controls')).toBe('primary-sidebar');
       expect(toggle.getAttribute('data-testid')).toBe('sidebar-collapse-toggle');
       expect(toggle.getAttribute('data-state')).toBe('collapsed');
+      expect(toggle).toHaveClass('justify-center');
       expect(screen.queryByText('Collapse')).toBeNull();
 
       // Open the tooltip by hovering the trigger, then advance past the
@@ -58,6 +79,30 @@ describe('SidebarCollapseToggle — collapsed mode', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe('Sidebar — collapsed section dividers', () => {
+  it('renders one collapsed divider per labeled section boundary', () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const { container } = render(
+      <QueryClientProvider client={queryClient}>
+        <Sidebar collapsed={true} onToggle={vi.fn()} />
+      </QueryClientProvider>,
+    );
+
+    expect(screen.getByRole('complementary', { name: /primary navigation/i })).toHaveClass('w-sidebar-collapsed-w');
+    expect(screen.queryByText('Workspace')).toBeNull();
+    expect(screen.queryByText('Channels')).toBeNull();
+    expect(screen.queryByText('Manage')).toBeNull();
+
+    const collapsedHeaderDividers = container.querySelectorAll('.px-3.pb-1.pt-2 > .h-px.w-6');
+    const topRuleDividers = container.querySelectorAll('.mx-auto.my-2.h-px.w-6');
+
+    expect(collapsedHeaderDividers).toHaveLength(3);
+    expect(topRuleDividers).toHaveLength(0);
   });
 });
 

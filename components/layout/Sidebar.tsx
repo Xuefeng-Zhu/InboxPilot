@@ -316,9 +316,11 @@ function renderSection(
   isLinkActive: (href: string) => boolean,
   collapsed: boolean = false,
 ) {
+  const showTopRule = section.topRule && !(collapsed && section.label);
+
   return (
     <div key={key}>
-      {section.topRule && (
+      {showTopRule && (
         collapsed ? (
           <div className="mx-auto my-2 h-px w-6 bg-[var(--m03-line)]" />
         ) : (

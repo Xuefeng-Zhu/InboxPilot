@@ -25,7 +25,7 @@ export function SidebarCollapseToggle({ collapsed, onToggle }: SidebarCollapseTo
       data-state={collapsed ? 'collapsed' : 'expanded'}
       className={cn(
         'w-full text-[var(--m03-fg-3)] hover:text-[var(--m03-fg)] hover:bg-[var(--m03-line-2)]',
-        collapsed ? 'px-0 justify-center' : 'justify-between',
+        collapsed ? 'px-0 justify-center' : 'justify-start gap-2',
       )}
     >
       {collapsed ? (

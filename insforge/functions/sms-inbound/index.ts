@@ -21,7 +21,6 @@
 import { createDbClient } from '../_shared/create-db-client.ts';
 import { createRealtimePublisher } from '../_shared/create-realtime-publisher.ts';
 import { createProviderRegistry } from '../_shared/create-provider-registry.ts';
-import { triggerProcessJobs } from '../_shared/trigger-process-jobs.ts';
 
 import { ContactRepository } from '../../../packages/support-core/src/repositories/contact-repository.ts';
 import { ConversationRepository } from '../../../packages/support-core/src/repositories/conversation-repository.ts';
@@ -237,10 +236,13 @@ export default async function (req: Request): Promise<Response> {
       conversationId: message.conversationId,
     });
 
-    // 11. Trigger process-jobs to immediately handle the AI message job.
-    // Bounded await (≤5s) so the trigger reliably fires after enqueue rather
-    // than relying on the cron safety net. The cron remains as a fallback.
-    await triggerProcessJobs({ baseUrl, serviceRoleKey });
+    // 11. The AI job is enqueued above. The `process-jobs` function picks it
+    // up on its next cron tick (currently 10 seconds — see schedules in
+    // InsForge dashboard). Function-to-function triggers within the same
+    // Deno deployment are blocked by 508 LOOP_DETECTED, so a direct trigger
+    // from this function is not possible. A Postgres http_post-based trigger
+    // was attempted but the `http` extension is unreliable in this project.
+    // The 10s cron cadence is the practical equivalent of event-driven.
 
     // 12. Return 200 OK with message data
     return jsonResponse({ status: 'ok', data: message });

@@ -133,7 +133,7 @@ export class AiAgentService {
       );
     } catch (err) {
       // If embedding/vector retrieval fails, try lexical fallback below before
-      // allowing MissingKnowledgeRule to escalate the conversation.
+      // falling back to the no-knowledge clarification policy.
       console.warn(
         'embedding/knowledge retrieval failed; continuing with empty chunks',
         err instanceof Error ? err.message : String(err),
@@ -149,7 +149,8 @@ export class AiAgentService {
         );
       } catch (err) {
         // A failed fallback should not hide the original AI turn. If both
-        // retrieval paths miss, MissingKnowledgeRule will still escalate.
+        // retrieval paths miss, the prompt tells the model to clarify instead
+        // of inventing an ungrounded answer.
         console.warn(
           'lexical knowledge retrieval failed; continuing with empty chunks',
           err instanceof Error ? err.message : String(err),
@@ -329,7 +330,11 @@ export class AiAgentService {
         confidenceThreshold,
       );
 
-      if (lowConfResult && parsed.decision_type !== 'escalate') {
+      if (
+        lowConfResult &&
+        parsed.decision_type !== 'escalate' &&
+        parsed.decision_type !== 'clarify'
+      ) {
         // Low confidence — escalate
         await this.conversationRepo.update(conversationId, {
           status: 'escalated',
@@ -589,6 +594,8 @@ export class AiAgentService {
         .join('\n\n');
 
       fullSystemPrompt += `\n\nRelevant knowledge base articles:\n${knowledgeContext}`;
+    } else {
+      fullSystemPrompt += `\n\nNo relevant knowledge base article was found for this message. Do not invent facts, policies, prices, timelines, or account-specific details. If you cannot answer safely from the conversation alone, return decision_type "clarify", requires_human false, and a concise response_text that asks the customer for the missing detail or explains that you need more information. Do not escalate solely because knowledge is missing.`;
     }
 
     fullSystemPrompt += `\n\nYou MUST respond with a JSON object in this exact format:

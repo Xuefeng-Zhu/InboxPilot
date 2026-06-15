@@ -250,7 +250,7 @@ export class KeywordRule implements EscalationRule {
 // ─── Factory ─────────────────────────────────────────────────────────
 
 /**
- * Create a default EscalationEngine with all 8 built-in rules registered
+ * Create a default EscalationEngine with the pre-LLM safety rules registered
  * in the standard evaluation order.
  */
 export function createDefaultEscalationEngine(): EscalationEngine {
@@ -260,7 +260,6 @@ export function createDefaultEscalationEngine(): EscalationEngine {
   engine.register(new ProfanityAngerRule());
   engine.register(new SensitiveTopicRule());
   engine.register(new SafetyConcernRule());
-  engine.register(new MissingKnowledgeRule());
   engine.register(new LowConfidenceRule());
   engine.register(new RepeatedFailureRule());
   engine.register(new KeywordRule());

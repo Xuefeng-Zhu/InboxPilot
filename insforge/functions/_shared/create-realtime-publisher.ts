@@ -1,11 +1,10 @@
 /**
  * Shared utility: creates a RealtimePublisher that publishes events
- * via the InsForge Realtime REST API.
+ * via the InsForge database RPC API.
  *
- * InsForge Realtime exposes a REST endpoint for server-side event publishing:
- *   POST {baseUrl}/realtime/v1/api/broadcast
- *
- * This avoids needing a WebSocket connection from within a serverless function.
+ * The native publisher is `realtime.publish(...)`, but the database RPC API
+ * exposes public-schema functions only. Migration 014 creates a narrow
+ * `public.publish_realtime_message(...)` wrapper for server-side callers.
  */
 
 import type { RealtimePublisher } from '../../../packages/support-core/src/interfaces/realtime-publisher.ts';
@@ -22,7 +21,7 @@ export function createRealtimePublisher(
 ): RealtimePublisher {
   return {
     async publish(channel: string, event: string, data: unknown): Promise<void> {
-      const url = `${baseUrl}/realtime/v1/api/broadcast`;
+      const url = `${baseUrl}/api/database/rpc/publish_realtime_message`;
 
       const res = await fetch(url, {
         method: 'POST',
@@ -32,9 +31,9 @@ export function createRealtimePublisher(
           Authorization: `Bearer ${serviceRoleKey}`,
         },
         body: JSON.stringify({
-          channel,
-          event,
-          payload: data,
+          p_channel_name: channel,
+          p_event_name: event,
+          p_payload: data,
         }),
       });
 

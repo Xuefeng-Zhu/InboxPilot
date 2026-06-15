@@ -358,6 +358,60 @@ describe('AiAgentService', () => {
       );
     });
 
+    it('escalates sensitive topics before calling the LLM', async () => {
+      const { SensitiveTopicRule } = await import('../../src/services/escalation-rules.js');
+      escalationEngine.register(new SensitiveTopicRule());
+
+      vi.mocked(messageRepo.listByConversation).mockResolvedValue([
+        { ...SAMPLE_MESSAGE, body: 'I am filing a chargeback for this order' },
+      ]);
+
+      const service = createService();
+      await service.processMessage(CONV_ID, ORG_ID);
+
+      expect(aiClient.chatCompletion).not.toHaveBeenCalled();
+      expect(conversationRepo.update).toHaveBeenCalledWith(
+        CONV_ID,
+        expect.objectContaining({
+          status: 'escalated',
+          aiState: 'needs_human',
+        }),
+      );
+      expect(aiDecisionRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          decisionType: 'escalate',
+          requiresHuman: true,
+        }),
+      );
+    });
+
+    it('escalates safety topics before calling the LLM', async () => {
+      const { SafetyConcernRule } = await import('../../src/services/escalation-rules.js');
+      escalationEngine.register(new SafetyConcernRule());
+
+      vi.mocked(messageRepo.listByConversation).mockResolvedValue([
+        { ...SAMPLE_MESSAGE, body: 'I think my account was hacked' },
+      ]);
+
+      const service = createService();
+      await service.processMessage(CONV_ID, ORG_ID);
+
+      expect(aiClient.chatCompletion).not.toHaveBeenCalled();
+      expect(conversationRepo.update).toHaveBeenCalledWith(
+        CONV_ID,
+        expect.objectContaining({
+          status: 'escalated',
+          aiState: 'needs_human',
+        }),
+      );
+      expect(aiDecisionRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          decisionType: 'escalate',
+          requiresHuman: true,
+        }),
+      );
+    });
+
     it('does not trigger MissingKnowledgeRule when lexical fallback finds a matching chunk', async () => {
       const { MissingKnowledgeRule } = await import('../../src/services/escalation-rules.js');
       escalationEngine.register(new MissingKnowledgeRule());
@@ -399,6 +453,136 @@ describe('AiAgentService', () => {
         expect.objectContaining({
           status: 'escalated',
           aiState: 'needs_human',
+        }),
+      );
+    });
+
+    it('lets a greeting with no knowledge chunks reach the LLM as clarify', async () => {
+      const { createDefaultEscalationEngine } = await import('../../src/services/escalation-rules.js');
+      escalationEngine = createDefaultEscalationEngine();
+      aiClient = createMockAiClient(JSON.stringify({
+        decision_type: 'clarify',
+        confidence: 0.8,
+        reasoning_summary: 'No knowledge was found, so ask what the customer needs.',
+        response_text: 'Hi! What can I help you with today?',
+        tags: ['clarify'],
+        requires_human: false,
+      }));
+      vi.mocked(messageRepo.listByConversation).mockResolvedValue([
+        { ...SAMPLE_MESSAGE, body: 'hello' },
+      ]);
+
+      const service = createService();
+      await service.processMessage(CONV_ID, ORG_ID);
+
+      expect(aiClient.chatCompletion).toHaveBeenCalled();
+      const chatArgs = vi.mocked(aiClient.chatCompletion).mock.calls[0]?.[0];
+      expect(chatArgs?.messages[0]?.content).toContain('No relevant knowledge base article was found');
+      expect(aiDecisionRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          decisionType: 'clarify',
+          requiresHuman: false,
+        }),
+      );
+      expect(conversationRepo.update).not.toHaveBeenCalledWith(
+        CONV_ID,
+        expect.objectContaining({
+          status: 'escalated',
+          aiState: 'needs_human',
+        }),
+      );
+    });
+
+    it('lets a substantive no-knowledge request produce a clarify decision', async () => {
+      const { createDefaultEscalationEngine } = await import('../../src/services/escalation-rules.js');
+      escalationEngine = createDefaultEscalationEngine();
+      aiClient = createMockAiClient(JSON.stringify({
+        decision_type: 'clarify',
+        confidence: 0.7,
+        reasoning_summary: 'No grounded answer is available from the knowledge base.',
+        response_text: 'Could you share which account setting you are trying to change?',
+        tags: ['clarify'],
+        requires_human: false,
+      }));
+      vi.mocked(messageRepo.listByConversation).mockResolvedValue([
+        { ...SAMPLE_MESSAGE, body: 'How do I change an account setting?' },
+      ]);
+
+      const service = createService();
+      await service.processMessage(CONV_ID, ORG_ID);
+
+      expect(aiClient.chatCompletion).toHaveBeenCalled();
+      expect(aiDecisionRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          decisionType: 'clarify',
+          requiresHuman: false,
+        }),
+      );
+      expect(conversationRepo.update).not.toHaveBeenCalledWith(
+        CONV_ID,
+        expect.objectContaining({
+          status: 'escalated',
+          aiState: 'needs_human',
+        }),
+      );
+    });
+  });
+
+  describe('low confidence handling', () => {
+    it('does not escalate low-confidence clarify decisions', async () => {
+      aiClient = createMockAiClient(JSON.stringify({
+        decision_type: 'clarify',
+        confidence: 0.2,
+        reasoning_summary: 'Need more information before answering.',
+        response_text: 'Could you share a few more details?',
+        tags: ['clarify'],
+        requires_human: false,
+      }));
+      const service = createService();
+
+      await service.processMessage(CONV_ID, ORG_ID);
+
+      expect(aiDecisionRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          decisionType: 'clarify',
+          confidence: 0.2,
+          requiresHuman: false,
+        }),
+      );
+      expect(conversationRepo.update).not.toHaveBeenCalledWith(
+        CONV_ID,
+        expect.objectContaining({
+          status: 'escalated',
+          aiState: 'needs_human',
+        }),
+      );
+    });
+
+    it('still escalates low-confidence respond decisions', async () => {
+      aiClient = createMockAiClient(JSON.stringify({
+        decision_type: 'respond',
+        confidence: 0.2,
+        reasoning_summary: 'Weak answer with insufficient confidence.',
+        response_text: 'This may be possible.',
+        tags: ['low_confidence'],
+        requires_human: false,
+      }));
+      const service = createService();
+
+      await service.processMessage(CONV_ID, ORG_ID);
+
+      expect(conversationRepo.update).toHaveBeenCalledWith(
+        CONV_ID,
+        expect.objectContaining({
+          status: 'escalated',
+          aiState: 'needs_human',
+        }),
+      );
+      expect(aiDecisionRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          decisionType: 'escalate',
+          confidence: 0.2,
+          requiresHuman: true,
         }),
       );
     });

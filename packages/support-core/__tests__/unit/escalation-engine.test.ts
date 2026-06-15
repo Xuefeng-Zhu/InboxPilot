@@ -234,7 +234,7 @@ describe('Escalation Rules — Individual Rule Tests', () => {
   });
 
   describe('createDefaultEscalationEngine', () => {
-    it('creates engine with all 8 rules registered', () => {
+    it('creates engine with pre-LLM safety rules registered', () => {
       const engine = createDefaultEscalationEngine();
 
       // Test that it evaluates rules correctly
@@ -243,6 +243,16 @@ describe('Escalation Rules — Individual Rule Tests', () => {
       }));
       expect(humanResult).not.toBeNull();
       expect(humanResult!.ruleName).toBe('HumanRequestRule');
+    });
+
+    it('does not register MissingKnowledgeRule by default', () => {
+      const engine = createDefaultEscalationEngine();
+
+      const result = engine.evaluate(makeContext({
+        latestMessage: 'How do I reset my account password?',
+        knowledgeChunks: [],
+      }));
+      expect(result).toBeNull();
     });
 
     it('returns null when no rules trigger', () => {

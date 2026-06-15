@@ -1,32 +1,54 @@
--- 013_webchat_realtime_widget_channel.sql
+-- 013_realtime_publish_and_channels.sql
 --
--- Enable the per-visitor webchat realtime channel pattern so the wchat
--- iframe (loaded in a third-party site, connected via the InsForge SDK
--- Realtime client with the anon key) can subscribe to channels of the
--- form `widget:<webchat_widgets.id>:<jti>` and receive agent/AI replies
--- pushed by the `send-reply` / `approve-ai-draft` realtime broadcast.
+-- Combined realtime repair:
+-- 1. Enable org-scoped inbox channels used by the Inbox and Symphony UIs.
+-- 2. Enable per-visitor widget channels used by the embedded webchat.
+-- 3. Expose a narrow public RPC wrapper for server-side realtime publishes.
 --
--- Without this pattern, `insforge.realtime.subscribe('widget:...')` is
--- rejected by the Realtime gateway. The InsForge SDK integration guide
--- is explicit: "The frontend can only subscribe to channel names that
--- match an enabled backend channel pattern." The server-side broadcast
--- in `send-reply` (REST, service role) still publishes, but with no
--- matching pattern no client is ever admitted to the room, so visitors
--- never receive agent/AI replies in real time.
+-- Current app code subscribes and publishes on:
+--   org:<organization_id>
+--   widget:<webchat_widgets.id>:<visitor_token_jti>
 --
--- The `jti` is an unguessable UUID minted per-thread in
--- `webchat-thread-init` and stored in `webchat_threads.visitor_token_jti`,
--- so channel-name secrecy provides visitor isolation. No additional RLS
--- policy is required: the default (RLS disabled on `realtime.channels`,
--- or a permissive policy) allows the subscribe; the secrecy of `jti`
--- is the access control.
+-- The native publisher is `realtime.publish(...)`, but the database RPC API
+-- exposes public-schema functions only. The wrapper below replaces the stale
+-- `/realtime/v1/api/broadcast` server publish path, which returns 404 on the
+-- live backend. Execute is granted only to `project_admin`, the role used by
+-- server-side API keys.
 
 INSERT INTO realtime.channels (pattern, description, enabled)
 VALUES (
-  'widget:%',
+  'org:%',
+  'Per-organization inbox events (org:<organization_id>) for new messages and conversation updates.',
+  true
+)
+ON CONFLICT (pattern) DO UPDATE
+SET description = EXCLUDED.description,
+    enabled = EXCLUDED.enabled;
+
+INSERT INTO realtime.channels (pattern, description, enabled)
+VALUES (
+  'widget:%:%',
   'Per-visitor webchat thread (widget:<webchat_widgets.id>:<jti>). jti is unguessable, channel-name secrecy isolates visitors.',
   true
 )
 ON CONFLICT (pattern) DO UPDATE
 SET description = EXCLUDED.description,
     enabled = EXCLUDED.enabled;
+
+CREATE OR REPLACE FUNCTION public.publish_realtime_message(
+  p_channel_name text,
+  p_event_name text,
+  p_payload jsonb
+)
+RETURNS uuid
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, realtime
+AS $$
+BEGIN
+  RETURN realtime.publish(p_channel_name, p_event_name, p_payload);
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.publish_realtime_message(text, text, jsonb) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.publish_realtime_message(text, text, jsonb) TO project_admin;

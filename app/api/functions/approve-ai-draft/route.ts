@@ -93,7 +93,7 @@ export async function POST(req: NextRequest) {
         const baseUrl = process.env.NEXT_PUBLIC_INSFORGE_URL ?? '';
         const serviceRoleKey = process.env.INSFORGE_SERVICE_ROLE_KEY ?? '';
 
-        fetch(`${baseUrl}/realtime/v1/api/broadcast`, {
+        fetch(`${baseUrl}/api/database/rpc/publish_realtime_message`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -101,9 +101,9 @@ export async function POST(req: NextRequest) {
             Authorization: `Bearer ${serviceRoleKey}`,
           },
           body: JSON.stringify({
-            channel: `widget:${thread.widget_id}:${thread.visitor_token_jti}`,
-            event: 'new_message',
-            payload: { message, conversationId },
+            p_channel_name: `widget:${thread.widget_id}:${thread.visitor_token_jti}`,
+            p_event_name: 'new_message',
+            p_payload: { message, conversationId },
           }),
         }).catch(() => { /* non-critical */ });
       }

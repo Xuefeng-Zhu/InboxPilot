@@ -6,7 +6,6 @@ import {
   ProfanityAngerRule,
   SensitiveTopicRule,
   SafetyConcernRule,
-  MissingKnowledgeRule,
   RepeatedFailureRule,
   KeywordRule,
 } from '@support-core/services/escalation-rules';
@@ -187,7 +186,7 @@ describe('Escalation engine property tests', () => {
         ({ type, message }) => {
           const context = makeContext({
             latestMessage: message,
-            knowledgeChunks: [makeChunk()], // Has knowledge, so MissingKnowledgeRule won't fire
+            knowledgeChunks: [makeChunk()],
             consecutiveAiFailures: 0, // Below threshold
           });
 
@@ -210,27 +209,22 @@ describe('Escalation engine property tests', () => {
   });
 
   /**
-   * Additional property: MissingKnowledgeRule triggers when no knowledge chunks.
-   *
-   * **Validates: Requirements 12.5**
+   * Additional property: the default engine does not escalate solely because
+   * no knowledge chunks matched. AiAgentService handles that as a clarify path.
    */
-  it('Property 6 (MissingKnowledge): triggers when knowledge chunks array is empty', () => {
+  it('Property 6 (NoKnowledge): default engine does not trigger on empty knowledge chunks alone', () => {
     const engine = createDefaultEscalationEngine();
 
     fc.assert(
       fc.property(cleanMessageArb, (message) => {
         const context = makeContext({
           latestMessage: message,
-          knowledgeChunks: [], // Empty — should trigger MissingKnowledgeRule
+          knowledgeChunks: [],
           consecutiveAiFailures: 0,
         });
 
         const result = engine.evaluate(context);
-        expect(result).not.toBeNull();
-        if (result) {
-          expect(result.ruleName).toBe('MissingKnowledgeRule');
-          expect(result.reason).toBe('missing_knowledge');
-        }
+        expect(result).toBeNull();
       }),
       { numRuns: 100 },
     );

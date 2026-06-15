@@ -21,7 +21,7 @@ interface AuthState {
 }
 
 interface AuthContextValue extends AuthState {
-  signIn: (email: string, password: string) => Promise<{ error: string | null }>;
+  signIn: (email: string, password: string, remember?: boolean) => Promise<{ error: string | null }>;
   signUp: (email: string, password: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
 }
@@ -36,9 +36,10 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 // Cookie helpers (for Next.js middleware auth detection)
 // ---------------------------------------------------------------------------
 
-function setCookie(token: string): void {
+function setCookie(token: string, remember: boolean): void {
   try {
-    document.cookie = `insforge_access_token=${token}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`;
+    const maxAge = remember ? `; max-age=${60 * 60 * 24 * 7}` : '';
+    document.cookie = `insforge_access_token=${encodeURIComponent(token)}; path=/; SameSite=Lax${maxAge}`;
   } catch {
     // ignore
   }
@@ -71,7 +72,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  const signIn = useCallback(async (email: string, password: string) => {
+  const signIn = useCallback(async (email: string, password: string, remember = false) => {
     const { data, error } = await insforge.auth.signInWithPassword({
       email,
       password,
@@ -80,7 +81,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { error: error?.message ?? 'Sign-in failed' };
     }
     if (data.accessToken) {
-      setCookie(data.accessToken);
+      setCookie(data.accessToken, remember);
     }
     setState({ user: data.user as InsForgeUser, loading: false });
     return { error: null };
@@ -95,7 +96,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { error: error?.message ?? 'Sign-up failed' };
     }
     if (data.accessToken) {
-      setCookie(data.accessToken);
+      setCookie(data.accessToken, true);
       setState({ user: data.user as InsForgeUser, loading: false });
     }
     // If email verification is required, user won't have an accessToken yet

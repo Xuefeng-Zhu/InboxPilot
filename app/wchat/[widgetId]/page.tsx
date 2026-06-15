@@ -1,12 +1,14 @@
 'use client';
 
-import { Suspense, useEffect, useRef, useState, useCallback } from 'react';
+import { Suspense, useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
+import { useRealtime } from '@/lib/use-realtime';
 
 /**
  * Widget iframe page — fully isolated (no app shell, no auth gate).
  * Renders chat messages and handles send via webchat-inbound function.
- * Subscribes to InsForge Realtime WebSocket for incoming agent/AI messages.
+ * Subscribes to InsForge Realtime (via @insforge/sdk) on
+ * `widget:${widgetId}:${jti}` for incoming agent/AI messages.
  * Implements pre-chat form when widget has pre_chat_enabled.
  */
 
@@ -22,83 +24,13 @@ interface ChatMessage {
 }
 
 // ---------------------------------------------------------------------------
-// Realtime hook — subscribes to widget:{widgetId}:{jti} channel via WebSocket
+// Realtime subscription is handled by `useRealtime` from lib/use-realtime.ts
+// (consumed in WidgetChatContent below). It uses the @insforge/sdk's
+// Socket.IO-based Realtime client — NOT a raw WebSocket. A raw WebSocket
+// would be rejected by the InsForge Realtime endpoint (which expects
+// engine.io/Socket.IO framing), so the wchat page would never receive any
+// agent/AI messages. The agent inbox uses the same hook on `org:${orgId}`.
 // ---------------------------------------------------------------------------
-
-function useRealtimeSubscription(
-  wsBaseUrl: string,
-  visitorToken: string,
-  onMessage: (msg: ChatMessage) => void,
-) {
-  const wsRef = useRef<WebSocket | null>(null);
-  const reconnectTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-
-  const connect = useCallback(() => {
-    if (!wsBaseUrl || !visitorToken) return;
-
-    // Extract jti from token for channel subscription
-    let jti = '';
-    let widgetId = '';
-    try {
-      const parts = visitorToken.split('.');
-      const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
-      jti = payload.jti;
-      widgetId = payload.widget;
-    } catch {
-      return;
-    }
-
-    if (!jti || !widgetId) return;
-
-    const wsUrl = wsBaseUrl.replace(/^http/, 'ws') + '/realtime/v1/websocket';
-    const ws = new WebSocket(wsUrl);
-    wsRef.current = ws;
-
-    ws.onopen = () => {
-      // Subscribe to the visitor-specific channel
-      ws.send(JSON.stringify({
-        type: 'subscribe',
-        channel: `widget:${widgetId}:${jti}`,
-      }));
-    };
-
-    ws.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        if (data.event === 'new_message' && data.payload) {
-          const payload = data.payload;
-          // The payload can be the message itself or contain a message property
-          const msg: ChatMessage = payload.message ?? {
-            id: payload.id ?? `rt_${Date.now()}`,
-            body: payload.body,
-            sender_type: payload.senderType ?? payload.sender_type ?? 'user',
-            created_at: payload.created_at ?? new Date().toISOString(),
-          };
-          if (msg.body) {
-            onMessage(msg);
-          }
-        }
-      } catch { /* ignore malformed messages */ }
-    };
-
-    ws.onclose = () => {
-      // Reconnect after 3s
-      reconnectTimer.current = setTimeout(connect, 3000);
-    };
-
-    ws.onerror = () => {
-      ws.close();
-    };
-  }, [wsBaseUrl, visitorToken, onMessage]);
-
-  useEffect(() => {
-    connect();
-    return () => {
-      clearTimeout(reconnectTimer.current);
-      wsRef.current?.close();
-    };
-  }, [connect]);
-}
 
 // ---------------------------------------------------------------------------
 // Pre-chat form component
@@ -191,8 +123,6 @@ function WidgetChatContent() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messageIdsRef = useRef(new Set<string>());
 
-  const wsBaseUrl = process.env.NEXT_PUBLIC_INSFORGE_URL ?? '';
-
   // Deduplicated message handler for realtime
   const handleRealtimeMessage = useCallback((msg: ChatMessage) => {
     if (messageIdsRef.current.has(msg.id)) return;
@@ -200,8 +130,53 @@ function WidgetChatContent() {
     setMessages((prev) => [...prev, msg]);
   }, []);
 
-  // Subscribe to realtime WebSocket
-  useRealtimeSubscription(wsBaseUrl, visitorToken, handleRealtimeMessage);
+  // Per-visitor realtime channel. The `jti` (from the visitor JWT) is the
+  // unguessable secret that scopes the channel to this thread — the
+  // `send-reply` route broadcasts to the same `widget:${widgetId}:${jti}`.
+  const realtimeChannel = useMemo(() => {
+    if (!visitorToken) return undefined;
+    try {
+      const parts = visitorToken.split('.');
+      if (parts.length !== 3) return undefined;
+      const payload = JSON.parse(
+        atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')),
+      ) as { jti?: unknown };
+      if (typeof payload.jti !== 'string' || !payload.jti) return undefined;
+      return `widget:${widgetId}:${payload.jti}`;
+    } catch {
+      return undefined;
+    }
+  }, [visitorToken, widgetId]);
+
+  // The InsForge SDK Realtime delivers the inner publish payload
+  // (shape: { message, conversationId } — see realtimePublisher.publish).
+  const onRealtime = useCallback(
+    (payload: Record<string, unknown>) => {
+      const msg = payload.message;
+      if (!msg || typeof msg !== 'object') return;
+      const m = msg as Record<string, unknown>;
+      if (typeof m.body !== 'string' || !m.body) return;
+      handleRealtimeMessage({
+        id: (typeof m.id === 'string' ? m.id : undefined) ?? `rt_${Date.now()}`,
+        body: m.body,
+        sender_type:
+          (m.sender_type as ChatMessage['sender_type']) ??
+          (m.senderType as ChatMessage['sender_type']) ??
+          'user',
+        created_at:
+          (m.created_at as string) ?? new Date().toISOString(),
+      });
+    },
+    [handleRealtimeMessage],
+  );
+
+  // Subscribe via the InsForge SDK Realtime (Socket.IO) — same hook the
+  // agent inbox uses on `org:${orgId}` channels.
+  useRealtime({
+    messageChannel: realtimeChannel,
+    onNewMessage: onRealtime,
+    enabled: !!realtimeChannel,
+  });
 
   // Fetch session info on mount
   useEffect(() => {
@@ -250,7 +225,7 @@ function WidgetChatContent() {
     }
 
     loadSession();
-  }, [visitorToken, wsBaseUrl, searchParams]);
+  }, [visitorToken, searchParams]);
 
   // Read color from URL
   useEffect(() => {

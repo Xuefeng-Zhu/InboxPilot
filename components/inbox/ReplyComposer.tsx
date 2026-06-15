@@ -1,7 +1,9 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { getAccessToken } from '@/lib/insforge';
+import { queryKeys, MESSAGE_PAGE_SIZE } from '@/lib/queries/keys';
 
 // ---------------------------------------------------------------------------
 // Component
@@ -21,10 +23,9 @@ export function ReplyComposer({
   onPrefillConsumed,
 }: ReplyComposerProps) {
   const [body, setBody] = useState('');
-  const [sending, setSending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
 
-  // Adopt external prefill (e.g. "Approve & send" from the right panel)
+  // Adopt external prefill (e.g. "Fill composer" from the AI Draft panel)
   useEffect(() => {
     if (typeof prefillBody === 'string' && prefillBody.trim().length > 0) {
       setBody(prefillBody);
@@ -32,39 +33,51 @@ export function ReplyComposer({
     }
   }, [prefillBody, onPrefillConsumed]);
 
+  const mutation = useMutation({
+    mutationFn: async (trimmedBody: string) => {
+      const token = getAccessToken();
+      const res = await fetch('/api/functions/send-reply', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ conversationId, body: trimmedBody }),
+      });
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as Record<string, string>;
+        throw new Error(data.error ?? 'Failed to send reply');
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      setBody('');
+      // The server transitioned conversations.ai_state to 'idle' so the
+      // AiDraftPanel + DRAFTED header pill need a fresh conversation fetch.
+      // Realtime would normally cover this, but the webchat broadcast goes
+      // to a widget channel that MessageThread's useRealtime does not
+      // subscribe to, and SMS/email publish no realtime event at all — so
+      // we invalidate explicitly.
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.conversation(conversationId),
+      });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.messagesInfinite(conversationId, MESSAGE_PAGE_SIZE),
+      });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.aiDecision(conversationId),
+      });
+    },
+  });
+
   const handleSubmit = useCallback(
-    async (e: React.FormEvent) => {
+    (e: React.FormEvent) => {
       e.preventDefault();
       const trimmed = body.trim();
-      if (!trimmed) return;
-
-      setSending(true);
-      setError(null);
-      try {
-        const token = getAccessToken();
-
-        const res = await fetch(`/api/functions/send-reply`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          },
-          body: JSON.stringify({ conversationId, body: trimmed }),
-        });
-
-        if (!res.ok) {
-          const data = await res.json().catch(() => ({}));
-          throw new Error((data as Record<string, string>).error ?? 'Failed to send reply');
-        }
-
-        setBody('');
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to send reply');
-      } finally {
-        setSending(false);
-      }
+      if (!trimmed || mutation.isPending) return;
+      mutation.mutate(trimmed);
     },
-    [body, conversationId],
+    [body, mutation],
   );
 
   const handleKeyDown = useCallback(
@@ -76,6 +89,13 @@ export function ReplyComposer({
     },
     [handleSubmit],
   );
+
+  const sending = mutation.isPending;
+  const error = mutation.error
+    ? mutation.error instanceof Error
+      ? mutation.error.message
+      : 'Failed to send reply'
+    : null;
 
   return (
     <form

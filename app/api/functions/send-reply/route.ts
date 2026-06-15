@@ -246,6 +246,15 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // Agent reply consumes any pending AI draft — clear ai_state so the
+    // AiDraftPanel + DRAFTED header pill stop rendering. Mirrors the
+    // approve-ai-draft flow at app/api/functions/approve-ai-draft/route.ts:78-81.
+    // (OutboundMessageService.sendReply already updates last_message_at.)
+    await insforge.database
+      .from('conversations')
+      .update({ ai_state: 'idle' })
+      .eq('id', conversationId);
+
     return NextResponse.json({ status: 'ok', data: message });
   } catch (err) {
     return NextResponse.json(

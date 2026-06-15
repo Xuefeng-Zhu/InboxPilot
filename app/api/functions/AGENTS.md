@@ -14,7 +14,7 @@
 | `POST /api/functions/escalate-conversation` | `conversations` (update `status=escalated, ai_state=needs_human`) | — | Permission: `reply_conversations` |
 | `POST /api/functions/resolve-conversation` | `conversations` (update `status=resolved, ai_state=idle`) | — | Permission: `reply_conversations` |
 | `POST /api/functions/reopen-conversation` | `conversations` (update `status=open, ai_state=idle`) | — | Permission: `reply_conversations` |
-| `POST /api/functions/test-channel-connection` | `sms_provider_accounts` or `email_provider_accounts` (read) | — | Permission: `manage_settings` (the only one) |
+| `POST /api/functions/test-channel-connection` | `sms_provider_accounts` or `email_provider_accounts` (read) | — | Permission: `manage_settings` (the only one). Pings the provider via `health-check.ts`; loads credentials from InsForge secrets API (`getSecret`); returns `{status, data: {ok, message|reason, provider, active}}` |
 | `POST /api/functions/change-member-role` | `organization_members`, `audit_logs` | `member_role_changed` | **Uses the support-core service layer.** Permission: `manage_members`, plus an owner-only gate when the target is currently an owner or the new role is `owner` (P1). |
 | `POST /api/functions/invite-member` | `organization_members`, `audit_logs` | `member_added` | **Uses the support-core service layer.** Takes an email, looks up the user via the InsForge admin REST endpoint, then calls `OrganizationService.inviteMember`. Permission: `manage_members`. |
 | `POST /api/functions/remove-member` | `organization_members`, `audit_logs` | `member_removed` | **Uses the support-core service layer.** Permission: `manage_members`, plus an owner-only gate when the target is an owner (P1). |

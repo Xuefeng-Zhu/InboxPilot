@@ -13,7 +13,10 @@
 
 import { createDbClient } from '../_shared/create-db-client.ts';
 import { createRealtimePublisher } from '../_shared/create-realtime-publisher.ts';
+import { createProviderRegistry } from '../_shared/create-provider-registry.ts';
+import { getSecret } from '../_shared/insforge-secrets.ts';
 import { PostgresJobQueue } from '../../../packages/support-core/src/services/postgres-job-queue.ts';
+import { OutboundMessageService } from '../../../packages/support-core/src/services/outbound-message-service.ts';
 import { ConversationRepository } from '../../../packages/support-core/src/repositories/conversation-repository.ts';
 import { MessageRepository } from '../../../packages/support-core/src/repositories/message-repository.ts';
 import { KnowledgeRepository } from '../../../packages/support-core/src/repositories/knowledge-repository.ts';
@@ -22,6 +25,8 @@ import { AiDecisionRepository } from '../../../packages/support-core/src/reposit
 import { AuditLogRepository } from '../../../packages/support-core/src/repositories/audit-log-repository.ts';
 import { ContactRepository } from '../../../packages/support-core/src/repositories/contact-repository.ts';
 import { WebchatThreadRepository } from '../../../packages/support-core/src/repositories/webchat-thread-repository.ts';
+import { SmsProviderAccountRepository } from '../../../packages/support-core/src/repositories/sms-provider-account-repository.ts';
+import { EmailProviderAccountRepository } from '../../../packages/support-core/src/repositories/email-provider-account-repository.ts';
 import { AiAgentService } from '../../../packages/support-core/src/services/ai-agent-service.ts';
 import { KnowledgeIngestionService } from '../../../packages/support-core/src/services/knowledge-ingestion-service.ts';
 import { createFileContentFetcher } from '../../../packages/support-core/src/utils/file-content-fetcher.ts';
@@ -148,10 +153,11 @@ function buildJobHandlers(
 
       const knowledgeRepo = new KnowledgeRepository(db);
       const auditLogRepo = new AuditLogRepository(db);
+      const aiSettingsRepo = new AiSettingsRepository(db);
       const fileFetcher = createFileContentFetcher();
 
       const ingestionService = new KnowledgeIngestionService(
-        knowledgeRepo, aiClient, auditLogRepo, fileFetcher,
+        knowledgeRepo, aiClient, auditLogRepo, fileFetcher, aiSettingsRepo,
       );
 
       await ingestionService.processDocument(documentId);
@@ -166,6 +172,13 @@ function buildJobHandlers(
       // AI-generated auto-reply send. Triggered by the AI agent in auto_reply
       // mode (see AiAgentService). Job payload: conversation_id, body,
       // sender_type: 'ai', ai_decision_id.
+      //
+      // Delegates to OutboundMessageService.sendReply (which performs the real
+      // provider call via the registered adapter, persists the outbound
+      // message with the correct `provider` value, and writes its own audit
+      // log entry). We then patch the persisted message's `sender_type` back
+      // to 'ai' (the service always writes 'user') and publish the org-level
+      // realtime event so the agent inbox updates in real time.
       const conversationId = (job.payload.conversation_id ?? job.payload.conversationId) as string;
       const body = (job.payload.body as string) ?? '';
       const aiDecisionId = (job.payload.ai_decision_id as string) ?? null;
@@ -179,55 +192,157 @@ function buildJobHandlers(
       const webchatThreadRepo = new WebchatThreadRepository(db);
       const auditLogRepo = new AuditLogRepository(db);
       const aiDecisionRepo = new AiDecisionRepository(db);
+      const smsAccountRepo = new SmsProviderAccountRepository(db);
+      const emailAccountRepo = new EmailProviderAccountRepository(db);
 
       const conversation = await conversationRepo.findById(conversationId);
       if (!conversation) {
         throw new Error(`Conversation not found: ${conversationId}`);
       }
-      const contact = await contactRepo.findById(conversation.contactId);
-      if (!contact) {
-        throw new Error(`Contact not found: ${conversation.contactId}`);
-      }
 
-      const externalMessageId = `ai_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-      const message = await messageRepo.create({
-        conversationId: conversation.id,
-        senderType: 'ai',
-        senderId: null,
-        direction: 'outbound',
-        channel: conversation.channel,
-        body,
-        provider: conversation.channel === 'webchat' ? 'webchat' : null,
-        providerAccountId: null,
-        externalMessageId,
-        deliveryStatus: 'sent',
-      } as unknown as Parameters<typeof messageRepo.create>[0]);
+      // Build the OutboundMessageService dependency graph. Mirrors the
+      // Node route in app/api/functions/send-reply: we deliberately do
+      // NOT pass `webchatThreadRepo` or `realtimePublisher` to the
+      // service, so its webchat branch becomes a no-op. We do all
+      // realtime publishing here in process-jobs so the visitor
+      // channel carries the corrected `senderType: 'ai'` payload on
+      // the first publish (no `new_message` → `message_corrected` race).
+      const registry = createProviderRegistry();
+      const outboundService = new OutboundMessageService(
+        conversationRepo,
+        contactRepo,
+        messageRepo,
+        registry,
+        smsAccountRepo,
+        emailAccountRepo,
+        auditLogRepo,
+      );
 
-      await conversationRepo.update(conversation.id, { lastMessageAt: new Date() });
-
-      // Webchat: publish to the visitor's widget channel so the iframe
-      // receives the AI reply in real time. The iframe subscribes to
-      // widget:{widgetId}:{jti}.
-      if (conversation.channel === 'webchat') {
-        const thread = await webchatThreadRepo.findByConversationId(conversation.id);
-        if (thread) {
-          await realtime.publish(
-            `widget:${thread.widgetId}:${thread.visitorTokenJti}`,
-            'new_message',
-            {
-              id: message.id,
-              body: message.body,
-              sender_type: 'ai',
-              conversation_id: conversation.id,
-            },
-          );
+      // Load provider credentials from InsForge secrets, keyed by the
+      // configured account's `credentials_secret_id`. Mock provider skips
+      // the secret lookup entirely; webchat doesn't need a provider at all.
+      let providerConfig: Record<string, unknown> = {};
+      if (conversation.channel === 'sms') {
+        const defaultPhone = await smsAccountRepo.findDefaultPhoneNumber(conversation.organizationId);
+        if (defaultPhone) {
+          const smsAccount = await smsAccountRepo.findById(defaultPhone.providerAccountId);
+          if (smsAccount && smsAccount.isActive && smsAccount.provider !== 'mock') {
+            const secret = await getSecret<Record<string, unknown>>(
+              smsAccount.credentialsSecretId,
+              baseUrl,
+              serviceRoleKey,
+            );
+            if (secret) {
+              providerConfig = secret;
+            }
+          }
+        }
+      } else if (conversation.channel === 'email') {
+        const defaultEmail = await emailAccountRepo.findDefaultEmailAddress(conversation.organizationId);
+        if (defaultEmail) {
+          const emailAccount = await emailAccountRepo.findById(defaultEmail.providerAccountId);
+          if (emailAccount && emailAccount.isActive && emailAccount.provider !== 'mock') {
+            const secret = await getSecret<Record<string, unknown>>(
+              emailAccount.credentialsSecretId,
+              baseUrl,
+              serviceRoleKey,
+            );
+            if (secret) {
+              providerConfig = secret;
+            }
+          }
         }
       }
 
-      // Also notify the agent inbox via the org channel.
+      // The job is an AI auto-reply. The OutboundMessageService contract
+      // writes sender_type='user' and (by default) actorType='user'; the
+      // human-reply path is its primary use case. We pass
+      // `writeAuditLog: false` to suppress the misleading `user` audit row
+      // and write a single `actorType: 'ai'` row below. The DB message row
+      // is patched post-insert (the service does not accept an actor
+      // parameter).
+      const message = await outboundService.sendReply(
+        conversationId,
+        body,
+        null,
+        providerConfig,
+        { writeAuditLog: false },
+      );
+
+      // Patch the message row to reflect AI authorship. Must happen
+      // BEFORE any realtime publish so the event payloads carry
+      // sender_type='ai'. Failure is non-fatal — the agent still sees
+      // the message in the inbox, just temporarily misattributed.
+      try {
+        await db
+          .from('messages')
+          .update({ sender_type: 'ai', sender_id: null })
+          .eq('id', message.id);
+      } catch (err) {
+        console.error(
+          `send_outbound_message: failed to patch sender_type=ai on message ${message.id}: ` +
+            (err instanceof Error ? err.message : String(err)),
+        );
+      }
+
+      // Reflect the correction on the in-memory message so downstream
+      // publishes carry the right data.
+      const correctedMessage = { ...message, senderType: 'ai' as const, senderId: null };
+
+      // Write the AI audit log entry — the only one for this message.
+      // Matches the pre-refactor contract:
+      //   action: 'message_sent', actorType: 'ai', actorId: null,
+      //   metadata: { trigger: 'auto_reply', channel, conversationId }.
+      try {
+        await auditLogRepo.create({
+          organizationId: conversation.organizationId,
+          actorId: null,
+          actorType: 'ai',
+          action: 'message_sent',
+          resourceType: 'message',
+          resourceId: message.id,
+          metadata: {
+            trigger: 'auto_reply',
+            channel: conversation.channel,
+            conversationId: conversation.id,
+          },
+        });
+      } catch (err) {
+        console.error(
+          `send_outbound_message: failed to write ai audit log for message ${message.id}: ` +
+            (err instanceof Error ? err.message : String(err)),
+        );
+      }
+
+      // Webchat: publish to the visitor channel from process-jobs
+      // (the service's webchat branch is a no-op because we did not
+      // inject `webchatThreadRepo`/`realtimePublisher`). The payload
+      // uses the corrected message so the widget sees the AI actor on
+      // the very first event — no follow-up corrective event needed.
+      // Best-effort: failures are logged, not thrown.
+      if (conversation.channel === 'webchat') {
+        const thread = await webchatThreadRepo.findByConversationId(conversation.id);
+        if (thread) {
+          try {
+            await realtime.publish(
+              `widget:${thread.widgetId}:${thread.visitorTokenJti}`,
+              'new_message',
+              { message: correctedMessage, conversationId: correctedMessage.conversationId },
+            );
+          } catch (err) {
+            console.error(
+              `send_outbound_message: failed to publish webchat realtime for message ${message.id}: ` +
+                (err instanceof Error ? err.message : String(err)),
+            );
+          }
+        }
+      }
+
+      // Notify the agent inbox via the org channel with the corrected
+      // message (senderType='ai' and senderId=null).
       await realtime.publish(`org:${conversation.organizationId}`, 'new_message', {
-        message,
-        conversationId: conversation.id,
+        message: correctedMessage,
+        conversationId: correctedMessage.conversationId,
       });
 
       // Mark the AI decision as auto-sent (best-effort).
@@ -238,20 +353,6 @@ function buildJobHandlers(
           });
         } catch { /* non-critical */ }
       }
-
-      await auditLogRepo.create({
-        organizationId: conversation.organizationId,
-        actorType: 'ai',
-        actorId: null,
-        action: 'message_sent',
-        resourceType: 'message',
-        resourceId: message.id,
-        metadata: {
-          conversationId: conversation.id,
-          channel: conversation.channel,
-          trigger: 'auto_reply',
-        },
-      } as unknown as Parameters<typeof auditLogRepo.create>[0]);
     },
 
     async process_delivery_status(_job: Job) {

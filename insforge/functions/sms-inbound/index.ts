@@ -20,9 +20,8 @@
 
 import { createDbClient } from '../_shared/create-db-client.ts';
 import { createRealtimePublisher } from '../_shared/create-realtime-publisher.ts';
+import { createProviderRegistry } from '../_shared/create-provider-registry.ts';
 
-import { ProviderRegistry } from '../../../packages/support-core/src/interfaces/provider-registry.ts';
-import { MockSmsAdapter } from '../../../packages/support-core/src/adapters/mock-sms-adapter.ts';
 import { ContactRepository } from '../../../packages/support-core/src/repositories/contact-repository.ts';
 import { ConversationRepository } from '../../../packages/support-core/src/repositories/conversation-repository.ts';
 import { MessageRepository } from '../../../packages/support-core/src/repositories/message-repository.ts';
@@ -152,9 +151,7 @@ export default async function (req: Request): Promise<Response> {
     const provider = req.headers.get('x-provider') ?? 'mock';
 
     // 3. Build provider registry and get adapter
-    const registry = new ProviderRegistry();
-    registry.registerSmsAdapter('mock', new MockSmsAdapter());
-    // Future: register Twilio, Telnyx, etc. adapters here
+    const registry = createProviderRegistry();
 
     let adapter;
     try {

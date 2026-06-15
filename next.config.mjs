@@ -5,7 +5,7 @@ const INSFORGE_FUNCTIONS_URL =
   '';
 
 const nextConfig = {
-  transpilePackages: [],
+  transpilePackages: ['@inboxpilot/support-core'],
   turbopack: {},
   async rewrites() {
     if (!INSFORGE_FUNCTIONS_URL) return [];

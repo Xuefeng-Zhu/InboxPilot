@@ -102,13 +102,27 @@ export default function SmsSettingsPanel() {
   }, [authLoading, user, fetchData]);
 
   const handleAddAccount = async () => {
+    if (!user) return;
     if (!newLabel.trim() || !newCredentialsId.trim()) return;
     setAddingAccount(true);
     setError(null);
     try {
+      // Look up the user's current org from organization_members
+      const { data: membership, error: membershipError } = await insforge.database
+        .from('organization_members')
+        .select('organization_id')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if (membershipError || !membership) {
+        setError(membershipError?.message ?? 'No organization found for current user');
+        return;
+      }
+
       const { error: insertError } = await insforge.database
         .from('sms_provider_accounts')
         .insert([{
+          organization_id: membership.organization_id,
           provider: newProvider,
           label: newLabel.trim(),
           credentials_secret_id: newCredentialsId.trim(),

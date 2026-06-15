@@ -30,7 +30,7 @@
 | `POST /api/functions/escalate-conversation` | `{conversationId}` | `reply_conversations` | `status=escalated, ai_state=needs_human` |
 | `POST /api/functions/resolve-conversation` | `{conversationId}` | `reply_conversations` | `status=resolved, ai_state=idle` |
 | `POST /api/functions/reopen-conversation` | `{conversationId}` | `reply_conversations` | `status=open, ai_state=idle` |
-| `POST /api/functions/test-channel-connection` | `{channelType, providerAccountId}` | `manage_settings` | Read-only check; returns `{provider, active}` (does NOT ping the provider) |
+| `POST /api/functions/test-channel-connection` | `{channelType, providerAccountId}` | `manage_settings` | Pings the provider via `healthCheck()` (no real outbound send); loads credentials from InsForge secrets via `getSecret()`; returns `{status, data: {ok, message|reason, provider, active}}` |
 | `POST /api/functions/delete-widget` | `{organizationId, widgetId}` | `manage_settings` | Delete `webchat_widgets` row; FK cascade wipes linked `webchat_threads` (conversations/contacts are not cascade-deleted); audit `webchat_widget_deleted` (only surviving record) |
 
 ## AUTH GATING — 3 LAYERS

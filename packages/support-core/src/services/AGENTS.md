@@ -7,7 +7,7 @@ Service layer — orchestrates business logic using repositories + interface-typ
 | Service | What it does | Constructor deps (in order) |
 |---|---|---|
 | `InboundMessageService` | Inbound flow: dedup → find-or-create contact/conv → insert message → bump `lastMessageAt` → enqueue `process_ai_message` → audit | `ContactRepo, ConversationRepo, MessageRepo, JobQueue, AuditLogRepo` |
-| `OutboundMessageService` | Send reply: load conv/contact → pick default number/address → call `ProviderRegistry` adapter → persist outbound message → publish realtime (webchat only) → audit | `ConversationRepo, ContactRepo, MessageRepo, ProviderRegistry, SmsProviderAccountRepo, EmailProviderAccountRepo, AuditLogRepo, WebchatThreadRepo?, RealtimePublisher?` |
+| `OutboundMessageService` | Send reply: load conv/contact → pick default number/address → call `ProviderRegistry` adapter (with caller-supplied `providerConfig` for real providers) → persist outbound message → caller publishes realtime (webchat only) → audit. Called by `app/api/functions/send-reply` and `insforge/functions/process-jobs#send_outbound_message`. **Realtime publishing is the caller's exclusive responsibility** — the service persists the message row but never publishes a `new_message` event (the caller knows the correct `senderType` for the widget payload: 'user' for human, 'ai' for AI). | `ConversationRepo, ContactRepo, MessageRepo, ProviderRegistry, SmsProviderAccountRepo, EmailProviderAccountRepo, AuditLogRepo` |
 | `AiAgentService` | AI pipeline: load settings → embed → `matchChunks` → **escalation engine first** → if escalated, persist + audit; else LLM → Zod-parse → handle `draft_only`/`auto_reply`/low-confidence → enqueue `send_outbound_message` if auto-sent → enqueue `record_chunk_refs` → audit | `ConversationRepo, MessageRepo, KnowledgeRepo, AiSettingsRepo, AiDecisionRepo, EscalationEngine, AiClient, JobQueue, AuditLogRepo` |
 | `KnowledgeIngestionService` | RAG: load doc → `processing` → optional `FileContentFetcher` → `splitIntoChunks` → embed each → insert chunks → `ready` (or `failed` + cleanup on error) → audit | `KnowledgeRepo, AiClient, AuditLogRepo, FileContentFetcher?` |
 | `WebchatThreadService` | Webchat lifecycle: `initThread` (find-or-create contact, create conv+thread, mint JTI) → `identifyThread` (update contact, rotate JTI) → audit | `ContactRepo, ConversationRepo, WebchatWidgetRepo, WebchatThreadRepo, AuditLogRepo` |
@@ -22,13 +22,14 @@ Service layer — orchestrates business logic using repositories + interface-typ
 - **Add a new message pipeline step** → check `InboundMessageService` first, then `AiAgentService` (LLM path), then `OutboundMessageService` (delivery).
 - **Tune AI confidence thresholds / chunk counts** → `AiAgentService` (the `lowConfidence` branch is the only post-LLM escalation hook).
 - **Adjust job-queue backoff / dead-letter policy** → `PostgresJobQueue` constants near the top.
-- **Realtime publish** → `OutboundMessageService` only (webchat path). For org-wide events, the Deno `process-jobs` function publishes to `org:${orgId}` channel.
+- **Realtime publish** → callers of `OutboundMessageService` only (webchat path). The service persists the message row; the caller publishes the `new_message` event with the correct sender type ('user' for human, 'ai' for AI auto-reply). For org-wide events, the Deno `process-jobs` function publishes to `org:${orgId}` channel.
+- **How is the active provider picked?** → `SmsProviderAccountRepository.findDefaultPhoneNumber` and `EmailProviderAccountRepository.findDefaultEmailAddress` return the org's default account row; `OutboundMessageService` then resolves the adapter via `ProviderRegistry` using that account's `provider` field (e.g. `twilio`, `postmark`, `mock`). Real-provider credentials are loaded from InsForge secrets by the caller (the route or the Deno entrypoint) using `account.credentials_secret_id`.
 
 ## CONVENTIONS
 - **DI: pure constructor injection of interface types.** No service locator.
 - **All significant actions write to `audit_logs`** via `AuditLogRepository`. Pattern: `auditLogRepo.insert({ orgId, actorType, actorId, action, resourceType, resourceId, metadata })`.
 - **Error handling: throw `new Error(msg)` on repository failures**; services propagate. No custom error class hierarchy — only `Error`.
-- **Optional deps with `?`** keep services usable in tests where webchat/realtime aren't wired.
+- **Optional deps with `?`** keep services usable in tests where the real implementation isn't wired (e.g. `FileContentFetcher?` in `KnowledgeIngestionService`, `webchatThreadRepo?` only in services that still need it). The general rule: if a dep can be cleanly stubbed with no-op behavior in unit tests, mark it optional rather than forcing every test to construct a full implementation.
 
 ## UNIQUE
 - **Escalation ALWAYS runs before the LLM.** If a rule matches, the AI never sees the message. This is the "deterministic escalation before AI" guarantee.

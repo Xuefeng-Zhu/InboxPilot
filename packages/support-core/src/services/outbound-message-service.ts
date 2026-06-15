@@ -1,16 +1,29 @@
 /**
- * OutboundMessageService — orchestrates sending outbound replies over SMS or email.
+ * OutboundMessageService — orchestrates sending outbound replies over SMS,
+ * email, or webchat.
  *
  * sendReply flow:
  * 1. Load conversation by ID
- * 2. Determine channel from conversation (sms or email)
+ * 2. Determine channel from conversation (sms, email, or webchat)
  * 3. Load the contact to get the recipient address (phone or email)
  * 4. If SMS: find default phone number, get SMS adapter, call sendSms
  * 5. If email: find default email address, get email adapter, call sendEmail
- * 6. Create outbound message record with provider, providerAccountId, externalMessageId
- * 7. Update conversation lastMessageAt
- * 8. Record audit log entry for 'message_sent'
- * 9. Return the created message
+ * 6. If webchat: skip the external provider — synthesize provider-stub
+ *    fields locally (no realtime publish here, see contract note below)
+ * 7. Create outbound message record with provider, providerAccountId,
+ *    externalMessageId
+ * 8. Update conversation lastMessageAt
+ * 9. Record audit log entry for 'message_sent'
+ * 10. Return the created message
+ *
+ * Contract — realtime publishing is the caller's responsibility:
+ * This service never publishes a realtime event. For the webchat channel the
+ * caller (the route or the Deno function) must publish the `new_message`
+ * event itself with the correct `senderType` for the widget payload:
+ *   - `app/api/functions/send-reply` → 'user' (human agent reply)
+ *   - `insforge/functions/process-jobs#send_outbound_message` → 'ai'
+ * Hard-coding the sender type inside the service was unsafe because the
+ * service cannot tell a human reply from an AI auto-reply.
  *
  * This service never imports InsForge SDK — all dependencies are injected.
  */
@@ -21,9 +34,7 @@ import type { MessageRepository } from '../repositories/message-repository.js';
 import type { AuditLogRepository } from '../repositories/audit-log-repository.js';
 import type { SmsProviderAccountRepository } from '../repositories/sms-provider-account-repository.js';
 import type { EmailProviderAccountRepository } from '../repositories/email-provider-account-repository.js';
-import type { WebchatThreadRepository } from '../repositories/webchat-thread-repository.js';
 import type { ProviderRegistry } from '../interfaces/provider-registry.js';
-import type { RealtimePublisher } from '../interfaces/realtime-publisher.js';
 import type { Message } from '../types/index.js';
 
 export class OutboundMessageService {
@@ -35,8 +46,6 @@ export class OutboundMessageService {
     private smsAccountRepo: SmsProviderAccountRepository,
     private emailAccountRepo: EmailProviderAccountRepository,
     private auditLog: AuditLogRepository,
-    private webchatThreadRepo?: WebchatThreadRepository,
-    private realtimePublisher?: RealtimePublisher,
   ) {}
 
   /**
@@ -45,9 +54,31 @@ export class OutboundMessageService {
    * @param conversationId - The conversation to reply on
    * @param body - The message body text
    * @param userId - The user sending the reply
+   * @param providerConfig - Per-call credentials for the provider adapter
+   *   (e.g. `{ accountSid, authToken }` for Twilio, `{ serverToken }` for
+   *   Postmark, `{ apiKey }` for Telnyx). The Mock adapter ignores it.
+   *   Optional — when omitted, defaults to `{}`, which is correct for the
+   *   Mock adapter and for environments that configure credentials via the
+   *   adapter constructor (none of the current adapters do).
+   * @param options - Optional behavior flags:
+   *   - `writeAuditLog` (default `true`): when `false`, the service skips
+   *     its own `message_sent` audit entry. The AI auto-reply path in
+   *     `process-jobs#send_outbound_message` passes `writeAuditLog: false`
+   *     so it can write a single `actorType: 'ai'` audit row in place of
+   *     the service's default `actorType: 'user'` row (which would be
+   *     misleading for AI-sent messages). Realtime publishing for AI
+   *     auto-replies also lives in that caller (with
+   *     `senderType: 'ai'`), since the service no longer publishes
+   *     realtime itself.
    * @returns The created outbound Message
    */
-  async sendReply(conversationId: string, body: string, userId: string): Promise<Message> {
+  async sendReply(
+    conversationId: string,
+    body: string,
+    userId: string,
+    providerConfig: Record<string, unknown> = {},
+    options: { writeAuditLog?: boolean } = {},
+  ): Promise<Message> {
     // 1. Load conversation
     const conversation = await this.conversationRepo.findById(conversationId);
     if (!conversation) {
@@ -92,7 +123,7 @@ export class OutboundMessageService {
         to: recipientPhone,
         from: defaultPhone.phoneNumber,
         body,
-        providerConfig: {},
+        providerConfig,
       });
 
       provider = sendResult.provider;
@@ -124,7 +155,7 @@ export class OutboundMessageService {
         from: defaultEmail.emailAddress,
         subject: conversation.subject ?? 'Re: Support',
         bodyText: body,
-        providerConfig: {},
+        providerConfig,
       });
 
       provider = sendResult.provider;
@@ -133,23 +164,18 @@ export class OutboundMessageService {
       deliveryStatus = sendResult.status;
     } else {
       // channel === 'webchat'
-      // No external provider call — deliver via realtime push
+      // No external provider call — the service persists the outbound row
+      // and synthesizes a deterministic-ish local externalMessageId, but it
+      // never publishes a realtime event. Realtime delivery is the caller's
+      // exclusive responsibility: the caller knows the correct `senderType`
+      // for the widget payload ('user' for human replies, 'ai' for AI
+      // auto-replies) and must publish the `new_message` event itself
+      // (see `app/api/functions/send-reply` for the human path and
+      // `insforge/functions/process-jobs#send_outbound_message` for AI).
       provider = 'webchat';
       providerAccountId = '';
       externalMessageId = `wc_reply_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
       deliveryStatus = 'sent';
-
-      // Publish to the visitor's realtime channel
-      if (this.webchatThreadRepo && this.realtimePublisher) {
-        const thread = await this.webchatThreadRepo.findByConversationId(conversation.id);
-        if (thread) {
-          await this.realtimePublisher.publish(
-            `widget:${thread.widgetId}:${thread.visitorTokenJti}`,
-            'new_message',
-            { body, senderType: 'user', conversationId: conversation.id, senderId: userId },
-          );
-        }
-      }
     }
 
     // 6. Create outbound message record
@@ -173,19 +199,21 @@ export class OutboundMessageService {
     });
 
     // 8. Record audit log entry
-    await this.auditLog.create({
-      organizationId: conversation.organizationId,
-      actorId: userId,
-      actorType: 'user',
-      action: 'message_sent',
-      resourceType: 'message',
-      resourceId: message.id,
-      metadata: {
-        conversationId: conversation.id,
-        channel,
-        provider,
-      },
-    });
+    if (options.writeAuditLog !== false) {
+      await this.auditLog.create({
+        organizationId: conversation.organizationId,
+        actorId: userId,
+        actorType: 'user',
+        action: 'message_sent',
+        resourceType: 'message',
+        resourceId: message.id,
+        metadata: {
+          conversationId: conversation.id,
+          channel,
+          provider,
+        },
+      });
+    }
 
     // 9. Return the created message
     return message;

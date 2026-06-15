@@ -73,10 +73,13 @@
   // Create the floating button
   // ---------------------------------------------------------------------------
 
+  const CHAT_ICON_SVG = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>`;
+  const CLOSE_ICON_SVG = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`;
+
   const btn = document.createElement('button');
   btn.id = 'inboxpilot-widget-btn';
   btn.setAttribute('aria-label', 'Open chat');
-  btn.innerHTML = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>`;
+  btn.innerHTML = CHAT_ICON_SVG;
 
   Object.assign(btn.style, {
     position: 'fixed',
@@ -99,6 +102,11 @@
   btn.addEventListener('mouseenter', () => { btn.style.transform = 'scale(1.05)'; });
   btn.addEventListener('mouseleave', () => { btn.style.transform = 'scale(1)'; });
 
+  function updateLauncherIcon() {
+    btn.innerHTML = isOpen ? CLOSE_ICON_SVG : CHAT_ICON_SVG;
+    btn.setAttribute('aria-label', isOpen ? 'Close chat' : 'Open chat');
+  }
+
   // ---------------------------------------------------------------------------
   // Create the iframe container
   // ---------------------------------------------------------------------------
@@ -119,6 +127,41 @@
     display: 'none',
     border: '1px solid #e5e7eb',
   });
+
+  // Header close button (overlay on the chat panel)
+  const panelCloseBtn = document.createElement('button');
+  panelCloseBtn.id = 'inboxpilot-widget-panel-close';
+  panelCloseBtn.setAttribute('aria-label', 'Close chat');
+  panelCloseBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#374151" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`;
+  Object.assign(panelCloseBtn.style, {
+    position: 'absolute',
+    top: '8px',
+    right: '8px',
+    width: '28px',
+    height: '28px',
+    borderRadius: '50%',
+    background: 'rgba(255, 255, 255, 0.95)',
+    border: '1px solid rgba(0, 0, 0, 0.08)',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '0',
+    zIndex: '1',
+    boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+  });
+  panelCloseBtn.addEventListener('mouseenter', () => {
+    panelCloseBtn.style.background = 'rgba(243, 244, 246, 1)';
+  });
+  panelCloseBtn.addEventListener('mouseleave', () => {
+    panelCloseBtn.style.background = 'rgba(255, 255, 255, 0.95)';
+  });
+  panelCloseBtn.addEventListener('click', () => {
+    container.style.display = 'none';
+    isOpen = false;
+    updateLauncherIcon();
+  });
+  container.appendChild(panelCloseBtn);
 
   // ---------------------------------------------------------------------------
   // Initialize session & open widget
@@ -197,6 +240,7 @@
     if (isOpen) {
       container.style.display = 'none';
       isOpen = false;
+      updateLauncherIcon();
       return;
     }
 
@@ -209,6 +253,7 @@
     mountIframe(session.token, session.preChatEnabled);
     container.style.display = 'block';
     isOpen = true;
+    updateLauncherIcon();
   }
 
   btn.addEventListener('click', toggleWidget);
@@ -219,6 +264,7 @@
     if (event.data?.type === 'inboxpilot:close') {
       container.style.display = 'none';
       isOpen = false;
+      updateLauncherIcon();
     }
     if (event.data?.type === 'inboxpilot:token_rotated' && event.data.token) {
       visitorToken = event.data.token;
@@ -234,6 +280,7 @@
       }
       container.style.display = 'none';
       isOpen = false;
+      updateLauncherIcon();
     }
   });
 

@@ -12,12 +12,78 @@ const INSFORGE_URL = process.env.NEXT_PUBLIC_INSFORGE_URL ?? '';
 const INSFORGE_ANON_KEY = process.env.NEXT_PUBLIC_INSFORGE_ANON_KEY ?? '';
 
 /**
+ * Custom fetch wrapper for the InsForge SDK.
+ *
+ * The SDK auto-refreshes the access token on 401 (via the httpOnly refresh
+ * cookie) and stores the new token in memory only — it does NOT update the
+ * `insforge_access_token` cookie our app reads via `getAccessToken()`. After
+ * ~15 minutes, the cookie is stale, the next API route call gets 401 from
+ * `_auth.ts`, and the team panel (and any other cookie-authed route) falls
+ * back to truncated user IDs.
+ *
+ * We intercept the `/api/auth/refresh` response and mirror the new access
+ * token into the cookie. CSRF cookie is also mirrored (set by InsForge on
+ * refresh, read by the SDK on subsequent authed calls).
+ */
+function withCookieSync(originalFetch: typeof fetch): typeof fetch {
+  return async function patchedFetch(
+    input: RequestInfo | URL,
+    init?: RequestInit,
+  ): Promise<Response> {
+    const response = await originalFetch(input, init);
+    try {
+      const url =
+        typeof input === 'string'
+          ? input
+          : input instanceof URL
+            ? input.toString()
+            : input.url;
+      const isRefresh = url.includes('/api/auth/refresh');
+      if (isRefresh && response.ok) {
+        // Clone before reading — the SDK caller still needs the original.
+        const clone = response.clone();
+        const body = (await clone.json()) as { accessToken?: unknown };
+        if (typeof body.accessToken === 'string' && body.accessToken) {
+          document.cookie = `insforge_access_token=${body.accessToken}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`;
+        }
+        // Mirror any Set-Cookie headers InsForge sent (notably the refreshed
+        // CSRF token). Multiple Set-Cookie headers must be set individually
+        // via document.cookie — concat and split on the standard separator.
+        const setCookies = response.headers.getSetCookie?.() ?? [];
+        for (const raw of setCookies) {
+          const [pair] = raw.split(';');
+          if (!pair) continue;
+          // Preserve attributes (Path, SameSite, etc.) from the original.
+          const attrs = raw
+            .split(';')
+            .slice(1)
+            .map((s) => s.trim())
+            .filter(
+              (a) =>
+                !/^Max-Age=/i.test(a) && !/^Expires=/i.test(a),
+            )
+            .join('; ');
+          // Refresh cookie is HttpOnly — document.cookie can't set/clear it,
+          // so skip HttpOnly entries.
+          if (/HttpOnly/i.test(attrs)) continue;
+          document.cookie = `${pair}; ${attrs}`;
+        }
+      }
+    } catch {
+      // Best-effort: never let a cookie-sync failure break a real request.
+    }
+    return response;
+  };
+}
+
+/**
  * Browser / client-side InsForge client.
  * Uses the public anon key — safe to expose in the browser.
  */
 export const insforge = createClient({
   baseUrl: INSFORGE_URL,
   anonKey: INSFORGE_ANON_KEY,
+  fetch: typeof window !== 'undefined' ? withCookieSync(globalThis.fetch.bind(globalThis)) : undefined,
 });
 
 // Re-export types that components use

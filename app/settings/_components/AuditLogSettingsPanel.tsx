@@ -1,8 +1,10 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { Card, Input, Select } from '@/components/ui';
+import { Eye } from 'lucide-react';
+import { Card, Input, Select, Tooltip } from '@/components/ui';
 import { useAuditLogs, type AuditLogRow } from '@/lib/queries';
+import { MetadataDrawer } from './MetadataDrawer';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -60,6 +62,7 @@ function actorDisplay(row: AuditLogRow): string {
 export default function AuditLogSettingsPanel() {
   const [actorType, setActorType] = useState<ActorTypeFilter>('all');
   const [search, setSearch] = useState('');
+  const [openRow, setOpenRow] = useState<AuditLogRow | null>(null);
 
   const filters = useMemo(
     () => ({
@@ -187,17 +190,16 @@ export default function AuditLogSettingsPanel() {
                     </div>
                   </td>
                   <td className="px-3 py-2.5">
-                    <details className="group">
-                      <summary className="inline-flex cursor-pointer list-none items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-medium text-[var(--m03-fg-2)] hover:bg-[var(--m03-line-2)] hover:text-[var(--m03-fg)]">
-                        <span aria-hidden="true" className="font-mono text-[10px]">
-                          ▸
-                        </span>
-                        View
-                      </summary>
-                      <pre className="mt-2 max-w-[360px] overflow-auto rounded border border-[var(--m03-line)] bg-[var(--m03-line-2)] p-2 font-mono text-[11px] leading-snug text-[var(--m03-fg)]">
-                        {JSON.stringify(row.metadata ?? {}, null, 2)}
-                      </pre>
-                    </details>
+                    <Tooltip content="View metadata" side="left">
+                      <button
+                        type="button"
+                        onClick={() => setOpenRow(row)}
+                        className="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded text-[var(--m03-fg-3)] transition-colors hover:bg-[var(--m03-line-2)] hover:text-[var(--m03-fg)] focus:outline-none focus:ring-1 focus:ring-[var(--m03-fg)]"
+                        aria-label={`View metadata for ${row.action}`}
+                      >
+                        <Eye className="h-4 w-4" aria-hidden="true" />
+                      </button>
+                    </Tooltip>
                   </td>
                 </tr>
               ))}
@@ -205,6 +207,8 @@ export default function AuditLogSettingsPanel() {
           </table>
         </div>
       )}
+
+      <MetadataDrawer row={openRow} onClose={() => setOpenRow(null)} />
     </Card>
   );
 }

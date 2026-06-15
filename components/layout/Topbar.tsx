@@ -4,6 +4,7 @@ import { useRouter, usePathname } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth-context';
+import { BrandMark } from '@/components/BrandMark';
 
 // ---------------------------------------------------------------------------
 // Topbar — M03 global topbar (logo · search · avatar menu)
@@ -87,9 +88,7 @@ export function Topbar({ nav }: TopbarProps) {
         href="/"
         className="flex items-center gap-2 text-[14px] font-medium tracking-[-0.02em] text-[var(--m03-fg)]"
       >
-        <span className="text-[11px] leading-none" aria-hidden="true">
-          ▲
-        </span>
+        <BrandMark size={26} className="text-[var(--m03-fg)]" />
         InboxPilot
       </Link>
 

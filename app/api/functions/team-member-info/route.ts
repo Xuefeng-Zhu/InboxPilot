@@ -57,13 +57,17 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // The team list includes member emails, so gate it behind the same
-    // permission required to mutate the team (owner + admin only). Viewers
-    // and agents intentionally don't see the directory.
+    // The team list (and the member emails that decorate it) is already
+    // visible to every org member via the RLS-protected `organization_members`
+    // table — we just enrich the rows with the auth-user's email/name so the
+    // panel can show something friendlier than a truncated UUID. Gate on the
+    // same permission required to see the conversation list, which every
+    // role (owner/admin/agent/viewer) has. Mutation routes still gate on
+    // `manage_members` separately.
     const allowed = await userHasOrgPermission(
       user.id,
       organizationId,
-      'manage_members',
+      'view_conversations',
     );
     if (!allowed) {
       return NextResponse.json({ error: 'forbidden' }, { status: 403 });

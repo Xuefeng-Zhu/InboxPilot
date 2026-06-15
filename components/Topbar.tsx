@@ -19,7 +19,7 @@ export function Topbar({ nav, cta }: TopbarProps) {
         href="/"
         className="flex items-center gap-2 font-medium text-[14px] tracking-tight text-[var(--m03-fg)]"
       >
-        <BrandMark size={16} className="text-[var(--m03-fg)]" />
+        <BrandMark size={26} className="text-[var(--m03-fg)]" />
         InboxPilot
       </Link>
       {nav && nav.length > 0 && (

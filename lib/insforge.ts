@@ -44,7 +44,14 @@ function withCookieSync(originalFetch: typeof fetch): typeof fetch {
         const clone = response.clone();
         const body = (await clone.json()) as { accessToken?: unknown };
         if (typeof body.accessToken === 'string' && body.accessToken) {
-          document.cookie = `insforge_access_token=${body.accessToken}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`;
+          // URL-encode the token (JWT base64url chars like . / + = are unsafe
+          // inside a cookie value) and use a session cookie (no max-age) so
+          // its lifetime tracks the browser session, not 7 days past expiry.
+          // The SDK auto-refreshes the in-memory token on 401 and re-enters
+          // this block to re-mirror the cookie — no long-lived client cookie
+          // is needed.
+          const encodedToken = encodeURIComponent(body.accessToken);
+          document.cookie = `insforge_access_token=${encodedToken}; path=/; SameSite=Lax`;
         }
         // Mirror any Set-Cookie headers InsForge sent (notably the refreshed
         // CSRF token). Multiple Set-Cookie headers must be set individually
@@ -53,15 +60,14 @@ function withCookieSync(originalFetch: typeof fetch): typeof fetch {
         for (const raw of setCookies) {
           const [pair] = raw.split(';');
           if (!pair) continue;
-          // Preserve attributes (Path, SameSite, etc.) from the original.
+          // Preserve all attributes (Path, SameSite, Max-Age, Expires, etc.)
+          // from the original — do NOT strip Max-Age/Expires, otherwise a
+          // server-issued long-lived CSRF cookie is silently downgraded to a
+          // session cookie on the client.
           const attrs = raw
             .split(';')
             .slice(1)
             .map((s) => s.trim())
-            .filter(
-              (a) =>
-                !/^Max-Age=/i.test(a) && !/^Expires=/i.test(a),
-            )
             .join('; ');
           // Refresh cookie is HttpOnly — document.cookie can't set/clear it,
           // so skip HttpOnly entries.
@@ -102,9 +108,17 @@ export type InsForgeUser = {
 export function getAccessToken(): string | null {
   if (typeof window === 'undefined') return null;
   try {
-    // Read from cookie
+    // Read from cookie. The stored value is URL-encoded (see
+    // withCookieSync) — decode it back to the raw JWT.
     const match = document.cookie.match(/insforge_access_token=([^;]+)/);
-    return match?.[1] ?? null;
+    const raw = match?.[1];
+    if (!raw) return null;
+    try {
+      return decodeURIComponent(raw);
+    } catch {
+      // Legacy value written before URL-encoding was added — return as-is.
+      return raw;
+    }
   } catch {
     return null;
   }

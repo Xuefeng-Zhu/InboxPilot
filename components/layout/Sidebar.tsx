@@ -7,6 +7,8 @@ import { useQuery } from '@tanstack/react-query';
 import { insforge } from '@/lib/insforge';
 import { queryKeys, useOrgMembership } from '@/lib/queries';
 import { cn } from '@/components/ui/cn';
+import { Tooltip } from '@/components/ui/Tooltip';
+import { SidebarCollapseToggle } from './SidebarCollapseToggle';
 
 // ---------------------------------------------------------------------------
 // Sidebar — M03 monochrome (design-mock-3.html lines 73-93)
@@ -122,6 +124,7 @@ function NavRow({
   disabled,
   disabledReason,
   onClick,
+  collapsed = false,
 }: {
   href: string;
   label: string;
@@ -132,9 +135,12 @@ function NavRow({
   disabled?: boolean;
   disabledReason?: string;
   onClick?: () => void;
+  collapsed?: boolean;
 }) {
-  const baseRow =
-    'flex items-center gap-2.5 rounded px-2.5 py-1.5 text-[13px] transition-colors';
+  const baseRow = cn(
+    'flex items-center gap-2.5 rounded px-2.5 py-1.5 text-[13px] transition-colors min-h-[32px]',
+    collapsed && 'justify-center',
+  );
   const stateRow = disabled
     ? 'cursor-not-allowed text-[var(--m03-fg-3)] opacity-50'
     : isActive
@@ -155,8 +161,8 @@ function NavRow({
       <span className={iconWrap} aria-hidden="true">
         {icon}
       </span>
-      <span className="truncate">{label}</span>
-      {typeof count === 'number' && count > 0 && (
+      {!collapsed && <span className="truncate">{label}</span>}
+      {!collapsed && typeof count === 'number' && count > 0 && (
         <span
           title={countTone === 'escalated' ? 'Escalated conversations' : 'Open conversations'}
           className={cn(
@@ -186,16 +192,33 @@ function NavRow({
     );
   }
 
-  return (
+  const link = (
     <a href={href} onClick={onClick} className={cn(baseRow, stateRow)}>
       {inner}
     </a>
   );
+
+  if (collapsed) {
+    return (
+      <Tooltip content={label} side="right">
+        {link}
+      </Tooltip>
+    );
+  }
+
+  return link;
 }
 
-function SectionHeader({ label }: { label: string }) {
+function SectionHeader({ label, collapsed = false }: { label: string; collapsed?: boolean }) {
+  if (collapsed) {
+    return (
+      <div className="px-3 pb-1 pt-2">
+        <div className="mx-auto h-px w-6 bg-[var(--m03-line)]" />
+      </div>
+    );
+  }
   return (
-    <div className="px-3 pb-1.5 pt-3 font-mono text-[11px] font-medium uppercase tracking-[0.04em] text-[var(--m03-fg-3)]">
+    <div className="px-3 pb-1 pt-2 font-mono text-[11px] font-medium uppercase tracking-[0.04em] text-[var(--m03-fg-3)]">
       {label}
     </div>
   );
@@ -263,7 +286,7 @@ const MANAGE_LINKS: SectionLink[] = [
   { href: '/settings', label: 'Settings', icon: Icon.cog },
 ];
 
-function UserChip() {
+function UserChip({ collapsed = false }: { collapsed?: boolean }) {
   const { user } = useAuth();
   return (
     <div className="border-t border-[var(--m03-line)] pt-2">
@@ -274,7 +297,12 @@ function UserChip() {
         >
           {userInitial(user?.email)}
         </span>
-        <span className="truncate text-[12.5px] text-[var(--m03-fg-2)]">
+        <span
+          className={cn(
+            'truncate text-[12.5px] text-[var(--m03-fg-2)]',
+            collapsed && 'invisible w-0 overflow-hidden',
+          )}
+        >
           {user?.email ?? 'Signed in'}
         </span>
       </div>
@@ -286,16 +314,27 @@ function renderSection(
   section: Section,
   key: string,
   isLinkActive: (href: string) => boolean,
+  collapsed: boolean = false,
 ) {
   return (
     <div key={key}>
-      {section.topRule && <div className="my-2 mx-2 border-t border-[var(--m03-line)]" />}
-      {section.label && <SectionHeader label={section.label} />}
+      {section.topRule && (
+        collapsed ? (
+          <div className="mx-auto my-2 h-px w-6 bg-[var(--m03-line)]" />
+        ) : (
+          <div className="my-2 mx-2 border-t border-[var(--m03-line)]" />
+        )
+      )}
+      {section.label && <SectionHeader label={section.label} collapsed={collapsed} />}
       <div className="flex flex-col gap-0.5">
         {section.links.map((l) => (
-          <div key={`${key}-${l.href}-${l.label}`}>
+          <div key={`${key}-${l.href}-${l.label}`} className="w-full">
             {l.dividerBefore && (
-              <div className="mx-2 my-1 border-t border-[var(--m03-line)]" />
+              collapsed ? (
+                <div className="mx-auto my-1 h-px w-6 bg-[var(--m03-line)]" />
+              ) : (
+                <div className="mx-2 my-1 border-t border-[var(--m03-line)]" />
+              )
             )}
             <NavRow
               href={l.href}
@@ -306,6 +345,7 @@ function renderSection(
               countTone={l.countTone}
               disabled={l.disabled}
               disabledReason={l.disabledReason}
+              collapsed={collapsed}
             />
           </div>
         ))}
@@ -318,7 +358,7 @@ function renderSection(
 // requires `useSearchParams` consumers to be wrapped in a `<Suspense>`
 // boundary, otherwise static prerendering of any page that renders Sidebar
 // (e.g. /analytics) bails out and the production build fails.
-function SidebarBody() {
+function SidebarBody({ collapsed = false, onToggle }: { collapsed?: boolean; onToggle?: () => void }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const { user } = useAuth();
@@ -365,38 +405,52 @@ function SidebarBody() {
   ];
 
   return (
-    <aside className="flex h-full w-sidebar-w shrink-0 flex-col border-r border-[var(--m03-line)] bg-white py-3.5 px-2 text-[13px]">
+    <div className="flex h-full flex-col">
       <div className="flex-1 overflow-y-auto">
-        {sections.map((s, i) => renderSection(s, String(i), isLinkActive))}
+        {sections.map((s, i) => renderSection(s, String(i), isLinkActive, collapsed))}
       </div>
-      <UserChip />
-    </aside>
+      {onToggle && (
+        <div className="mt-auto border-t border-[var(--m03-line)] pt-1.5">
+          <SidebarCollapseToggle collapsed={collapsed} onToggle={onToggle} />
+        </div>
+      )}
+      <UserChip collapsed={collapsed} />
+    </div>
   );
 }
 
 // Suspense fallback — same shell, no active highlighting, no counts. Shown
 // during prerender or while the client is hydrating; the real SidebarBody
 // swaps in immediately after.
-function SidebarFallback() {
+function SidebarFallback({ collapsed = false }: { collapsed?: boolean }) {
   const sections: Section[] = [
     { label: 'Workspace', links: WORKSPACE_LINKS },
     { label: 'Channels', links: CHANNELS_LINKS },
     { label: 'Manage', topRule: true, links: MANAGE_LINKS },
   ];
   return (
-    <aside className="flex h-full w-sidebar-w shrink-0 flex-col border-r border-[var(--m03-line)] bg-white py-3.5 px-2 text-[13px]">
+    <div className="flex h-full flex-col">
       <div className="flex-1 overflow-y-auto">
-        {sections.map((s, i) => renderSection(s, String(i), () => false))}
+        {sections.map((s, i) => renderSection(s, String(i), () => false, collapsed))}
       </div>
-      <UserChip />
-    </aside>
+      <UserChip collapsed={collapsed} />
+    </div>
   );
 }
 
-export function Sidebar() {
+export function Sidebar({ collapsed = false, onToggle }: { collapsed?: boolean; onToggle?: () => void }) {
   return (
-    <Suspense fallback={<SidebarFallback />}>
-      <SidebarBody />
-    </Suspense>
+    <aside
+      id="primary-sidebar"
+      aria-label="Primary navigation"
+      className={cn(
+        'flex h-full shrink-0 flex-col border-r border-[var(--m03-line)] bg-white py-3.5 text-[13px] transition-none',
+        collapsed ? 'w-sidebar-collapsed-w px-1.5' : 'w-sidebar-w px-2',
+      )}
+    >
+      <Suspense fallback={<SidebarFallback collapsed={collapsed} />}>
+        <SidebarBody collapsed={collapsed} onToggle={onToggle} />
+      </Suspense>
+    </aside>
   );
 }

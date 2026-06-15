@@ -21,6 +21,7 @@ const fullConfig = resolveConfig(tailwindConfig);
 
 const expectedSpacing: Array<{ key: string; value: string }> = [
   { key: 'sidebar-w', value: '220px' },
+  { key: 'sidebar-collapsed-w', value: '56px' },
   { key: 'inbox-list-w', value: '340px' },
   { key: 'right-panel-w', value: '320px' },
 ];

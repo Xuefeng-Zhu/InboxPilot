@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useCallback, useState, useEffect } from 'react';
 import { Sidebar } from './Sidebar';
 import { Topbar } from './Topbar';
 import { AuthGuard } from './AuthGuard';
 import { cn } from '../ui/cn';
+import { useLocalStorage } from '@/lib/hooks/useLocalStorage';
 
 interface AppShellProps {
   children: React.ReactNode;
@@ -18,6 +19,8 @@ interface AppShellProps {
 
 export function AppShell({ children, noPadding = false }: AppShellProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [collapsed, setCollapsed] = useLocalStorage<boolean>('inboxpilot:sidebar-collapsed', false);
+  const toggleCollapsed = useCallback(() => setCollapsed((prev) => !prev), [setCollapsed]);
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
@@ -34,10 +37,10 @@ export function AppShell({ children, noPadding = false }: AppShellProps) {
     <div className="flex h-screen flex-col">
       <Topbar />
 
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 min-w-0 overflow-hidden">
         {/* Desktop sidebar — visible at xl (1280px) and above */}
         <div className="hidden xl:block">
-          <Sidebar />
+          <Sidebar collapsed={collapsed} onToggle={toggleCollapsed} />
         </div>
 
         {/* Mobile overlay sidebar */}
@@ -49,13 +52,13 @@ export function AppShell({ children, noPadding = false }: AppShellProps) {
               aria-hidden="true"
             />
             <div className="relative z-50 h-full">
-              <Sidebar />
+              <Sidebar collapsed={false} />
             </div>
           </div>
         )}
 
         {/* Main content area */}
-        <div className="flex flex-1 flex-col overflow-hidden">
+        <div className="flex flex-1 min-w-0 flex-col overflow-hidden">
           <button
             className={cn(
               'fixed top-3 left-3 z-30 rounded border border-[var(--m03-line)] bg-white p-2 shadow-sm transition-colors hover:bg-[var(--m03-line-2)]',
@@ -73,7 +76,7 @@ export function AppShell({ children, noPadding = false }: AppShellProps) {
 
           <main
             className={cn(
-              'flex-1 overflow-auto bg-white',
+              'flex-1 min-w-0 overflow-auto bg-white',
               !noPadding && 'px-10 py-8',
             )}
           >

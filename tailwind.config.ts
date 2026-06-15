@@ -21,6 +21,7 @@ const config: Config = {
       },
       spacing: {
         'sidebar-w': '220px',
+        'sidebar-collapsed-w': '56px',
         'inbox-list-w': '340px',
         'right-panel-w': '320px',
       },

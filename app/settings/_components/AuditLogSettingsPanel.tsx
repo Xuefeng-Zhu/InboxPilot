@@ -195,7 +195,7 @@ export default function AuditLogSettingsPanel() {
                         type="button"
                         onClick={() => setOpenRow(row)}
                         className="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded text-[var(--m03-fg-3)] transition-colors hover:bg-[var(--m03-line-2)] hover:text-[var(--m03-fg)] focus:outline-none focus:ring-1 focus:ring-[var(--m03-fg)]"
-                        aria-label={`View metadata for ${row.action}`}
+                        aria-label={`View metadata for ${row.action} (${row.id.slice(-8)})`}
                       >
                         <Eye className="h-4 w-4" aria-hidden="true" />
                       </button>

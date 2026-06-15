@@ -44,21 +44,26 @@ export function WidgetCard({ widget, onRefresh, onDelete }: WidgetCardProps) {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <span
-            className={`inline-flex items-center rounded-[3px] border px-1.5 py-px font-mono text-[9px] font-semibold uppercase tracking-[0.04em] ${
-              widget.is_active
-                ? 'border-[var(--m03-green-line)] bg-[var(--m03-green-fill)] text-[var(--m03-green)]'
-                : 'border-[var(--m03-line)] bg-white text-[var(--m03-fg-2)]'
-            }`}
-          >
-            {widget.is_active ? 'Active' : 'Inactive'}
-          </span>
           <button
+            type="button"
+            role="switch"
             onClick={handleToggleActive}
             disabled={toggling}
-            className="text-[12px] text-[var(--m03-fg-2)] transition-colors hover:text-[var(--m03-fg)] disabled:opacity-50"
+            aria-checked={widget.is_active}
+            aria-label={widget.is_active ? 'Disable widget' : 'Enable widget'}
+            title={widget.is_active ? 'Click to disable' : 'Click to enable'}
+            className={`relative inline-flex h-[18px] w-8 shrink-0 items-center rounded-full border transition-colors duration-200 focus:outline-none focus:ring-1 focus:ring-[var(--m03-fg)] disabled:opacity-50 ${
+              widget.is_active
+                ? 'border-[var(--m03-green)] bg-[var(--m03-green)]'
+                : 'border-[var(--m03-line)] bg-[var(--m03-line-2)]'
+            }`}
           >
-            {widget.is_active ? 'Disable' : 'Enable'}
+            <span
+              aria-hidden
+              className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform duration-200 ease-out ${
+                widget.is_active ? 'translate-x-[16px]' : 'translate-x-0.5'
+              }`}
+            />
           </button>
         </div>
       </div>

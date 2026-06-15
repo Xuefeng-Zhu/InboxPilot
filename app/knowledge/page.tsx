@@ -378,7 +378,7 @@ function DocumentRow({
       <td className="border-b border-[var(--m03-line)] px-3 py-3">
         {doc.status === 'ready' && <Tag status="ready">Ready</Tag>}
         {doc.status === 'processing' && <Tag status="processing">Processing</Tag>}
-        {doc.status === 'pending' && <Tag status="draft">Draft</Tag>}
+        {doc.status === 'pending' && <Tag status="draft">Pending</Tag>}
         {doc.status === 'failed' && <Tag status="failed">Failed</Tag>}
       </td>
       <td className="border-b border-[var(--m03-line)] px-3 py-3 text-[var(--m03-fg-2)] tabular-nums">

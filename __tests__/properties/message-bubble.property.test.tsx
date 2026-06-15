@@ -14,8 +14,9 @@ import { MessageBubble, type MessageRow } from '../../components/inbox/MessageBu
  * For any message with sender_type being either "contact" or "user"/"ai",
  * the rendered MessageBubble should apply distinct visual treatment matching
  * the M03 chat-bubble layout: customer (inbound) uses line-2 gray background,
- * agent (outbound) uses solid black background, AI uses white with an orange
- * border.
+ * agent (outbound) uses solid black background, AI uses an unstyled bubble
+ * (draft/auto-reply/pending state is rendered by the AiDraftPanel, not per
+ * message).
  *
  * Tag: Feature: stitch-ui-implementation, Property 8: Message bubble sender-type styling
  * Validates: Requirements 8.5
@@ -80,14 +81,29 @@ describe('Feature: stitch-ui-implementation, Property 8: Message bubble sender-t
     );
   });
 
-  it('AI messages render with white background and orange border, left-aligned', () => {
+  it('AI messages render left-aligned with an unstyled bubble (no state badge)', () => {
     fc.assert(
       fc.property(messageRowArb('ai'), (message) => {
         const { container } = render(<MessageBubble message={message} />);
         const bubble = container.querySelector('.rounded-lg')!;
         expect(bubble).not.toBeNull();
-        expect(bubble.className).toContain('bg-white');
-        expect(bubble.className).toContain('border-[var(--m03-orange)]');
+        // AI messages are not decorated per-message: draft/auto-reply state is
+        // surfaced by the AiDraftPanel, not the bubble. The bubble should not
+        // carry a colored background or border, and no state pill should exist.
+        expect(bubble.className).not.toContain('bg-white');
+        expect(bubble.className).not.toContain('bg-[var(--m03-line-2)]');
+        expect(bubble.className).not.toContain('bg-[var(--m03-fg)]');
+        expect(bubble.className).not.toContain('border-[var(--m03-orange)]');
+        expect(bubble.className).not.toContain('border-[var(--m03-green)]');
+        expect(bubble.className).not.toContain('border-[var(--m03-red)]');
+        const row = container.querySelector('.justify-start')!;
+        expect(row).not.toBeNull();
+        // No AI-state pill should be rendered.
+        expect(container.querySelector('[aria-label="DRAFTED"]')).toBeNull();
+        expect(container.querySelector('[aria-label="AUTO-REPLIED"]')).toBeNull();
+        expect(container.querySelector('[aria-label="THINKING"]')).toBeNull();
+        expect(container.querySelector('[aria-label="NEEDS HUMAN"]')).toBeNull();
+        expect(container.querySelector('[aria-label="FAILED"]')).toBeNull();
       }),
       { numRuns: 100 },
     );

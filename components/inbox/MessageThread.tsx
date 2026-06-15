@@ -306,7 +306,6 @@ export function MessageThread({
                 key={msg.id}
                 message={msg}
                 contactName={conversation.contacts?.name ?? null}
-                aiState={conversation.ai_state}
               />
             ))}
           </div>

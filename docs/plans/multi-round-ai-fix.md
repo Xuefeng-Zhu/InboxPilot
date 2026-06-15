@@ -230,7 +230,7 @@ remains unchanged and out of scope.
 - The pre-existing message_id race condition (separate bug)
 - `next lint` failure (pre-existing on this branch)
 - The `send_outbound_message` job stub (auto_reply mode doesn't actually send)
-- Lack of knowledge citation rendering in the AI Insight panel
+- Lack of knowledge citation rendering in the AI Insight tab (the right panel in `components/inbox/RightPanel.tsx` has 3 tabs: `AiInsightTab.tsx` / Customer / `AuditTab.tsx`; the Audit tab uses `useConversationAuditTrail` from `lib/queries/hooks/useConversationAuditTrail`)
 
 ## Estimated Effort
 

@@ -1,20 +1,60 @@
 'use client';
 
-import { useEffect } from 'react';
-import { ActivityPanel, ContactDetails } from './ContactDetails';
+import { useEffect, useState } from 'react';
+import { AiInsightTab } from './AiInsightTab';
+import { AuditTab } from './AuditTab';
+import { CustomerTab } from './CustomerTab';
 import { useConversation, useInfiniteMessages } from '@/lib/queries';
 import type { ConversationRow } from './ConversationItem';
 
 // ---------------------------------------------------------------------------
 // RightPanel — M03 right-column container.
-// Sections (per Phase 5 decision: AI Draft stays inline in the thread):
-//   1. Contact (centered avatar + key/value rows)
-//   2. Activity (status / AI state / last msg / messages)
+// 3-tab strip (AI Insight / Customer / Audit) above the body, matching the
+// pre-redesign `cb6730a` IA. Both render modes (inline aside at xl+, drawer
+// at <xl) share `PanelBody`, so the tabs work in both automatically.
 //
-// Two render modes:
-//   - Inline: hidden <xl (rendered as <aside> in the 4-col grid by the page).
-//   - Drawer: <xl only, controlled by `open`.
+// Per Phase 5 decision: AI Draft stays inline in the thread (MessageThread).
 // ---------------------------------------------------------------------------
+
+type ActiveTab = 'ai' | 'customer' | 'audit';
+
+function TabStrip({
+  active,
+  onChange,
+}: {
+  active: ActiveTab;
+  onChange: (tab: ActiveTab) => void;
+}) {
+  const tabs: Array<{ id: ActiveTab; label: string }> = [
+    { id: 'ai', label: 'AI Insight' },
+    { id: 'customer', label: 'Customer' },
+    { id: 'audit', label: 'Audit' },
+  ];
+  return (
+    <div className="flex border-b border-[var(--m03-line)]" role="tablist">
+      {tabs.map((tab) => {
+        const isActive = active === tab.id;
+        return (
+          <button
+            key={tab.id}
+            type="button"
+            role="tab"
+            aria-current={isActive ? 'page' : undefined}
+            aria-selected={isActive}
+            onClick={() => onChange(tab.id)}
+            className={`flex-1 px-3 py-2 text-[12px] font-medium text-center transition-colors ${
+              isActive
+                ? 'text-[var(--m03-fg)] border-b-2 border-b-[var(--m03-fg)]'
+                : 'text-[var(--m03-fg-3)] hover:text-[var(--m03-fg-2)]'
+            }`}
+          >
+            {tab.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
 
 interface RightPanelProps {
   conversationId: string;
@@ -23,7 +63,15 @@ interface RightPanelProps {
   onClose?: () => void;
 }
 
-function PanelBody({ conversationId }: { conversationId: string }) {
+function PanelBody({
+  conversationId,
+  activeTab,
+  setActiveTab,
+}: {
+  conversationId: string;
+  activeTab: ActiveTab;
+  setActiveTab: (tab: ActiveTab) => void;
+}) {
   const { data: conversationData } = useConversation(conversationId);
   const { items: messages } = useInfiniteMessages(conversationId);
   const conversation = conversationData as ConversationRow | undefined;
@@ -37,18 +85,30 @@ function PanelBody({ conversationId }: { conversationId: string }) {
   }
 
   return (
-    <div className="flex flex-col gap-3.5 p-4">
-      <ContactDetails conversation={conversation} />
-      <ActivityPanel
-        conversation={conversation}
-        lastMessageAt={conversation.last_message_at}
-        messageCount={Array.isArray(messages) ? messages.length : undefined}
-      />
+    <div>
+      <TabStrip active={activeTab} onChange={setActiveTab} />
+      <div className="p-4">
+        {activeTab === 'ai' && <AiInsightTab conversation={conversation} />}
+        {activeTab === 'customer' && (
+          <CustomerTab
+            conversation={conversation}
+            lastMessageAt={conversation.last_message_at}
+            messageCount={Array.isArray(messages) ? messages.length : undefined}
+          />
+        )}
+        {activeTab === 'audit' && <AuditTab conversationId={conversationId} />}
+      </div>
     </div>
   );
 }
 
 export function RightPanel({ conversationId, open, onClose }: RightPanelProps) {
+  const [activeTab, setActiveTab] = useState<ActiveTab>('ai');
+
+  useEffect(() => {
+    setActiveTab('ai');
+  }, [conversationId]);
+
   useEffect(() => {
     if (open === undefined || !open) return;
     function onKey(e: KeyboardEvent) {
@@ -62,7 +122,11 @@ export function RightPanel({ conversationId, open, onClose }: RightPanelProps) {
     return (
       <aside className="hidden w-right-panel-w shrink-0 overflow-hidden border-l border-[var(--m03-line)] bg-white xl:block">
         <div className="h-full overflow-y-auto">
-          <PanelBody conversationId={conversationId} />
+          <PanelBody
+            conversationId={conversationId}
+            activeTab={activeTab}
+            setActiveTab={setActiveTab}
+          />
         </div>
       </aside>
     );
@@ -99,7 +163,11 @@ export function RightPanel({ conversationId, open, onClose }: RightPanelProps) {
             </button>
           </div>
           <div className="flex-1 overflow-y-auto">
-            <PanelBody conversationId={conversationId} />
+            <PanelBody
+              conversationId={conversationId}
+              activeTab={activeTab}
+              setActiveTab={setActiveTab}
+            />
           </div>
         </div>
       </div>

@@ -62,6 +62,21 @@ const EMAIL_CONVERSATION: Conversation = {
   updatedAt: new Date('2024-01-01'),
 };
 
+const WEBCHAT_CONVERSATION: Conversation = {
+  id: 'conv-webchat-001',
+  organizationId: ORG_ID,
+  contactId: 'contact-003',
+  channel: 'webchat',
+  status: 'open',
+  aiState: 'idle',
+  subject: null,
+  assignedTo: null,
+  lastMessageAt: null,
+  metadata: {},
+  createdAt: new Date('2024-01-01'),
+  updatedAt: new Date('2024-01-01'),
+};
+
 const SMS_CONTACT: Contact = {
   id: 'contact-001',
   organizationId: ORG_ID,
@@ -78,6 +93,17 @@ const EMAIL_CONTACT: Contact = {
   organizationId: ORG_ID,
   name: 'Jane Doe',
   email: 'jane@example.com',
+  phone: null,
+  metadata: {},
+  createdAt: new Date('2024-01-01'),
+  updatedAt: new Date('2024-01-01'),
+};
+
+const WEBCHAT_CONTACT: Contact = {
+  id: 'contact-003',
+  organizationId: ORG_ID,
+  name: 'Web Visitor',
+  email: null,
   phone: null,
   metadata: {},
   createdAt: new Date('2024-01-01'),
@@ -158,6 +184,24 @@ const OUTBOUND_EMAIL_MESSAGE: Message = {
   providerAccountId: 'email-acct-001',
   externalMessageId: 'mock_email_1',
   deliveryStatus: 'queued',
+  createdAt: new Date('2024-01-01'),
+  updatedAt: new Date('2024-01-01'),
+};
+
+const OUTBOUND_WEBCHAT_MESSAGE: Message = {
+  id: 'msg-out-003',
+  conversationId: 'conv-webchat-001',
+  senderType: 'user',
+  senderId: USER_ID,
+  direction: 'outbound',
+  channel: 'webchat',
+  body: 'We can help you with that!',
+  subject: null,
+  rawPayload: {},
+  provider: 'webchat',
+  providerAccountId: '',
+  externalMessageId: 'wc_reply_placeholder',
+  deliveryStatus: 'sent',
   createdAt: new Date('2024-01-01'),
   updatedAt: new Date('2024-01-01'),
 };
@@ -457,6 +501,65 @@ describe('OutboundMessageService', () => {
     });
   });
 
+  describe('sendReply — providerConfig forwarding', () => {
+    // Provider credentials are security-sensitive (Twilio authToken,
+    // Postmark serverToken, Telnyx apiKey). The route loads them from
+    // InsForge secrets and forwards them via `providerConfig`; if the
+    // service ever silently dropped them, the adapter would fall back to
+    // its constructor-injected credentials (none today) and the send
+    // would fail or use a stale credential. These tests lock the wiring.
+
+    it('forwards a non-empty providerConfig to the SMS adapter', async () => {
+      const providerConfig = { accountSid: 'AC_test_sid', authToken: 'twilio_secret' };
+
+      await service.sendReply('conv-sms-001', 'Body', USER_ID, providerConfig);
+
+      expect(smsAdapter.sendSms).toHaveBeenCalledWith(
+        expect.objectContaining({ providerConfig }),
+      );
+    });
+
+    it('forwards a non-empty providerConfig to the email adapter', async () => {
+      const providerConfig = { serverToken: 'postmark_secret' };
+      vi.mocked(conversationRepo.findById).mockResolvedValue(EMAIL_CONVERSATION);
+      vi.mocked(contactRepo.findById).mockResolvedValue(EMAIL_CONTACT);
+
+      await service.sendReply('conv-email-001', 'Body', USER_ID, providerConfig);
+
+      expect(emailAdapter.sendEmail).toHaveBeenCalledWith(
+        expect.objectContaining({ providerConfig }),
+      );
+    });
+
+    it('defaults providerConfig to an empty object when omitted', async () => {
+      // Three-arg call shape is the historical default and is used by
+      // any caller that has not been updated to pass credentials.
+      await service.sendReply('conv-sms-001', 'Body', USER_ID);
+
+      expect(smsAdapter.sendSms).toHaveBeenCalledWith(
+        expect.objectContaining({ providerConfig: {} }),
+      );
+    });
+  });
+
+  describe('sendReply — writeAuditLog option', () => {
+    it('writes the audit log by default', async () => {
+      await service.sendReply('conv-sms-001', 'Body', USER_ID);
+
+      expect(auditLog.create).toHaveBeenCalledTimes(1);
+    });
+
+    it('skips the audit log when writeAuditLog is false', async () => {
+      // The AI auto-reply path in process-jobs#send_outbound_message
+      // passes writeAuditLog: false so it can write a single
+      // actorType='ai' row in place of the service's default
+      // actorType='user' row.
+      await service.sendReply('conv-sms-001', 'Body', USER_ID, {}, { writeAuditLog: false });
+
+      expect(auditLog.create).not.toHaveBeenCalled();
+    });
+  });
+
   describe('sendReply — error cases', () => {
     it('throws when conversation is not found', async () => {
       vi.mocked(conversationRepo.findById).mockResolvedValue(null);
@@ -527,6 +630,79 @@ describe('OutboundMessageService', () => {
       await expect(
         service.sendReply('conv-email-001', 'body', USER_ID),
       ).rejects.toThrow('has no email address for email reply');
+    });
+  });
+
+  describe('sendReply — webchat channel', () => {
+    // Webchat replies have no external provider — the service synthesizes
+    // provider-stub fields and persists the message row. Realtime delivery
+    // is the caller's responsibility (the route publishes `new_message`
+    // with the correct `senderType`: 'user' for human, 'ai' for AI
+    // auto-reply). These tests lock the in-service behavior so that
+    // dropping the realtime publish from the service does not regress.
+
+    beforeEach(() => {
+      vi.mocked(conversationRepo.findById).mockResolvedValue(WEBCHAT_CONVERSATION);
+      vi.mocked(contactRepo.findById).mockResolvedValue(WEBCHAT_CONTACT);
+      vi.mocked(messageRepo.create).mockResolvedValue(OUTBOUND_WEBCHAT_MESSAGE);
+    });
+
+    it('persists the outbound row with webchat provider-stub fields', async () => {
+      const result = await service.sendReply(
+        'conv-webchat-001',
+        'We can help you with that!',
+        USER_ID,
+      );
+
+      // 1. No adapter was touched (no SMS, no email path)
+      expect(providerRegistry.getSmsAdapter).not.toHaveBeenCalled();
+      expect(providerRegistry.getEmailAdapter).not.toHaveBeenCalled();
+      expect(smsAdapter.sendSms).not.toHaveBeenCalled();
+      expect(emailAdapter.sendEmail).not.toHaveBeenCalled();
+
+      // 2. messageRepo.create received the correct webchat payload
+      expect(messageRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          conversationId: 'conv-webchat-001',
+          senderType: 'user',
+          senderId: USER_ID,
+          direction: 'outbound',
+          channel: 'webchat',
+          body: 'We can help you with that!',
+          provider: 'webchat',
+          providerAccountId: '',
+          deliveryStatus: 'sent',
+          externalMessageId: expect.stringMatching(/^wc_reply_/),
+        }),
+      );
+
+      // 3. Conversation was bumped
+      expect(conversationRepo.update).toHaveBeenCalledWith('conv-webchat-001', {
+        lastMessageAt: expect.any(Date),
+      });
+
+      // 4. Audit log was written
+      expect(auditLog.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          actorType: 'user',
+          action: 'message_sent',
+        }),
+      );
+
+      expect(result.id).toBe('msg-out-003');
+      expect(result.channel).toBe('webchat');
+    });
+
+    it('generates a unique externalMessageId for each call', async () => {
+      await service.sendReply('conv-webchat-001', 'First reply', USER_ID);
+      await service.sendReply('conv-webchat-001', 'Second reply', USER_ID);
+
+      expect(messageRepo.create).toHaveBeenCalledTimes(2);
+      const firstId = vi.mocked(messageRepo.create).mock.calls[0][0].externalMessageId;
+      const secondId = vi.mocked(messageRepo.create).mock.calls[1][0].externalMessageId;
+      expect(firstId).toMatch(/^wc_reply_/);
+      expect(secondId).toMatch(/^wc_reply_/);
+      expect(firstId).not.toBe(secondId);
     });
   });
 });

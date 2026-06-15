@@ -212,8 +212,12 @@ function NavRow({
 function SectionHeader({ label, collapsed = false }: { label: string; collapsed?: boolean }) {
   if (collapsed) {
     return (
-      <div className="px-3 pb-1 pt-2">
-        <div className="mx-auto h-px w-6 bg-[var(--m03-line)]" />
+      <div
+        className="relative px-3 pb-1 pt-2 font-mono text-[11px] font-medium uppercase tracking-[0.04em]"
+        data-sidebar-collapsed-header="true"
+      >
+        <span aria-hidden="true" className="invisible">{label}</span>
+        <div className="absolute inset-x-3 top-1/2 h-px -translate-y-1/2 bg-[var(--m03-line)]" />
       </div>
     );
   }
@@ -316,15 +320,21 @@ function renderSection(
   isLinkActive: (href: string) => boolean,
   collapsed: boolean = false,
 ) {
-  const showTopRule = section.topRule && !(collapsed && section.label);
+  const preserveTopRuleSpace = Boolean(section.topRule && collapsed && section.label);
 
   return (
     <div key={key}>
-      {showTopRule && (
+      {section.topRule && (
         collapsed ? (
-          <div className="mx-auto my-2 h-px w-6 bg-[var(--m03-line)]" />
+          <div
+            className={cn(
+              'mx-auto my-2 h-px w-6',
+              preserveTopRuleSpace ? 'bg-transparent' : 'bg-[var(--m03-line)]',
+            )}
+            data-sidebar-rule={preserveTopRuleSpace ? 'spacer' : 'visible'}
+          />
         ) : (
-          <div className="my-2 mx-2 border-t border-[var(--m03-line)]" />
+          <div className="my-2 mx-2 border-t border-[var(--m03-line)]" data-sidebar-rule="visible" />
         )
       )}
       {section.label && <SectionHeader label={section.label} collapsed={collapsed} />}

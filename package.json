@@ -7,7 +7,8 @@
     "build": "npm run build:widget && next build",
     "build:widget": "cd widget-src && npm run build",
     "start": "next start",
-    "lint": "tsc --noEmit",
+    "lint": "tsc --noEmit && npm run lint:deno",
+    "lint:deno": "node scripts/check-deno-safety.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:core": "vitest run --project support-core"

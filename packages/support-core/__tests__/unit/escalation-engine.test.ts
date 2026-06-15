@@ -30,6 +30,7 @@ const DEFAULT_SETTINGS: AiSettings = {
   escalationKeywords: [],
   systemPrompt: null,
   model: 'openai/gpt-4o-mini',
+  embeddingModel: 'openai/text-embedding-3-small',
   createdAt: new Date(),
   updatedAt: new Date(),
 };

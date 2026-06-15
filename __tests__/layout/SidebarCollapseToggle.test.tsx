@@ -94,15 +94,19 @@ describe('Sidebar — collapsed section dividers', () => {
     );
 
     expect(screen.getByRole('complementary', { name: /primary navigation/i })).toHaveClass('w-sidebar-collapsed-w');
-    expect(screen.queryByText('Workspace')).toBeNull();
-    expect(screen.queryByText('Channels')).toBeNull();
-    expect(screen.queryByText('Manage')).toBeNull();
+    for (const label of ['Workspace', 'Channels', 'Manage']) {
+      const spacer = screen.getByText(label);
+      expect(spacer).toHaveClass('invisible');
+      expect(spacer).toHaveAttribute('aria-hidden', 'true');
+    }
 
-    const collapsedHeaderDividers = container.querySelectorAll('.px-3.pb-1.pt-2 > .h-px.w-6');
-    const topRuleDividers = container.querySelectorAll('.mx-auto.my-2.h-px.w-6');
+    const collapsedHeaderDividers = container.querySelectorAll('[data-sidebar-collapsed-header="true"] .h-px');
+    const topRuleSpacers = container.querySelectorAll('[data-sidebar-rule="spacer"]');
+    const visibleTopRuleDividers = container.querySelectorAll('[data-sidebar-rule="visible"]');
 
     expect(collapsedHeaderDividers).toHaveLength(3);
-    expect(topRuleDividers).toHaveLength(0);
+    expect(topRuleSpacers).toHaveLength(1);
+    expect(visibleTopRuleDividers).toHaveLength(0);
   });
 });
 

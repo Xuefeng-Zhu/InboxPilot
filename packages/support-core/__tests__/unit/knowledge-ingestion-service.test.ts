@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { KnowledgeIngestionService } from '../../src/services/knowledge-ingestion-service.js';
 import type { KnowledgeRepository } from '../../src/repositories/knowledge-repository.js';
 import type { AuditLogRepository } from '../../src/repositories/audit-log-repository.js';
+import type { AiSettingsRepository } from '../../src/repositories/ai-settings-repository.js';
 import type { AiClient } from '../../src/interfaces/ai-client.js';
 import type { KnowledgeDocument, AuditLog } from '../../src/types/index.js';
 
@@ -70,19 +71,33 @@ function createMockAuditLog(): AuditLogRepository {
   } as unknown as AuditLogRepository;
 }
 
+function createMockAiSettingsRepo(): AiSettingsRepository {
+  return {
+    findByOrg: vi.fn().mockResolvedValue({
+      embeddingModel: 'openai/text-embedding-3-small',
+    }),
+    create: vi.fn(),
+    update: vi.fn(),
+  } as unknown as AiSettingsRepository;
+}
+
 // ─── Tests ────────────────────────────────────────────────────────
 
 describe('KnowledgeIngestionService', () => {
   let knowledgeRepo: ReturnType<typeof createMockKnowledgeRepo>;
   let aiClient: ReturnType<typeof createMockAiClient>;
   let auditLog: ReturnType<typeof createMockAuditLog>;
+  let aiSettingsRepo: ReturnType<typeof createMockAiSettingsRepo>;
   let service: KnowledgeIngestionService;
 
   beforeEach(() => {
     knowledgeRepo = createMockKnowledgeRepo();
     aiClient = createMockAiClient();
     auditLog = createMockAuditLog();
-    service = new KnowledgeIngestionService(knowledgeRepo, aiClient, auditLog);
+    aiSettingsRepo = createMockAiSettingsRepo();
+    service = new KnowledgeIngestionService(
+      knowledgeRepo, aiClient, auditLog, undefined, aiSettingsRepo,
+    );
   });
 
   describe('successful processing', () => {

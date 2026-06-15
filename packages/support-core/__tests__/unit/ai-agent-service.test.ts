@@ -17,6 +17,7 @@ import type {
   AuditLog,
   Job,
 } from '../../src/types/index.js';
+import { DEFAULT_EMBEDDING_MODEL } from '../../src/types/ai-models.js';
 
 /**
  * Unit tests for AiAgentService.
@@ -74,6 +75,7 @@ const SAMPLE_AI_SETTINGS: AiSettings = {
   escalationKeywords: [],
   systemPrompt: 'You are a helpful support agent.',
   model: 'openai/gpt-4o-mini',
+  embeddingModel: DEFAULT_EMBEDDING_MODEL,
   createdAt: new Date('2024-01-01'),
   updatedAt: new Date('2024-01-01'),
 };
@@ -356,6 +358,12 @@ describe('AiAgentService', () => {
         expect.objectContaining({
           model: 'openai/gpt-4o-mini',
           responseFormat: { type: 'json_object' },
+        }),
+      );
+      // Should call createEmbedding with the configured embedding model
+      expect(aiClient.createEmbedding).toHaveBeenCalledWith(
+        expect.objectContaining({
+          model: SAMPLE_AI_SETTINGS.embeddingModel,
         }),
       );
       // Should create AI decision

@@ -6,7 +6,13 @@
  */
 
 import type { DatabaseClient } from '../interfaces/database-client.js';
-import type { AiSettings, AiMode, CreateAiSettingsInput } from '../types/index.js';
+import type {
+  AiSettings,
+  AiMode,
+  CreateAiSettingsInput,
+  EmbeddingModelId,
+  ModelId,
+} from '../types/index.js';
 
 /** Raw row shape returned by the database (snake_case columns). */
 interface AiSettingsRow {
@@ -19,7 +25,8 @@ interface AiSettingsRow {
   knowledge_similarity_threshold: number;
   escalation_keywords: string[];
   system_prompt: string | null;
-  model: string;
+  model: ModelId;
+  embedding_model: EmbeddingModelId;
   created_at: string;
   updated_at: string;
 }
@@ -37,6 +44,7 @@ function toAiSettings(row: AiSettingsRow): AiSettings {
     escalationKeywords: row.escalation_keywords,
     systemPrompt: row.system_prompt,
     model: row.model,
+    embeddingModel: row.embedding_model,
     createdAt: new Date(row.created_at),
     updatedAt: new Date(row.updated_at),
   };
@@ -55,6 +63,7 @@ function toRow(fields: Partial<AiSettings>): Record<string, unknown> {
   if (fields.escalationKeywords !== undefined) row.escalation_keywords = fields.escalationKeywords;
   if (fields.systemPrompt !== undefined) row.system_prompt = fields.systemPrompt;
   if (fields.model !== undefined) row.model = fields.model;
+  if (fields.embeddingModel !== undefined) row.embedding_model = fields.embeddingModel;
   if (fields.createdAt !== undefined) row.created_at = fields.createdAt.toISOString();
   if (fields.updatedAt !== undefined) row.updated_at = fields.updatedAt.toISOString();
 
@@ -93,6 +102,7 @@ export class AiSettingsRepository {
     if (input.escalationKeywords !== undefined) row.escalation_keywords = input.escalationKeywords;
     if (input.systemPrompt !== undefined) row.system_prompt = input.systemPrompt;
     if (input.model !== undefined) row.model = input.model;
+    if (input.embeddingModel !== undefined) row.embedding_model = input.embeddingModel;
 
     const { data, error } = await this.db
       .from('ai_settings')

@@ -29,6 +29,7 @@ import type {
 } from '../types/index.js';
 import { parseAiDecision } from './ai-decision-parser.js';
 import { LowConfidenceRule } from './escalation-rules.js';
+import { DEFAULT_CHAT_MODEL, DEFAULT_EMBEDDING_MODEL } from '../types/ai-models.js';
 
 /** Default AI settings used when no settings are configured for the org. */
 const DEFAULT_AI_SETTINGS: Omit<AiSettings, 'id' | 'organizationId' | 'createdAt' | 'updatedAt'> = {
@@ -39,7 +40,8 @@ const DEFAULT_AI_SETTINGS: Omit<AiSettings, 'id' | 'organizationId' | 'createdAt
   knowledgeSimilarityThreshold: 0.7,
   escalationKeywords: [],
   systemPrompt: null,
-  model: 'openai/gpt-5.4-nano',
+  model: DEFAULT_CHAT_MODEL,
+  embeddingModel: 'openai/text-embedding-3-small',
 };
 
 export class AiAgentService {
@@ -119,7 +121,7 @@ export class AiAgentService {
     try {
       // Generate embedding for the latest message
       const embedding = await this.aiClient.createEmbedding({
-        model: 'text-embedding-ada-002',
+        model: settings?.embeddingModel ?? DEFAULT_EMBEDDING_MODEL,
         input: latestMessage,
       });
 
@@ -129,9 +131,14 @@ export class AiAgentService {
         5,
         knowledgeSimilarityThreshold,
       );
-    } catch {
+    } catch (err) {
       // If embedding/knowledge retrieval fails, continue with empty chunks
-      // The MissingKnowledgeRule will handle escalation if needed
+      // The MissingKnowledgeRule will handle escalation if needed.
+      // Log so the failure is visible — the AI turn itself still succeeds.
+      console.warn(
+        'embedding/knowledge retrieval failed; continuing with empty chunks',
+        err instanceof Error ? err.message : String(err),
+      );
     }
 
     // Chunk IDs that grounded this turn. Enqueued (not inserted inline)
@@ -173,14 +180,24 @@ export class AiAgentService {
       }
     };
 
-    // Build effective settings for escalation context
+    // Build effective settings for escalation context.
+    // Explicit construction (no `as` cast) so missing fields are compile-time
+    // visible: the cast used to mask `embeddingModel` until T6 added it.
     const effectiveSettings: AiSettings = settings ?? {
       id: '',
       organizationId: orgId,
-      ...DEFAULT_AI_SETTINGS,
+      aiMode: DEFAULT_AI_SETTINGS.aiMode,
+      confidenceThreshold: DEFAULT_AI_SETTINGS.confidenceThreshold,
+      contextWindowSize: DEFAULT_AI_SETTINGS.contextWindowSize,
+      maxConsecutiveFailures: DEFAULT_AI_SETTINGS.maxConsecutiveFailures,
+      knowledgeSimilarityThreshold: DEFAULT_AI_SETTINGS.knowledgeSimilarityThreshold,
+      escalationKeywords: DEFAULT_AI_SETTINGS.escalationKeywords,
+      systemPrompt: DEFAULT_AI_SETTINGS.systemPrompt,
+      model: DEFAULT_AI_SETTINGS.model,
+      embeddingModel: DEFAULT_AI_SETTINGS.embeddingModel,
       createdAt: new Date(),
       updatedAt: new Date(),
-    } as AiSettings;
+    };
 
     // Count consecutive AI failures from recent decisions
     const consecutiveAiFailures = this.countConsecutiveFailures(messages, conversation.aiState);

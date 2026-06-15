@@ -334,7 +334,7 @@ ON CONFLICT (id) DO NOTHING;
 -- 7. AI Settings
 -- =============================================================================
 
-INSERT INTO ai_settings (id, organization_id, ai_mode, confidence_threshold, context_window_size, max_consecutive_failures, knowledge_similarity_threshold, escalation_keywords, system_prompt, model)
+INSERT INTO ai_settings (id, organization_id, ai_mode, confidence_threshold, context_window_size, max_consecutive_failures, knowledge_similarity_threshold, escalation_keywords, system_prompt, model, embedding_model)
 VALUES (
   'a1000000-0000-4000-8000-000000000001',
   'a0000000-0000-4000-8000-000000000001',
@@ -345,6 +345,7 @@ VALUES (
   0.70,
   ARRAY['urgent', 'lawsuit', 'attorney', 'legal'],
   'You are a helpful customer support assistant for Acme Platform. Answer questions using the provided knowledge base context. Be concise, friendly, and professional. If you are unsure, say so and offer to connect the customer with a human agent.',
-  'openai/gpt-4o-mini'
+  'openai/gpt-4o-mini',
+  'openai/text-embedding-3-small'
 )
 ON CONFLICT (id) DO NOTHING;

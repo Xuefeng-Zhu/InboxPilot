@@ -16,7 +16,9 @@
 import type { KnowledgeRepository } from '../repositories/knowledge-repository.js';
 import type { AiClient } from '../interfaces/ai-client.js';
 import type { AuditLogRepository } from '../repositories/audit-log-repository.js';
+import type { AiSettingsRepository } from '../repositories/ai-settings-repository.js';
 import type { CreateChunkInput } from '../types/index.js';
+import { DEFAULT_EMBEDDING_MODEL } from '../types/ai-models.js';
 import { splitIntoChunks } from '../utils/chunking.js';
 
 /**
@@ -38,6 +40,7 @@ export class KnowledgeIngestionService {
     private aiClient: AiClient,
     private auditLog: AuditLogRepository,
     private fileFetcher?: FileContentFetcher,
+    private aiSettingsRepo?: AiSettingsRepository,
   ) {}
 
   /**
@@ -90,11 +93,18 @@ export class KnowledgeIngestionService {
         throw new Error('Document body produced no chunks after splitting');
       }
 
-      // 4. Generate embeddings for each chunk
+      // 4a. Resolve the org's embedding model (fall back to the package default
+      //     if no settings row exists or the repo is not wired in tests).
+      const orgSettings = this.aiSettingsRepo
+        ? await this.aiSettingsRepo.findByOrg(document.organizationId)
+        : null;
+      const embeddingModel = orgSettings?.embeddingModel ?? DEFAULT_EMBEDDING_MODEL;
+
+      // 5. Generate embeddings for each chunk
       const chunkInputs: CreateChunkInput[] = [];
       for (const chunkText of textChunks) {
         const embedding = await this.aiClient.createEmbedding({
-          model: 'text-embedding-ada-002',
+          model: embeddingModel,
           input: chunkText,
         });
 
@@ -107,13 +117,13 @@ export class KnowledgeIngestionService {
         });
       }
 
-      // 5. Store all chunks with embeddings
+      // 6. Store all chunks with embeddings
       await this.knowledgeRepo.insertChunks(chunkInputs);
 
-      // 6. Set status to "ready"
+      // 7. Set status to "ready"
       await this.knowledgeRepo.updateDocument(documentId, { status: 'ready' });
 
-      // 8. Record audit log entry for success
+      // 9. Record audit log entry for success
       await this.auditLog.create({
         organizationId: document.organizationId,
         actorType: 'system',
@@ -123,7 +133,7 @@ export class KnowledgeIngestionService {
         metadata: { chunkCount: chunkInputs.length, status: 'ready' },
       });
     } catch (err) {
-      // 7. On error: clean up partial chunks and set status to "failed"
+      // 8. On error: clean up partial chunks and set status to "failed"
       try {
         await this.knowledgeRepo.deleteChunksByDocument(documentId);
       } catch {

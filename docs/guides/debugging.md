@@ -62,7 +62,8 @@ ORDER BY created_at DESC LIMIT 3;
 
 `raw_response` contains either the parsed LLM response or the error. Common causes:
 - OpenRouter key missing/invalid in the InsForge project's AI settings.
-- Model name in `ai_settings.model` is invalid (default is `openai/gpt-4o-mini`; current code uses `openai/gpt-5.4-nano` as a fallback default in `AiAgentService`).
+- Model name in `ai_settings.model` is invalid (default is `openai/gpt-5-mini`; `AiAgentService` falls back to `DEFAULT_CHAT_MODEL` from `packages/support-core/src/types/ai-models.ts` when the DB value is empty or not in `CHAT_MODEL_OPTIONS`).
+- The embedding model is configured per-org in `ai_settings.embedding_model` (default `openai/text-embedding-3-small`). Changing it requires re-indexing the knowledge base; until then, similarity scores may degrade.
 - LLM returned invalid JSON (will be in `raw_response.raw` with `error: "Schema validation failed: ..."`).
 
 ### "AI skipped with reason: missing_knowledge"

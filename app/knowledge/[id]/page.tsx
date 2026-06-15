@@ -380,7 +380,7 @@ export default function KnowledgeDetailPage({ params }: { params: Promise<{ id: 
               <div className="flex flex-col gap-1.5 text-[12px]">
                 <MetaRow label="Source type" value={doc.source_type} />
                 <MetaRow label="Chunks" value={String(chunkCount ?? '—')} />
-                <MetaRow label="Embedding model" value="text-embed-3" mono />
+                <MetaRow label="Embedding model" value="openai/text-embedding-3-small" mono />
                 <MetaRow label="Status" value={doc.status} />
               </div>
             </div>

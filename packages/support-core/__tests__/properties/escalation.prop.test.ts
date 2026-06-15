@@ -34,6 +34,7 @@ function makeSettings(overrides: Partial<AiSettings> = {}): AiSettings {
     escalationKeywords: [],
     systemPrompt: null,
     model: 'openai/gpt-4o-mini',
+    embeddingModel: 'openai/text-embedding-3-small',
     createdAt: new Date(),
     updatedAt: new Date(),
     ...overrides,

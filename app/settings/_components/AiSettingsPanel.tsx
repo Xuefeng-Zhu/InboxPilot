@@ -4,6 +4,13 @@ import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { insforge } from '@/lib/insforge';
 import { Card, Button, Select, cn } from '@/components/ui';
+import {
+  CHAT_MODEL_OPTIONS,
+  EMBEDDING_MODEL_OPTIONS,
+  DEFAULT_CHAT_MODEL,
+  DEFAULT_EMBEDDING_MODEL,
+} from '@support-core/types';
+import type { ModelId, EmbeddingModelId } from '@support-core/types';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -20,6 +27,7 @@ interface AiSettings {
   escalation_keywords: string[];
   system_prompt: string | null;
   model: string;
+  embedding_model: EmbeddingModelId;
   created_at: string;
   updated_at: string;
 }
@@ -28,15 +36,6 @@ const AI_MODE_OPTIONS: { value: AiSettings['ai_mode']; label: string; descriptio
   { value: 'off', label: 'Off', description: 'AI processing is disabled' },
   { value: 'draft_only', label: 'Draft Only', description: 'AI drafts responses for human review' },
   { value: 'auto_reply', label: 'Auto Reply', description: 'AI sends responses automatically when confident' },
-];
-
-const MODEL_OPTIONS = [
-  'openai/gpt-4o-mini',
-  'openai/gpt-4o',
-  'openai/gpt-3.5-turbo',
-  'anthropic/claude-3-haiku',
-  'anthropic/claude-3-sonnet',
-  'anthropic/claude-3-opus',
 ];
 
 function applySettingsToForm(
@@ -48,7 +47,8 @@ function applySettingsToForm(
     setContextWindowSize: (size: number) => void;
     setEscalationKeywords: (keywords: string[]) => void;
     setSystemPrompt: (prompt: string) => void;
-    setModel: (model: string) => void;
+    setModel: (model: ModelId) => void;
+    setEmbeddingModel: (model: EmbeddingModelId) => void;
   },
 ) {
   setters.setSettings(settings);
@@ -57,7 +57,8 @@ function applySettingsToForm(
   setters.setContextWindowSize(settings.context_window_size);
   setters.setEscalationKeywords(settings.escalation_keywords ?? []);
   setters.setSystemPrompt(settings.system_prompt ?? '');
-  setters.setModel(settings.model);
+  setters.setModel(settings.model as ModelId);
+  setters.setEmbeddingModel(settings.embedding_model);
 }
 
 // ---------------------------------------------------------------------------
@@ -79,7 +80,8 @@ export default function AiSettingsPanel() {
   const [escalationKeywords, setEscalationKeywords] = useState<string[]>([]);
   const [keywordInput, setKeywordInput] = useState('');
   const [systemPrompt, setSystemPrompt] = useState('');
-  const [model, setModel] = useState('openai/gpt-4o-mini');
+  const [model, setModel] = useState<ModelId>(DEFAULT_CHAT_MODEL);
+  const [embeddingModel, setEmbeddingModel] = useState<EmbeddingModelId>(DEFAULT_EMBEDDING_MODEL);
 
   const fetchSettings = useCallback(async () => {
     if (!user) return;
@@ -107,6 +109,7 @@ export default function AiSettingsPanel() {
           setEscalationKeywords,
           setSystemPrompt,
           setModel,
+          setEmbeddingModel,
         });
         return;
       }
@@ -145,6 +148,7 @@ export default function AiSettingsPanel() {
           setEscalationKeywords,
           setSystemPrompt,
           setModel,
+          setEmbeddingModel,
         });
 
         await insforge.database
@@ -190,6 +194,7 @@ export default function AiSettingsPanel() {
           escalation_keywords: escalationKeywords,
           system_prompt: systemPrompt || null,
           model,
+          embedding_model: embeddingModel,
           updated_at: new Date().toISOString(),
         })
         .eq('id', settings.id)
@@ -209,7 +214,7 @@ export default function AiSettingsPanel() {
           action: 'settings_changed',
           resource_type: 'ai_settings',
           resource_id: settings.id,
-          metadata: { ai_mode: aiMode, model },
+          metadata: { ai_mode: aiMode, model, embedding_model: embeddingModel },
         }])
         .select();
 
@@ -337,9 +342,31 @@ export default function AiSettingsPanel() {
           <Select
             id="model-select"
             value={model}
-            onValueChange={setModel}
-            options={MODEL_OPTIONS.map((m) => ({ value: m, label: m }))}
+            onValueChange={(v) => setModel(v as ModelId)}
+            options={CHAT_MODEL_OPTIONS.map((m) => ({ value: m, label: m }))}
           />
+        </Card>
+
+        {/* Embedding Model Card */}
+        <Card
+          header={
+            <div>
+              <h2 className="text-[18px] font-semibold tracking-tight text-[var(--m03-fg)]">Embedding Model</h2>
+              <p className="mt-1 text-[13px] text-[var(--m03-fg-2)]">Used for knowledge-base similarity search.</p>
+            </div>
+          }
+        >
+          <div className="space-y-2">
+            <Select
+              id="embedding-model-select"
+              value={embeddingModel}
+              onValueChange={(v) => setEmbeddingModel(v as EmbeddingModelId)}
+              options={EMBEDDING_MODEL_OPTIONS.map((m) => ({ value: m, label: m }))}
+            />
+            <p className="text-[12px] text-[var(--m03-fg-2)]">
+              Changing this requires re-indexing your knowledge base. Until then, similarity scores may degrade.
+            </p>
+          </div>
         </Card>
 
         {/* Confidence Threshold Card */}

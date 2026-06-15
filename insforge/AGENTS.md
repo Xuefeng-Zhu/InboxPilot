@@ -23,6 +23,7 @@ The committed InsForge backend tree. Contains **9 Deno function entrypoints** (w
 4. **Migration files are append-only.** Never edit a past migration — add a new one (`009_…`, `010_…`).
 5. **`audit_logs` is append-only at the RLS level** — only INSERT and SELECT policies exist, no UPDATE or DELETE.
 6. **All realtime publishes go to the `org:${orgId}` channel** with one of 3 event names: `new_message`, `conversation_updated`, `knowledge_document_updated`. Visitor channels use `widget:${widgetId}:${jti}`.
+7. **Deno-safety** — `insforge/functions/**` runs on the Deno serverless runtime. Imports of Node-only modules (`crypto`, `node:*`, `Buffer`) fail at deploy time. The `npm run lint:deno` script (`scripts/check-deno-safety.mjs`) catches this; it is chained into `npm run lint` after `tsc --noEmit`. The Deno registry currently registers 11 adapters (Mock SMS+email + Telnyx SMS + 8 stubs). Twilio + Postmark are blocked on a WebCrypto port — see `insforge/functions/AGENTS.md` for the porting path.
 
 ## CONVENTIONS
 - **Deno entrypoint shape:** each `functions/<name>/index.ts` is a `Deno.serve` handler that parses the request, runs JWT verification, builds the support-core service, calls it, and returns JSON.
@@ -39,6 +40,7 @@ The committed InsForge backend tree. Contains **9 Deno function entrypoints** (w
 - Importing from `@insforge/sdk` inside a Deno function for business logic (delegate to support-core).
 - Using `console.log` (use `console.error` for error paths, nothing for normal flow).
 - Hardcoding the InsForge project URL in a function (read from `Deno.env.get('INSFORGE_URL')`).
+- Adding Node-only imports (`crypto`, `Buffer`, `node:*`) to `insforge/functions/` — fails `npm run lint:deno` and crashes the Deno runtime at deploy.
 
 ## UNIQUE
 - **`_bundled/` mtime is `Jun 8`** while entrypoints are `Jun 14` — bundle is stale. Regenerate before deploying.

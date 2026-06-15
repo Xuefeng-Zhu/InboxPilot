@@ -13,7 +13,7 @@ Every significant action writes a row to `audit_logs`. The table is **append-onl
 | `actor_id` | User ID, contact ID, or system identifier (nullable) |
 | `actor_type` | `user` \| `system` \| `ai` |
 | `action` | Machine-readable string (see below) |
-| `resource_type` | `conversation` \| `message` \| `ai_decision` \| `organization` \| `organization_member` \| `webchat_thread` \| `webchat_widget` \| `knowledge_document` |
+| `resource_type` | `conversation` \| `message` \| `ai_decision` \| `organization` \| `organization_member` \| `webchat_thread` \| `webchat_widget` \| `knowledge_document` \| `ai_settings` |
 | `resource_id` | The affected resource ID |
 | `metadata` | Free-form JSON |
 | `created_at` | Event timestamp |
@@ -48,6 +48,13 @@ The "off" path also sets `metadata.reason = 'ai_mode_off'`. The "low confidence"
 | `member_added` | `user` | `OrganizationService.inviteMember` | `organization_member` | A new member was invited with a non-owner role. |
 | `member_role_changed` | `user` | `OrganizationService.changeMemberRole` | `organization_member` | A member's role was changed. `metadata.previousRole` and `metadata.newRole`. |
 | `member_removed` | `user` | `OrganizationService.removeMember` | `organization_member` | A member was removed from the org. |
+
+### Settings
+
+| `action` | `actor_type` | Emitted by | Resource | When |
+|---|---|---|---|---|
+| `settings_created` | `system` | `app/settings/_components/AiSettingsPanel.tsx` (first-time bootstrap) | `ai_settings` | The org's `ai_settings` row did not exist, so the panel auto-creates it on first visit. `metadata.source = 'settings_page_default'`. |
+| `settings_changed` | `user` | `app/settings/_components/AiSettingsPanel.tsx` (save handler) | `ai_settings` | The user saved AI settings. `metadata.ai_mode`, `metadata.model`, `metadata.confidence_threshold`, `metadata.context_window_size`, `metadata.escalation_keywords`, `metadata.system_prompt`, `metadata.embedding_model`. |
 
 ### Knowledge
 

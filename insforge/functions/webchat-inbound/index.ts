@@ -17,6 +17,7 @@ import { createDbClient } from '../_shared/create-db-client.ts';
 import { createRealtimePublisher } from '../_shared/create-realtime-publisher.ts';
 import { verifyVisitorJwt } from '../_shared/verify-visitor-jwt.ts';
 import { handleCorsPreFlight, corsJsonResponse } from '../_shared/cors.ts';
+import { triggerProcessJobs } from '../_shared/trigger-process-jobs.ts';
 
 import { ContactRepository } from '../../../packages/support-core/src/repositories/contact-repository.ts';
 import { ConversationRepository } from '../../../packages/support-core/src/repositories/conversation-repository.ts';
@@ -193,17 +194,10 @@ export default async function (req: Request): Promise<Response> {
       conversationId: thread.conversationId,
     });
 
-    // 9. Trigger process-jobs (fire-and-forget)
-    const functionsUrl = baseUrl.replace(/\.\w+-\w+\.insforge\.app/, '.functions.insforge.app');
-    fetch(`${functionsUrl}/process-jobs`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        apikey: serviceRoleKey,
-        Authorization: `Bearer ${serviceRoleKey}`,
-      },
-      body: '{}',
-    }).catch(() => { /* non-critical */ });
+    // 9. Trigger process-jobs to immediately handle the AI message job.
+    // Bounded await (≤5s) so the trigger reliably fires after enqueue rather
+    // than relying on the cron safety net. The cron remains as a fallback.
+    await triggerProcessJobs({ baseUrl, serviceRoleKey });
 
     // 10. Return success
     return jsonResponse({

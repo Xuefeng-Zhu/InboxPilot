@@ -21,6 +21,7 @@
 import { createDbClient } from '../_shared/create-db-client.ts';
 import { createRealtimePublisher } from '../_shared/create-realtime-publisher.ts';
 import { createProviderRegistry } from '../_shared/create-provider-registry.ts';
+import { triggerProcessJobs } from '../_shared/trigger-process-jobs.ts';
 
 import { ContactRepository } from '../../../packages/support-core/src/repositories/contact-repository.ts';
 import { ConversationRepository } from '../../../packages/support-core/src/repositories/conversation-repository.ts';
@@ -236,18 +237,10 @@ export default async function (req: Request): Promise<Response> {
       conversationId: message.conversationId,
     });
 
-    // 11. Trigger process-jobs to immediately handle the AI message job
-    // Fire-and-forget — don't block the inbound response
-    const functionsUrl = baseUrl.replace(/\.\w+-\w+\.insforge\.app/, '.functions.insforge.app');
-    fetch(`${functionsUrl}/process-jobs`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        apikey: serviceRoleKey,
-        Authorization: `Bearer ${serviceRoleKey}`,
-      },
-      body: '{}',
-    }).catch(() => { /* non-critical — job will be picked up on next trigger */ });
+    // 11. Trigger process-jobs to immediately handle the AI message job.
+    // Bounded await (≤5s) so the trigger reliably fires after enqueue rather
+    // than relying on the cron safety net. The cron remains as a fallback.
+    await triggerProcessJobs({ baseUrl, serviceRoleKey });
 
     // 12. Return 200 OK with message data
     return jsonResponse({ status: 'ok', data: message });

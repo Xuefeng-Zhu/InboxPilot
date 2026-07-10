@@ -22,6 +22,14 @@ const jobTypeArb = fc.constantFrom<JobType>(
   'retry_failed_jobs',
 );
 
+const idempotentJobTypeArb = fc.constantFrom<JobType>(
+  'process_ai_message',
+  'process_knowledge_document',
+  'send_outbound_message',
+  'process_delivery_status',
+  'record_chunk_refs',
+);
+
 /** Arbitrary for org IDs. */
 const orgIdArb = fc.stringOf(
   fc.constantFrom(...'abcdefghijklmnopqrstuvwxyz0123456789-'.split('')),
@@ -59,6 +67,8 @@ function createMockDb(options: {
   fromUpdateResult?: QueryResult;
   onUpdate?: (values: Record<string, unknown>) => void;
   onInsert?: (values: Record<string, unknown>) => void;
+  onEq?: (column: string, value: unknown) => void;
+  onContains?: (column: string, value: Record<string, unknown>) => void;
 }): DatabaseClient {
   const {
     rpcResult = { data: [], error: null },
@@ -67,6 +77,8 @@ function createMockDb(options: {
     fromUpdateResult = { data: null, error: null },
     onUpdate,
     onInsert,
+    onEq,
+    onContains,
   } = options;
 
   // Build a chainable query builder mock
@@ -83,7 +95,14 @@ function createMockDb(options: {
         return createQueryBuilder(fromUpdateResult);
       }),
       delete: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockImplementation(function (
+        this: QueryBuilder,
+        column: string,
+        value: unknown,
+      ) {
+        onEq?.(column, value);
+        return this;
+      }),
       neq: vi.fn().mockReturnThis(),
       gt: vi.fn().mockReturnThis(),
       gte: vi.fn().mockReturnThis(),
@@ -93,7 +112,14 @@ function createMockDb(options: {
       ilike: vi.fn().mockReturnThis(),
       is: vi.fn().mockReturnThis(),
       in: vi.fn().mockReturnThis(),
-      contains: vi.fn().mockReturnThis(),
+      contains: vi.fn().mockImplementation(function (
+        this: QueryBuilder,
+        column: string,
+        value: Record<string, unknown>,
+      ) {
+        onContains?.(column, value);
+        return this;
+      }),
       order: vi.fn().mockReturnThis(),
       limit: vi.fn().mockReturnThis(),
       range: vi.fn().mockReturnThis(),
@@ -211,7 +237,7 @@ describe('Job queue property tests', () => {
   it('Property 9: enqueuing the same job type and payload twice returns the existing job', async () => {
     await fc.assert(
       fc.asyncProperty(
-        jobTypeArb,
+        idempotentJobTypeArb,
         orgIdArb,
         uuidArb,
         async (jobType, orgId, existingJobId) => {
@@ -224,9 +250,11 @@ describe('Job queue property tests', () => {
             payload.documentId = 'doc-789';
           } else if (jobType === 'send_outbound_message') {
             payload.conversationId = 'conv-123';
-            payload.messageId = 'msg-456';
+            payload.aiDecisionId = 'decision-456';
           } else if (jobType === 'process_delivery_status') {
             payload.externalMessageId = 'ext-abc';
+          } else if (jobType === 'record_chunk_refs') {
+            payload.ai_decision_id = 'decision-789';
           }
 
           const existingJobRow = {
@@ -337,6 +365,61 @@ describe('Job queue property tests', () => {
       ),
       { numRuns: 100 },
     );
+  });
+
+  it('rejects idempotent jobs that omit required payload fields before querying', async () => {
+    const db = createMockDb({});
+    const queue = new PostgresJobQueue(db);
+
+    await expect(
+      queue.enqueue(
+        'send_outbound_message',
+        { conversationId: 'conv-123', body: 'Hello' },
+        'org-123',
+      ),
+    ).rejects.toThrow('aiDecisionId');
+    expect(db.from).not.toHaveBeenCalled();
+  });
+
+  it('scopes idempotency lookup to the organization and canonical payload keys', async () => {
+    const eqCalls: Array<[string, unknown]> = [];
+    const containsCalls: Array<[string, Record<string, unknown>]> = [];
+    const existingJobRow = {
+      id: 'job-existing',
+      organization_id: 'org-123',
+      job_type: 'send_outbound_message',
+      payload: { conversationId: 'conv-123', aiDecisionId: 'decision-123' },
+      status: 'pending',
+      attempts: 0,
+      max_attempts: 5,
+      last_error: null,
+      run_after: new Date().toISOString(),
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      completed_at: null,
+    };
+    const db = createMockDb({
+      fromSelectResult: { data: existingJobRow, error: null },
+      onEq: (column, value) => eqCalls.push([column, value]),
+      onContains: (column, value) => containsCalls.push([column, value]),
+    });
+    const queue = new PostgresJobQueue(db);
+
+    const job = await queue.enqueue(
+      'send_outbound_message',
+      {
+        conversationId: 'conv-123',
+        aiDecisionId: 'decision-123',
+        body: 'Hello',
+      },
+      'org-123',
+    );
+
+    expect(job.id).toBe('job-existing');
+    expect(eqCalls).toContainEqual(['organization_id', 'org-123']);
+    expect(containsCalls).toEqual([
+      ['payload', { conversationId: 'conv-123', aiDecisionId: 'decision-123' }],
+    ]);
   });
 
   /**

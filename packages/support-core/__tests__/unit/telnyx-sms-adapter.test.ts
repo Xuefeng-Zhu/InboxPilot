@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { generateKeyPairSync, sign } from 'node:crypto';
 import { TelnyxSmsAdapter } from '@support-core/adapters/telnyx-sms-adapter';
 import type { WebhookVerificationRequest } from '@support-core/types/index';
 
@@ -33,6 +34,25 @@ function buildStatusPayload(overrides: Record<string, unknown> = {}) {
         ...overrides,
       },
     },
+  };
+}
+
+function createSignedWebhookRequest(
+  body: string = JSON.stringify(buildInboundPayload()),
+  timestamp: string = String(Math.floor(Date.now() / 1000)),
+): WebhookVerificationRequest {
+  const keyPair = generateKeyPairSync('ed25519');
+  const signature = sign(null, Buffer.from(`${timestamp}|${body}`), keyPair.privateKey);
+  const publicKeyDer = keyPair.publicKey.export({ type: 'spki', format: 'der' });
+  const publicKeyRaw = publicKeyDer.subarray(publicKeyDer.length - 32);
+
+  return {
+    headers: {
+      'telnyx-signature-ed25519': signature.toString('base64'),
+      'telnyx-timestamp': timestamp,
+    },
+    body,
+    signingSecret: publicKeyRaw.toString('hex'),
   };
 }
 
@@ -218,39 +238,39 @@ describe('TelnyxSmsAdapter', () => {
   // ─── verifyWebhook ────────────────────────────────────────────────
 
   describe('verifyWebhook', () => {
-    it('returns true when signature and timestamp headers are present', async () => {
-      const req: WebhookVerificationRequest = {
-        headers: {
-          'telnyx-signature-ed25519': 'abc123signaturevalue',
-          'telnyx-timestamp': '1234567890',
-        },
-        body: JSON.stringify(buildInboundPayload()),
-        signingSecret: 'some-secret',
+    it('returns true when the Ed25519 signature matches the timestamp and body', async () => {
+      const req = createSignedWebhookRequest();
+
+      expect(await adapter.verifyWebhook(req)).toBe(true);
+    });
+
+    it('accepts case-insensitive Telnyx signature headers', async () => {
+      const req = createSignedWebhookRequest();
+      req.headers = {
+        'Telnyx-Signature-Ed25519': req.headers['telnyx-signature-ed25519'],
+        'Telnyx-Timestamp': req.headers['telnyx-timestamp'],
       };
 
       expect(await adapter.verifyWebhook(req)).toBe(true);
     });
 
+    it('returns false when the body has been tampered with', async () => {
+      const req = createSignedWebhookRequest();
+      req.body = JSON.stringify(buildInboundPayload({ text: 'tampered' }));
+
+      expect(await adapter.verifyWebhook(req)).toBe(false);
+    });
+
     it('returns false when signature header is missing', async () => {
-      const req: WebhookVerificationRequest = {
-        headers: {
-          'telnyx-timestamp': '1234567890',
-        },
-        body: JSON.stringify(buildInboundPayload()),
-        signingSecret: 'some-secret',
-      };
+      const req = createSignedWebhookRequest();
+      delete req.headers['telnyx-signature-ed25519'];
 
       expect(await adapter.verifyWebhook(req)).toBe(false);
     });
 
     it('returns false when timestamp header is missing', async () => {
-      const req: WebhookVerificationRequest = {
-        headers: {
-          'telnyx-signature-ed25519': 'abc123signaturevalue',
-        },
-        body: JSON.stringify(buildInboundPayload()),
-        signingSecret: 'some-secret',
-      };
+      const req = createSignedWebhookRequest();
+      delete req.headers['telnyx-timestamp'];
 
       expect(await adapter.verifyWebhook(req)).toBe(false);
     });
@@ -259,10 +279,10 @@ describe('TelnyxSmsAdapter', () => {
       const req: WebhookVerificationRequest = {
         headers: {
           'telnyx-signature-ed25519': '',
-          'telnyx-timestamp': '1234567890',
+          'telnyx-timestamp': String(Math.floor(Date.now() / 1000)),
         },
         body: JSON.stringify(buildInboundPayload()),
-        signingSecret: 'some-secret',
+        signingSecret: 'some-public-key',
       };
 
       expect(await adapter.verifyWebhook(req)).toBe(false);
@@ -275,7 +295,7 @@ describe('TelnyxSmsAdapter', () => {
           'telnyx-timestamp': '',
         },
         body: JSON.stringify(buildInboundPayload()),
-        signingSecret: 'some-secret',
+        signingSecret: 'some-public-key',
       };
 
       expect(await adapter.verifyWebhook(req)).toBe(false);
@@ -285,11 +305,18 @@ describe('TelnyxSmsAdapter', () => {
       const req: WebhookVerificationRequest = {
         headers: {
           'telnyx-signature-ed25519': '   ',
-          'telnyx-timestamp': '1234567890',
+          'telnyx-timestamp': String(Math.floor(Date.now() / 1000)),
         },
         body: JSON.stringify(buildInboundPayload()),
-        signingSecret: 'some-secret',
+        signingSecret: 'some-public-key',
       };
+
+      expect(await adapter.verifyWebhook(req)).toBe(false);
+    });
+
+    it('returns false when the timestamp is outside the replay window', async () => {
+      const staleTimestamp = String(Math.floor(Date.now() / 1000) - 301);
+      const req = createSignedWebhookRequest(JSON.stringify(buildInboundPayload()), staleTimestamp);
 
       expect(await adapter.verifyWebhook(req)).toBe(false);
     });
@@ -298,7 +325,7 @@ describe('TelnyxSmsAdapter', () => {
       const req: WebhookVerificationRequest = {
         headers: {},
         body: JSON.stringify(buildInboundPayload()),
-        signingSecret: 'some-secret',
+        signingSecret: 'some-public-key',
       };
 
       expect(await adapter.verifyWebhook(req)).toBe(false);

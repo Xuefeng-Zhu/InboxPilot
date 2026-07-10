@@ -41,12 +41,9 @@ import { useInfiniteMessages } from './useMessages';
  * - `rows` is deduplicated by `id`, sorted DESC by `created_at`, capped at
  *   100 entries. The cap mirrors the 100-row cap inside `useAuditLogs`
  *   itself — beyond that we'd be paginating anyway.
- * - `isLoading` reflects the aggregate of the 4 audit prongs (the ID-source
- *   hooks are internal: their loading state is irrelevant once their IDs
- *   have been collected, and their `data` transitions to defined as soon as
- *   the upstream resolves).
- * - `error` is the first non-null error from any of the 4 audit prongs, or
- *   `null` if all resolved cleanly.
+ * - `isLoading` reflects both ID sources and all 4 audit prongs so consumers
+ *   do not render a false empty state before dependent prongs can start.
+ * - `error` is the first non-null error from an ID source or audit prong.
  */
 export function useConversationAuditTrail(conversationId: string | undefined): {
   rows: AuditLogRow[];
@@ -94,26 +91,35 @@ export function useConversationAuditTrail(conversationId: string | undefined): {
     { enabled: messageIds.length > 0 },
   );
 
-  // Dedup by `id` (later occurrences overwrite earlier ones — order is
-  // metadata, conversation, ai_decision, message; the first occurrence
-  // wins, which keeps the most "natural" projection per writer).
+  // Dedup by `id`; the first occurrence wins in metadata, conversation,
+  // ai_decision, message priority order.
   const deduped = new Map<string, AuditLogRow>();
-  for (const row of metadataQuery.data ?? []) deduped.set(row.id, row);
-  for (const row of conversationQuery.data ?? []) deduped.set(row.id, row);
-  for (const row of aiDecisionsQueryAudit.data ?? []) deduped.set(row.id, row);
-  for (const row of messagesQueryAudit.data ?? []) deduped.set(row.id, row);
+  for (const rows of [
+    metadataQuery.data,
+    conversationQuery.data,
+    aiDecisionsQueryAudit.data,
+    messagesQueryAudit.data,
+  ]) {
+    for (const row of rows ?? []) {
+      if (!deduped.has(row.id)) deduped.set(row.id, row);
+    }
+  }
 
   const rows = Array.from(deduped.values())
     .sort((a, b) => b.created_at.localeCompare(a.created_at))
     .slice(0, 100);
 
   const isLoading =
+    aiDecisionsQuery.isLoading ||
+    messagesQuery.isInitialLoading ||
     metadataQuery.isLoading ||
     conversationQuery.isLoading ||
     aiDecisionsQueryAudit.isLoading ||
     messagesQueryAudit.isLoading;
 
   const error =
+    aiDecisionsQuery.error ??
+    messagesQuery.error ??
     metadataQuery.error ??
     conversationQuery.error ??
     aiDecisionsQueryAudit.error ??

@@ -18,8 +18,11 @@
  *    branch which gates on `webchatThreadRepo && realtimePublisher`)
  */
 import { NextRequest, NextResponse } from 'next/server';
+import { readRequestJsonObject } from '@/lib/http-json';
 import { insforgeAdmin as insforge } from '@/lib/insforge-admin';
 import { getSecret } from '@/lib/insforge-secrets';
+import { publishRealtimeMessage } from '@/lib/realtime-publisher';
+import { assertInsforgeSuccess } from '@/lib/insforge-result';
 import { createProviderRegistry } from '@/lib/provider-registry';
 import { getUserFromToken, userHasOrgPermission } from '../_auth';
 import { createInsforgeDbAdapter } from '../_insforge-db-adapter';
@@ -135,10 +138,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { conversationId, body } = (await req.json().catch(() => ({}))) as {
-      conversationId?: unknown;
-      body?: unknown;
-    };
+    const requestBody = await readRequestJsonObject(req);
+    if (!requestBody) {
+      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+    }
+    const { conversationId, body } = requestBody;
 
     if (typeof conversationId !== 'string' || typeof body !== 'string') {
       return NextResponse.json(
@@ -212,7 +216,7 @@ export async function POST(req: NextRequest) {
     // Webchat realtime broadcast — preserve the previous route's behavior.
     // OutboundMessageService's webchat branch is a no-op because we did not
     // inject `webchatThreadRepo` / `realtimePublisher`, so this is the only
-    // publish path. Best-effort: failures are swallowed.
+    // publish path. Best-effort: failures are logged without failing the reply.
     if (conversation.channel === 'webchat') {
       const { data: threadData } = await insforge.database
         .from('webchat_threads')
@@ -225,24 +229,18 @@ export async function POST(req: NextRequest) {
         | undefined;
 
       if (thread) {
-        const baseUrl = process.env.NEXT_PUBLIC_INSFORGE_URL ?? '';
-        const serviceRoleKey = process.env.INSFORGE_SERVICE_ROLE_KEY ?? '';
-
-        fetch(`${baseUrl}/api/database/rpc/publish_realtime_message`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            apikey: serviceRoleKey,
-            Authorization: `Bearer ${serviceRoleKey}`,
-          },
-          body: JSON.stringify({
-            p_channel_name: `widget:${thread.widget_id}:${thread.visitor_token_jti}`,
-            p_event_name: 'new_message',
-            p_payload: { message, conversationId },
-          }),
-        }).catch(() => {
-          /* non-critical: realtime is best-effort */
-        });
+        try {
+          await publishRealtimeMessage(
+            `widget:${thread.widget_id}:${thread.visitor_token_jti}`,
+            'new_message',
+            { message, conversationId },
+          );
+        } catch (err) {
+          console.warn(
+            'send-reply: failed to publish webchat realtime message',
+            err instanceof Error ? err.message : String(err),
+          );
+        }
       }
     }
 
@@ -250,10 +248,11 @@ export async function POST(req: NextRequest) {
     // AiDraftPanel + DRAFTED header pill stop rendering. Mirrors the
     // approve-ai-draft flow at app/api/functions/approve-ai-draft/route.ts:78-81.
     // (OutboundMessageService.sendReply already updates last_message_at.)
-    await insforge.database
+    const clearDraftResult = await insforge.database
       .from('conversations')
       .update({ ai_state: 'idle' })
       .eq('id', conversationId);
+    assertInsforgeSuccess(clearDraftResult, 'send-reply failed to clear AI draft state');
 
     return NextResponse.json({ status: 'ok', data: message });
   } catch (err) {

@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { readResponseJsonObject } from '@/lib/http-json';
 import { insforge, getAccessToken } from '@/lib/insforge';
 import type { AiState } from '@support-core/types';
 
@@ -105,8 +106,10 @@ export function AiDraftPanel({ conversationId, aiState, onPrefillComposer }: AiD
       });
 
       if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error((body as Record<string, string>).error ?? 'Failed to approve draft');
+        const body = await readResponseJsonObject(res, 'approve-ai-draft error');
+        throw new Error(
+          typeof body.error === 'string' ? body.error : 'Failed to approve draft',
+        );
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to approve draft');
@@ -134,8 +137,10 @@ export function AiDraftPanel({ conversationId, aiState, onPrefillComposer }: AiD
       });
 
       if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error((body as Record<string, string>).error ?? 'Failed to regenerate draft');
+        const body = await readResponseJsonObject(res, 'regenerate-ai-draft error');
+        throw new Error(
+          typeof body.error === 'string' ? body.error : 'Failed to regenerate draft',
+        );
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to regenerate draft');

@@ -641,5 +641,37 @@ describe('AiAgentService', () => {
         expect.objectContaining({ aiState: 'failed' }),
       );
     });
+
+    it('propagates chunk-reference enqueue failures so the worker can retry', async () => {
+      vi.mocked(knowledgeRepo.matchChunks).mockResolvedValue([
+        {
+          id: 'chunk-001',
+          documentId: 'doc-001',
+          organizationId: ORG_ID,
+          content: 'Returns are accepted within 30 days.',
+          embedding: [],
+          metadata: {},
+          createdAt: new Date('2024-01-01'),
+        },
+      ]);
+      vi.mocked(jobQueue.enqueue).mockRejectedValue(new Error('queue unavailable'));
+      const service = createService();
+
+      await expect(service.processMessage(CONV_ID, ORG_ID)).rejects.toThrow('queue unavailable');
+      expect(aiDecisionRepo.create).toHaveBeenCalledTimes(1);
+      expect(jobQueue.enqueue).toHaveBeenCalledTimes(1);
+      expect(conversationRepo.update).not.toHaveBeenCalledWith(
+        CONV_ID,
+        expect.objectContaining({ aiState: 'failed' }),
+      );
+      expect(jobQueue.enqueue).toHaveBeenCalledWith(
+        'record_chunk_refs',
+        expect.objectContaining({
+          ai_decision_id: expect.any(String),
+          knowledge_chunk_ids: ['chunk-001'],
+        }),
+        ORG_ID,
+      );
+    });
   });
 });

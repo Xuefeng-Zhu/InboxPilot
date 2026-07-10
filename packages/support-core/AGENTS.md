@@ -72,7 +72,7 @@ class XxxRepository {
 
 | Adapter | Interface | Notes |
 |---------|-----------|-------|
-| TwilioSmsAdapter / TelnyxSmsAdapter | SmsProviderAdapter | Real provider APIs. **Telnyx `verifyWebhook` is a stub** (header presence only, ed25519 marked TODO). |
+| TwilioSmsAdapter / TelnyxSmsAdapter | SmsProviderAdapter | Real provider APIs. **Telnyx `verifyWebhook` verifies ed25519 signatures** using the configured public key in `signingSecret`. |
 | MockSmsAdapter / `sms-stubs.ts` (4 stubs) | SmsProviderAdapter | `MockSmsAdapter` is in-memory with deterministic `mock_sms_N` IDs, used as a real test double (not mocked). The 4 stubs (Bandwidth, Vonage, Plivo, MessageBird) throw "not implemented" by design. |
 | PostmarkEmailAdapter | EmailProviderAdapter | Real Postmark API (`X-Postmark-Server-Token` verification, timing-safe). |
 | MockEmailAdapter / `email-stubs.ts` (4 stubs) | EmailProviderAdapter | Same pattern as SMS mocks. Stubs: Mailgun, Resend, AwsSes, InsForge (note: stub label, not an import). |

@@ -18,9 +18,15 @@
 
 import { createDbClient } from '../_shared/create-db-client.ts';
 import { createProviderRegistry } from '../_shared/create-provider-registry.ts';
+import {
+  parseEmailWebhookBody,
+  requestHeadersToRecord,
+  resolveEmailStatusWebhookContext,
+} from '../_shared/webhook-credentials.ts';
 
 import { MessageRepository } from '../../../packages/support-core/src/repositories/message-repository.ts';
 import { DeliveryEventRepository } from '../../../packages/support-core/src/repositories/delivery-event-repository.ts';
+import type { NormalizedDeliveryStatus } from '../../../packages/support-core/src/types/index.ts';
 
 // ---------------------------------------------------------------------------
 // Helper: JSON response builder
@@ -39,14 +45,8 @@ function jsonResponse(body: unknown, status = 200): Response {
 
 export default async function (req: Request): Promise<Response> {
   try {
-    // 1. Parse request body
+    // 1. Read request body
     const rawBody = await req.text();
-    let body: unknown;
-    try {
-      body = JSON.parse(rawBody);
-    } catch {
-      return jsonResponse({ error: 'Invalid JSON body' }, 400);
-    }
 
     // 2. Determine email provider from header (default: 'mock')
     const provider = req.headers.get('x-provider') ?? 'mock';
@@ -61,25 +61,24 @@ export default async function (req: Request): Promise<Response> {
       return jsonResponse({ error: `Unknown email provider: ${provider}` }, 400);
     }
 
-    // 4. Verify webhook signature
-    const signingSecret = req.headers.get('x-signing-secret') ?? '';
-    const headers: Record<string, string> = {};
-    req.headers.forEach((value, key) => {
-      headers[key] = value;
-    });
-
-    const isValid = await adapter.verifyWebhook({
-      headers,
-      body: rawBody,
-      signingSecret,
-    });
-
-    if (!isValid) {
-      return jsonResponse({ error: 'Webhook signature verification failed' }, 401);
+    // 4. Parse body in the provider's webhook shape.
+    let body: unknown;
+    try {
+      body = parseEmailWebhookBody(rawBody);
+    } catch {
+      return jsonResponse({ error: 'Invalid webhook body' }, 400);
     }
 
     // 5. Parse delivery status payload via adapter
-    const normalizedStatus = adapter.parseStatusWebhook(body);
+    let normalizedStatus: NormalizedDeliveryStatus;
+    try {
+      normalizedStatus = adapter.parseStatusWebhook(body);
+    } catch (err) {
+      return jsonResponse(
+        { error: err instanceof Error ? err.message : 'Invalid email status webhook payload' },
+        400,
+      );
+    }
 
     // 6. Create InsForge database client
     const baseUrl =
@@ -93,7 +92,32 @@ export default async function (req: Request): Promise<Response> {
 
     const db = createDbClient(baseUrl, serviceRoleKey);
 
-    // 7. Look up the message by external_message_id
+    // 7. Resolve the trusted provider account and signing secret from the
+    // stored outbound message before accepting the callback.
+    const webhookContext = await resolveEmailStatusWebhookContext(
+      db,
+      provider,
+      normalizedStatus.externalMessageId,
+      baseUrl,
+      serviceRoleKey,
+    );
+
+    if (!webhookContext && provider !== 'mock') {
+      return jsonResponse({ error: 'Webhook provider account not found' }, 401);
+    }
+
+    // 8. Verify webhook signature
+    const isValid = await adapter.verifyWebhook({
+      headers: requestHeadersToRecord(req.headers),
+      body: rawBody,
+      signingSecret: webhookContext?.signingSecret ?? '',
+    });
+
+    if (!isValid) {
+      return jsonResponse({ error: 'Webhook signature verification failed' }, 401);
+    }
+
+    // 9. Look up the message by external_message_id
     const messageRepo = new MessageRepository(db);
     const message = await messageRepo.findByExternalId(
       provider,
@@ -105,7 +129,7 @@ export default async function (req: Request): Promise<Response> {
       return jsonResponse({ status: 'ok', message: 'Message not found, status ignored' });
     }
 
-    // 8. Insert delivery event record
+    // 10. Insert delivery event record
     const deliveryEventRepo = new DeliveryEventRepository(db);
     await deliveryEventRepo.create('email', {
       messageId: message.id,
@@ -116,10 +140,10 @@ export default async function (req: Request): Promise<Response> {
       rawPayload: normalizedStatus.rawPayload,
     });
 
-    // 9. Update message delivery_status
+    // 11. Update message delivery_status
     await messageRepo.updateDeliveryStatus(message.id, normalizedStatus.status);
 
-    // 10. Return 200 OK
+    // 12. Return 200 OK
     return jsonResponse({
       status: 'ok',
       data: {

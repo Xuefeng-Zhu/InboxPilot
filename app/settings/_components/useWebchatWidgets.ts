@@ -1,6 +1,7 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { readResponseJsonObject } from '@/lib/http-json';
 import { insforge, getAccessToken } from '@/lib/insforge';
 
 export interface WebchatWidgetRow {
@@ -23,15 +24,25 @@ export function useWebchatWidgets(orgId: string | null) {
   const [widgets, setWidgets] = useState<WebchatWidgetRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const requestGenerationRef = useRef(0);
 
   const refresh = useCallback(async () => {
-    if (!orgId) return;
+    const requestGeneration = ++requestGenerationRef.current;
+    if (!orgId) {
+      setWidgets([]);
+      setError(null);
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     const { data, error: err } = await insforge.database
       .from('webchat_widgets')
       .select('*')
       .eq('organization_id', orgId)
       .order('created_at', { ascending: false });
+
+    if (requestGeneration !== requestGenerationRef.current) return;
 
     if (err) {
       setError(err.message);
@@ -56,19 +67,23 @@ export function useWebchatWidgets(orgId: string | null) {
         },
         body: JSON.stringify({ organizationId: orgId, widgetId }),
       });
-      const payload = (await res.json().catch(() => ({}))) as {
-        data?: unknown;
-        error?: string;
-      };
+      const payload = await readResponseJsonObject(res, 'delete-widget error');
       if (!res.ok) {
-        throw new Error(payload.error ?? `Delete failed (${res.status})`);
+        throw new Error(
+          typeof payload.error === 'string' ? payload.error : `Delete failed (${res.status})`,
+        );
       }
       await refresh();
     },
     [orgId, refresh],
   );
 
-  useState(() => { refresh(); });
+  useEffect(() => {
+    void refresh();
+    return () => {
+      requestGenerationRef.current++;
+    };
+  }, [refresh]);
 
   return { widgets, loading, error, refresh, deleteWidget };
 }

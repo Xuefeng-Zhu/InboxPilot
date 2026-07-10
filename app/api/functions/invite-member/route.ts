@@ -13,6 +13,7 @@
  * either way; we surface a friendlier message at the API boundary.
  */
 import { NextRequest, NextResponse } from 'next/server';
+import { readRequestJsonObject } from '@/lib/http-json';
 import { getUserFromToken, userHasOrgPermission } from '../_auth';
 import { createInsforgeDbAdapter } from '../_insforge-db-adapter';
 import { OrganizationService } from '@support-core/services/organization-service';
@@ -37,11 +38,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
     }
 
-    const body = (await req.json().catch(() => ({}))) as {
-      organizationId?: unknown;
-      email?: unknown;
-      role?: unknown;
-    };
+    const body = await readRequestJsonObject(req);
+    if (!body) {
+      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+    }
 
     const organizationId = body.organizationId;
     const email = body.email;

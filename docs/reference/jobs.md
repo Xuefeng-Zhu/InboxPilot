@@ -69,8 +69,9 @@ Handlers live in `insforge/functions/process-jobs/index.ts` (`buildJobHandlers`)
 
 The process-jobs function is invoked by:
 - The InsForge cron/scheduler.
-- A fire-and-forget POST from `sms-inbound`, `email-inbound`, and `webchat-inbound` after enqueuing the AI job.
-- The `regenerate-ai-draft` Next.js route after enqueuing.
+- The scheduled `process-jobs` worker after `sms-inbound`, `email-inbound`, or `webchat-inbound` enqueue an AI job.
+- The `regenerate-ai-draft` Next.js route after enqueuing; failures are logged
+  and the durable job remains for the scheduler.
 
 ## Enqueue sites
 
@@ -84,7 +85,7 @@ The process-jobs function is invoked by:
 ## Known quirks
 
 - **Parameter name mismatch** — The `claim_support_jobs` RPC declares its parameter as `claim_limit`, but `PostgresJobQueue.claim()` calls it as `{ max_count: limit }`. This is a bug: the call passes `max_count` as the `claim_limit` arg, but because both have defaults the call works (defaulting `claim_limit` to 5). The fix is to rename to align (call site should pass `{ claim_limit: limit }` and the RPC should use that name). Tracked in [`../plans/refactor.md`](../plans/refactor.md).
-- **Stubs are no-ops** — `send_outbound_message`, `process_delivery_status`, and `retry_failed_jobs` handlers are empty (just a `// TODO` comment). Jobs of these types are claimed and immediately fail (or never get enqueued in the first place for delivery status). This means async retries of failed outbound sends are not implemented; outbound sends are currently synchronous.
+- **Unsupported retry handlers fail explicitly** — `process_delivery_status` and `retry_failed_jobs` are reserved for future async retry paths and currently throw clear "not implemented" errors so claimed jobs do not complete as no-ops. `send_outbound_message` is implemented for AI auto-reply fallback/retry.
 - **`countConsecutiveFailures` heuristic** — In `ai-agent-service.ts`, the `RepeatedFailureRule` receives a `consecutiveAiFailures` count derived only from the conversation's current `ai_state === 'failed'` (returns 1 if true, 0 otherwise). It does not query `ai_decisions` for a true consecutive-failure count. The rule is therefore under-sensitive in practice. See `MULTI_ROUND_AI_FIX_PLAN.md` in the repo root (or `docs/plans/multi-round-ai-fix.md` once moved).
 
 ## Adding a new job type

@@ -33,7 +33,7 @@
   1. `getUserFromToken(req)` → 401 if null
   2. Resolve `organization_id` from the target row → `userHasOrgPermission(...)` → 403
   3. Use `insforgeAdmin` (service role) — `insforgeAdmin.database.from(...).update/insert(...)` — bypasses RLS
-  4. For webchat replies, broadcast via `POST /realtime/v1/api/broadcast` (fire-and-forget)
+  4. For webchat replies, use `publishRealtimeMessage(...)` and log best-effort failures
   5. Return `NextResponse.json(...)` with the new row / status
 - **Add a new team/admin mutation** → prefer routing through `OrganizationService` in support-core (mirrors the 3 existing team routes). The service enforces the audit-log actor and business invariants (single-owner, last-owner guard).
 
@@ -42,7 +42,7 @@
 - **Always use `insforgeAdmin`** (from `lib/insforge-admin.ts`) — never the browser `insforge` client.
 - **All responses are JSON** via `NextResponse.json({...}, { status })`.
 - **All errors return a clear shape:** `{ error: 'unauthorized' }` / `{ error: 'forbidden' }` / `{ error: 'missing conversationId' }` / `{ error: '<message>' }`.
-- **Webchat broadcast is fire-and-forget** — failures are logged via `console.error`, not thrown (realtime is best-effort).
+- **Webchat broadcast is awaited but best-effort** — failures are logged and do not fail the reply.
 - **Team-mutation routes pass `user.id` as `actorId` to the service** — never let the service infer the actor (the previous bug was that the service wrote the *target's* `userId` to the audit log).
 - **Owner transfers are owner-only.** Any route that can promote to or demote from `owner` must check `userHasOrgPermission(..., 'delete_org')` (owner-only) before allowing the change — `manage_members` is not enough since admins have it.
 
@@ -62,5 +62,5 @@
 - **`test-channel-connection` is the only conversation-touching route with `manage_settings`** (others need `reply_conversations`).
 - **`team-member-info` is the only read route** — it doesn't mutate state, just enriches the team panel with email/name for display.
 - **`change-member-role`, `remove-member`, `invite-member`, `delete-widget` are the routes that write to `audit_logs`** (the `approve-ai-draft` route also writes, so update this list when that changes).
-- **`regenerate-ai-draft` is the only route that fires a fire-and-forget POST to `${FUNCTIONS_URL}/process-jobs`** to trigger AI re-processing.
+- **`regenerate-ai-draft` awaits the `${FUNCTIONS_URL}/process-jobs` trigger** after enqueueing; trigger failures are logged and left for the scheduler because the job row is already durable.
 - **All routes resolve `orgId` from the request body** (not from the user session) — multi-org users work transparently.

@@ -56,6 +56,22 @@ loadEnvFile();
 const BASE_URL = process.env.NEXT_PUBLIC_INSFORGE_URL || '';
 const SERVICE_KEY = process.env.INSFORGE_SERVICE_ROLE_KEY || '';
 
+async function readJsonOrFallback(res, fallback, context) {
+  const text = await res.text();
+  if (!text.trim()) {
+    return fallback;
+  }
+
+  try {
+    return JSON.parse(text);
+  } catch (err) {
+    console.warn(
+      `mock-sms: could not parse ${context} JSON response: ${err instanceof Error ? err.message : String(err)}`,
+    );
+    return fallback;
+  }
+}
+
 /**
  * Minimal PostgREST-compatible client for InsForge's /api/database/records/ endpoint.
  * Uses the service role key to bypass RLS.
@@ -93,11 +109,15 @@ const db = {
     if (!res.ok) {
       // For single queries with no rows, PostgREST returns 406
       if (single && res.status === 406) return { data: null, error: null };
-      const err = await res.json().catch(() => ({ message: `HTTP ${res.status}` }));
+      const err = await readJsonOrFallback(
+        res,
+        { message: `HTTP ${res.status}` },
+        `${method} ${table} error`,
+      );
       return { data: null, error: { message: err.message || err.details || JSON.stringify(err) } };
     }
 
-    const data = await res.json().catch(() => null);
+    const data = await readJsonOrFallback(res, null, `${method} ${table}`);
     return { data, error: null };
   },
 
@@ -375,7 +395,7 @@ async function cmdInbound(message = 'Hi, I need help with my order #12345') {
         },
         body: '{}',
       });
-      const processResult = await processRes.json().catch(() => null);
+      const processResult = await readJsonOrFallback(processRes, null, 'process-jobs trigger');
       if (processRes.ok && processResult?.claimed > 0) {
         console.log(c.green(`  ✓ AI processed: ${JSON.stringify(processResult.results?.[0]?.status || 'done')}`));
       } else if (processRes.ok) {

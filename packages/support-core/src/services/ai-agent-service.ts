@@ -172,29 +172,18 @@ export class AiAgentService {
       .filter((id): id is string => typeof id === 'string' && id.length > 0);
 
     /** Enqueue a record_chunk_refs job for a freshly-created decision.
-     *  Empty arrays are a no-op. A failure here is rare (single INSERT to
-     *  support_jobs) and surfaces as a failed job with exponential
-     *  backoff; the AI turn itself succeeds without the link, which is
-     *  the same audit-log-gap-but-not-pipeline-failure semantic as
-     *  before, but now durably. */
+     *  Empty arrays are a no-op. A failure here aborts the current job so the
+     *  queue can retry instead of silently losing the linked-conversation row. */
     const enqueueChunkRefs = async (decisionId: string): Promise<void> => {
       if (citedChunkIds.length === 0) return;
-      try {
-        await this.jobQueue.enqueue(
-          'record_chunk_refs',
-          {
-            ai_decision_id: decisionId,
-            knowledge_chunk_ids: citedChunkIds as string[],
-          },
-          orgId,
-        );
-      } catch (err) {
-        // Soft-fail: a missing enqueue means the link won't appear in
-        // the Linked-conversations panel, but the decision itself is
-        // already committed. We log and move on so the AI turn's
-        // response is not blocked.
-        console.warn('record_chunk_refs enqueue failed', err);
-      }
+      await this.jobQueue.enqueue(
+        'record_chunk_refs',
+        {
+          ai_decision_id: decisionId,
+          knowledge_chunk_ids: citedChunkIds as string[],
+        },
+        orgId,
+      );
     };
 
     // Build effective settings for escalation context.
@@ -274,262 +263,26 @@ export class AiAgentService {
       return escalateDecision;
     }
 
-    // 6. No escalation: call LLM
-    try {
-      const chatMessages = this.buildPrompt(
-        messages,
-        knowledgeChunks,
-        systemPrompt,
-      );
+    // 6. No escalation: call LLM. Keep the error boundary narrow so
+    // persistence, queue, and audit failures are not mislabeled as LLM errors.
+    const chatMessages = this.buildPrompt(
+      messages,
+      knowledgeChunks,
+      systemPrompt,
+    );
 
-      const llmResponse = await this.aiClient.chatCompletion({
+    let llmResponse: Awaited<ReturnType<AiClient['chatCompletion']>>;
+    try {
+      llmResponse = await this.aiClient.chatCompletion({
         model,
         messages: chatMessages,
         responseFormat: { type: 'json_object' },
         temperature: 0.3,
       });
-
-      const parseResult = parseAiDecision(llmResponse.content);
-
-      if (!parseResult.success) {
-        // LLM returned invalid JSON — set ai_state to "failed"
-        await this.conversationRepo.update(conversationId, { aiState: 'failed' });
-
-        const failedDecision = await this.aiDecisionRepo.create({
-          conversationId,
-          organizationId: orgId,
-          messageId: latestMessageRecord?.id ?? null,
-          decisionType: 'respond',
-          confidence: 0,
-          reasoningSummary: `AI response parsing failed: ${parseResult.error}`,
-          responseText: null,
-          tags: ['parse_error'],
-          requiresHuman: false,
-          rawResponse: { raw: llmResponse.content, error: parseResult.error },
-        });
-        await enqueueChunkRefs(failedDecision.id);
-
-        await this.auditLog.create({
-          organizationId: orgId,
-          actorType: 'ai',
-          action: 'ai_decision_produced',
-          resourceType: 'ai_decision',
-          resourceId: failedDecision.id,
-          metadata: { decisionType: 'respond', error: parseResult.error },
-        });
-
-        return failedDecision;
-      }
-
-      const parsed = parseResult.data;
-
-      // Check post-LLM low confidence escalation
-      const lowConfidenceRule = new LowConfidenceRule();
-      const lowConfResult = lowConfidenceRule.evaluateConfidence(
-        parsed.confidence,
-        confidenceThreshold,
-      );
-
-      if (
-        lowConfResult &&
-        parsed.decision_type !== 'escalate' &&
-        parsed.decision_type !== 'clarify'
-      ) {
-        // Low confidence — escalate
-        await this.conversationRepo.update(conversationId, {
-          status: 'escalated',
-          aiState: 'needs_human',
-        });
-
-        const lowConfDecision = await this.aiDecisionRepo.create({
-          conversationId,
-          organizationId: orgId,
-          messageId: latestMessageRecord?.id ?? null,
-          decisionType: 'escalate',
-          confidence: parsed.confidence,
-          reasoningSummary: `Low confidence (${parsed.confidence} < ${confidenceThreshold}): ${parsed.reasoning_summary}`,
-          responseText: parsed.response_text,
-          tags: [...parsed.tags, 'low_confidence'],
-          requiresHuman: true,
-          rawResponse: parsed as unknown as Record<string, unknown>,
-        });
-        await enqueueChunkRefs(lowConfDecision.id);
-
-        await this.auditLog.create({
-          organizationId: orgId,
-          actorType: 'ai',
-          action: 'ai_decision_produced',
-          resourceType: 'ai_decision',
-          resourceId: lowConfDecision.id,
-          metadata: { decisionType: 'escalate', reason: 'low_confidence' },
-        });
-
-        return lowConfDecision;
-      }
-
-      // 7. Handle mode gating
-      if (parsed.requires_human || parsed.decision_type === 'escalate') {
-        // LLM itself says escalation needed
-        await this.conversationRepo.update(conversationId, {
-          status: 'escalated',
-          aiState: 'needs_human',
-        });
-
-        const humanDecision = await this.aiDecisionRepo.create({
-          conversationId,
-          organizationId: orgId,
-          messageId: latestMessageRecord?.id ?? null,
-          decisionType: parsed.decision_type as 'respond' | 'escalate' | 'clarify',
-          confidence: parsed.confidence,
-          reasoningSummary: parsed.reasoning_summary,
-          responseText: parsed.response_text,
-          tags: parsed.tags,
-          requiresHuman: true,
-          rawResponse: parsed as unknown as Record<string, unknown>,
-        });
-        await enqueueChunkRefs(humanDecision.id);
-
-        await this.auditLog.create({
-          organizationId: orgId,
-          actorType: 'ai',
-          action: 'ai_decision_produced',
-          resourceType: 'ai_decision',
-          resourceId: humanDecision.id,
-          metadata: { decisionType: parsed.decision_type, requiresHuman: true },
-        });
-
-        return humanDecision;
-      }
-
-      if (aiMode === 'draft_only') {
-        // Store draft, don't send
-        await this.conversationRepo.update(conversationId, { aiState: 'drafted' });
-
-        const draftDecision = await this.aiDecisionRepo.create({
-          conversationId,
-          organizationId: orgId,
-          messageId: latestMessageRecord?.id ?? null,
-          decisionType: parsed.decision_type as 'respond' | 'escalate' | 'clarify',
-          confidence: parsed.confidence,
-          reasoningSummary: parsed.reasoning_summary,
-          responseText: parsed.response_text,
-          tags: parsed.tags,
-          requiresHuman: false,
-          rawResponse: parsed as unknown as Record<string, unknown>,
-        });
-        await enqueueChunkRefs(draftDecision.id);
-
-        await this.auditLog.create({
-          organizationId: orgId,
-          actorType: 'ai',
-          action: 'ai_decision_produced',
-          resourceType: 'ai_decision',
-          resourceId: draftDecision.id,
-          metadata: { decisionType: parsed.decision_type, mode: 'draft_only' },
-        });
-
-        return draftDecision;
-      }
-
-      if (aiMode === 'auto_reply') {
-        // Auto-send if confidence ≥ threshold and requires_human is false
-        if (parsed.confidence >= confidenceThreshold && !parsed.requires_human) {
-          // Auto-reply: enqueue outbound message job
-          await this.conversationRepo.update(conversationId, { aiState: 'auto_replied' });
-
-          const autoDecision = await this.aiDecisionRepo.create({
-            conversationId,
-            organizationId: orgId,
-            messageId: latestMessageRecord?.id ?? null,
-            decisionType: parsed.decision_type as 'respond' | 'escalate' | 'clarify',
-            confidence: parsed.confidence,
-            reasoningSummary: parsed.reasoning_summary,
-            responseText: parsed.response_text,
-            tags: parsed.tags,
-            requiresHuman: false,
-            rawResponse: parsed as unknown as Record<string, unknown>,
-          });
-          await enqueueChunkRefs(autoDecision.id);
-
-          await this.auditLog.create({
-            organizationId: orgId,
-            actorType: 'ai',
-            action: 'ai_decision_produced',
-            resourceType: 'ai_decision',
-            resourceId: autoDecision.id,
-            metadata: { decisionType: parsed.decision_type, mode: 'auto_reply', autoSent: true },
-          });
-
-          return autoDecision;
-        } else {
-          // Confidence below threshold in auto_reply mode — store as draft
-          await this.conversationRepo.update(conversationId, { aiState: 'drafted' });
-
-          const draftDecision = await this.aiDecisionRepo.create({
-            conversationId,
-            organizationId: orgId,
-            messageId: latestMessageRecord?.id ?? null,
-            decisionType: parsed.decision_type as 'respond' | 'escalate' | 'clarify',
-            confidence: parsed.confidence,
-            reasoningSummary: parsed.reasoning_summary,
-            responseText: parsed.response_text,
-            tags: parsed.tags,
-            requiresHuman: false,
-            rawResponse: parsed as unknown as Record<string, unknown>,
-          });
-          await enqueueChunkRefs(draftDecision.id);
-
-          await this.auditLog.create({
-            organizationId: orgId,
-            actorType: 'ai',
-            action: 'ai_decision_produced',
-            resourceType: 'ai_decision',
-            resourceId: draftDecision.id,
-            metadata: {
-              decisionType: parsed.decision_type,
-              mode: 'auto_reply',
-              autoSent: false,
-              reason: 'confidence_below_threshold',
-            },
-          });
-
-          return draftDecision;
-        }
-      }
-
-      // Fallback: store as draft
-      await this.conversationRepo.update(conversationId, { aiState: 'drafted' });
-
-      const fallbackDecision = await this.aiDecisionRepo.create({
-        conversationId,
-        organizationId: orgId,
-        messageId: latestMessageRecord?.id ?? null,
-        decisionType: parsed.decision_type as 'respond' | 'escalate' | 'clarify',
-        confidence: parsed.confidence,
-        reasoningSummary: parsed.reasoning_summary,
-        responseText: parsed.response_text,
-        tags: parsed.tags,
-        requiresHuman: false,
-        rawResponse: parsed as unknown as Record<string, unknown>,
-      });
-      await enqueueChunkRefs(fallbackDecision.id);
-
-      await this.auditLog.create({
-        organizationId: orgId,
-        actorType: 'ai',
-        action: 'ai_decision_produced',
-        resourceType: 'ai_decision',
-        resourceId: fallbackDecision.id,
-        metadata: { decisionType: parsed.decision_type },
-      });
-
-      return fallbackDecision;
     } catch (err) {
-      // LLM call failed — set ai_state to "failed"
       await this.conversationRepo.update(conversationId, { aiState: 'failed' });
 
       const errorMessage = err instanceof Error ? err.message : String(err);
-
       const failedDecision = await this.aiDecisionRepo.create({
         conversationId,
         organizationId: orgId,
@@ -555,6 +308,242 @@ export class AiAgentService {
 
       return failedDecision;
     }
+
+    const parseResult = parseAiDecision(llmResponse.content);
+
+    if (!parseResult.success) {
+      // LLM returned invalid JSON — set ai_state to "failed"
+      await this.conversationRepo.update(conversationId, { aiState: 'failed' });
+
+      const failedDecision = await this.aiDecisionRepo.create({
+        conversationId,
+        organizationId: orgId,
+        messageId: latestMessageRecord?.id ?? null,
+        decisionType: 'respond',
+        confidence: 0,
+        reasoningSummary: `AI response parsing failed: ${parseResult.error}`,
+        responseText: null,
+        tags: ['parse_error'],
+        requiresHuman: false,
+        rawResponse: { raw: llmResponse.content, error: parseResult.error },
+      });
+      await enqueueChunkRefs(failedDecision.id);
+
+      await this.auditLog.create({
+        organizationId: orgId,
+        actorType: 'ai',
+        action: 'ai_decision_produced',
+        resourceType: 'ai_decision',
+        resourceId: failedDecision.id,
+        metadata: { decisionType: 'respond', error: parseResult.error },
+      });
+
+      return failedDecision;
+    }
+
+    const parsed = parseResult.data;
+
+    // Check post-LLM low confidence escalation
+    const lowConfidenceRule = new LowConfidenceRule();
+    const lowConfResult = lowConfidenceRule.evaluateConfidence(
+      parsed.confidence,
+      confidenceThreshold,
+    );
+
+    if (
+      lowConfResult &&
+      parsed.decision_type !== 'escalate' &&
+      parsed.decision_type !== 'clarify'
+    ) {
+      // Low confidence — escalate
+      await this.conversationRepo.update(conversationId, {
+        status: 'escalated',
+        aiState: 'needs_human',
+      });
+
+      const lowConfDecision = await this.aiDecisionRepo.create({
+        conversationId,
+        organizationId: orgId,
+        messageId: latestMessageRecord?.id ?? null,
+        decisionType: 'escalate',
+        confidence: parsed.confidence,
+        reasoningSummary: `Low confidence (${parsed.confidence} < ${confidenceThreshold}): ${parsed.reasoning_summary}`,
+        responseText: parsed.response_text,
+        tags: [...parsed.tags, 'low_confidence'],
+        requiresHuman: true,
+        rawResponse: parsed as unknown as Record<string, unknown>,
+      });
+      await enqueueChunkRefs(lowConfDecision.id);
+
+      await this.auditLog.create({
+        organizationId: orgId,
+        actorType: 'ai',
+        action: 'ai_decision_produced',
+        resourceType: 'ai_decision',
+        resourceId: lowConfDecision.id,
+        metadata: { decisionType: 'escalate', reason: 'low_confidence' },
+      });
+
+      return lowConfDecision;
+    }
+
+    // 7. Handle mode gating
+    if (parsed.requires_human || parsed.decision_type === 'escalate') {
+      // LLM itself says escalation needed
+      await this.conversationRepo.update(conversationId, {
+        status: 'escalated',
+        aiState: 'needs_human',
+      });
+
+      const humanDecision = await this.aiDecisionRepo.create({
+        conversationId,
+        organizationId: orgId,
+        messageId: latestMessageRecord?.id ?? null,
+        decisionType: parsed.decision_type as 'respond' | 'escalate' | 'clarify',
+        confidence: parsed.confidence,
+        reasoningSummary: parsed.reasoning_summary,
+        responseText: parsed.response_text,
+        tags: parsed.tags,
+        requiresHuman: true,
+        rawResponse: parsed as unknown as Record<string, unknown>,
+      });
+      await enqueueChunkRefs(humanDecision.id);
+
+      await this.auditLog.create({
+        organizationId: orgId,
+        actorType: 'ai',
+        action: 'ai_decision_produced',
+        resourceType: 'ai_decision',
+        resourceId: humanDecision.id,
+        metadata: { decisionType: parsed.decision_type, requiresHuman: true },
+      });
+
+      return humanDecision;
+    }
+
+    if (aiMode === 'draft_only') {
+      // Store draft, don't send
+      await this.conversationRepo.update(conversationId, { aiState: 'drafted' });
+
+      const draftDecision = await this.aiDecisionRepo.create({
+        conversationId,
+        organizationId: orgId,
+        messageId: latestMessageRecord?.id ?? null,
+        decisionType: parsed.decision_type as 'respond' | 'escalate' | 'clarify',
+        confidence: parsed.confidence,
+        reasoningSummary: parsed.reasoning_summary,
+        responseText: parsed.response_text,
+        tags: parsed.tags,
+        requiresHuman: false,
+        rawResponse: parsed as unknown as Record<string, unknown>,
+      });
+      await enqueueChunkRefs(draftDecision.id);
+
+      await this.auditLog.create({
+        organizationId: orgId,
+        actorType: 'ai',
+        action: 'ai_decision_produced',
+        resourceType: 'ai_decision',
+        resourceId: draftDecision.id,
+        metadata: { decisionType: parsed.decision_type, mode: 'draft_only' },
+      });
+
+      return draftDecision;
+    }
+
+    if (aiMode === 'auto_reply') {
+      // Auto-send if confidence ≥ threshold and requires_human is false
+      if (parsed.confidence >= confidenceThreshold && !parsed.requires_human) {
+        // Auto-reply: enqueue outbound message job
+        await this.conversationRepo.update(conversationId, { aiState: 'auto_replied' });
+
+        const autoDecision = await this.aiDecisionRepo.create({
+          conversationId,
+          organizationId: orgId,
+          messageId: latestMessageRecord?.id ?? null,
+          decisionType: parsed.decision_type as 'respond' | 'escalate' | 'clarify',
+          confidence: parsed.confidence,
+          reasoningSummary: parsed.reasoning_summary,
+          responseText: parsed.response_text,
+          tags: parsed.tags,
+          requiresHuman: false,
+          rawResponse: parsed as unknown as Record<string, unknown>,
+        });
+        await enqueueChunkRefs(autoDecision.id);
+
+        await this.auditLog.create({
+          organizationId: orgId,
+          actorType: 'ai',
+          action: 'ai_decision_produced',
+          resourceType: 'ai_decision',
+          resourceId: autoDecision.id,
+          metadata: { decisionType: parsed.decision_type, mode: 'auto_reply', autoSent: true },
+        });
+
+        return autoDecision;
+      } else {
+        // Confidence below threshold in auto_reply mode — store as draft
+        await this.conversationRepo.update(conversationId, { aiState: 'drafted' });
+
+        const draftDecision = await this.aiDecisionRepo.create({
+          conversationId,
+          organizationId: orgId,
+          messageId: latestMessageRecord?.id ?? null,
+          decisionType: parsed.decision_type as 'respond' | 'escalate' | 'clarify',
+          confidence: parsed.confidence,
+          reasoningSummary: parsed.reasoning_summary,
+          responseText: parsed.response_text,
+          tags: parsed.tags,
+          requiresHuman: false,
+          rawResponse: parsed as unknown as Record<string, unknown>,
+        });
+        await enqueueChunkRefs(draftDecision.id);
+
+        await this.auditLog.create({
+          organizationId: orgId,
+          actorType: 'ai',
+          action: 'ai_decision_produced',
+          resourceType: 'ai_decision',
+          resourceId: draftDecision.id,
+          metadata: {
+            decisionType: parsed.decision_type,
+            mode: 'auto_reply',
+            autoSent: false,
+            reason: 'confidence_below_threshold',
+          },
+        });
+
+        return draftDecision;
+      }
+    }
+
+    // Fallback: store as draft
+    await this.conversationRepo.update(conversationId, { aiState: 'drafted' });
+
+    const fallbackDecision = await this.aiDecisionRepo.create({
+      conversationId,
+      organizationId: orgId,
+      messageId: latestMessageRecord?.id ?? null,
+      decisionType: parsed.decision_type as 'respond' | 'escalate' | 'clarify',
+      confidence: parsed.confidence,
+      reasoningSummary: parsed.reasoning_summary,
+      responseText: parsed.response_text,
+      tags: parsed.tags,
+      requiresHuman: false,
+      rawResponse: parsed as unknown as Record<string, unknown>,
+    });
+    await enqueueChunkRefs(fallbackDecision.id);
+
+    await this.auditLog.create({
+      organizationId: orgId,
+      actorType: 'ai',
+      action: 'ai_decision_produced',
+      resourceType: 'ai_decision',
+      resourceId: fallbackDecision.id,
+      metadata: { decisionType: parsed.decision_type },
+    });
+
+    return fallbackDecision;
   }
 
   // ─── Private Helpers ────────────────────────────────────────────────

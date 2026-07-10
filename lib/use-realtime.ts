@@ -29,9 +29,6 @@ interface UseRealtimeOptions {
 
 export function useRealtime(options: UseRealtimeOptions): void {
   const {
-    onNewMessage,
-    onConversationUpdated,
-    onKnowledgeDocumentUpdated,
     messageChannel,
     conversationChannel,
     enabled = true,
@@ -52,7 +49,7 @@ export function useRealtime(options: UseRealtimeOptions): void {
       try {
         await insforge.realtime.connect();
       } catch {
-        // Already connected — that's fine
+        // Already connected is benign; subscription failures below are reported.
       }
 
       if (disposed) return;
@@ -66,9 +63,26 @@ export function useRealtime(options: UseRealtimeOptions): void {
       );
 
       for (const channel of requestedChannels) {
-        const res = await insforge.realtime.subscribe(channel);
-        if (res.ok) {
-          channels.push(channel);
+        try {
+          const res = await insforge.realtime.subscribe(channel);
+          if (disposed) {
+            if (res.ok) {
+              insforge.realtime.unsubscribe(channel);
+            }
+            return;
+          }
+          if (res.ok) {
+            channels.push(channel);
+          } else {
+            console.warn(`useRealtime: failed to subscribe to ${channel}`);
+          }
+        } catch (err) {
+          if (!disposed) {
+            console.warn(
+              `useRealtime: subscribe threw for ${channel}`,
+              err instanceof Error ? err.message : String(err),
+            );
+          }
         }
       }
     }
@@ -91,7 +105,7 @@ export function useRealtime(options: UseRealtimeOptions): void {
     insforge.realtime.on('conversation_updated', handleConversationUpdated);
     insforge.realtime.on('knowledge_document_updated', handleKnowledgeDocumentUpdated);
 
-    setup();
+    void setup();
 
     return () => {
       disposed = true;

@@ -354,5 +354,36 @@ describe('RightPanel tab strip (M03 regression)', () => {
         options: { enabled: true },
       });
     });
+
+    it('keeps the audit tab loading while prerequisite IDs are loading', () => {
+      mocks.useAiDecisionsForConversation.mockReturnValue({
+        data: undefined,
+        isLoading: true,
+        error: null,
+      });
+
+      renderWithQueryClient(<AuditTab conversationId="c1" />);
+
+      expect(screen.getByLabelText('Loading audit events')).toBeInTheDocument();
+      expect(screen.queryByTestId('audit-tab-empty')).not.toBeInTheDocument();
+    });
+
+    it('surfaces prerequisite source errors', () => {
+      mocks.useInfiniteMessages.mockReturnValue({
+        items: [],
+        isInitialLoading: false,
+        isLoading: false,
+        isFetchingNextPage: false,
+        isFetchNextPageError: false,
+        hasNextPage: false,
+        fetchNextPage: vi.fn().mockResolvedValue(undefined),
+        error: new Error('messages unavailable'),
+      });
+
+      renderWithQueryClient(<AuditTab conversationId="c1" />);
+
+      expect(screen.getByRole('alert')).toHaveTextContent("Couldn't load audit events");
+      expect(screen.queryByTestId('audit-tab-empty')).not.toBeInTheDocument();
+    });
   });
 });

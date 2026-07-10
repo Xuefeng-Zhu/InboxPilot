@@ -11,14 +11,12 @@
 
 import type { ContactRepository } from '../repositories/contact-repository.js';
 import type { ConversationRepository } from '../repositories/conversation-repository.js';
-import type { WebchatWidgetRepository } from '../repositories/webchat-widget-repository.js';
 import type { WebchatThreadRepository } from '../repositories/webchat-thread-repository.js';
 import type { AuditLogRepository } from '../repositories/audit-log-repository.js';
 import type {
   Contact,
   Conversation,
   WebchatThread,
-  WebchatWidget,
 } from '../types/index.js';
 
 export interface InitThreadParams {
@@ -52,7 +50,6 @@ export class WebchatThreadService {
   constructor(
     private contactRepo: ContactRepository,
     private conversationRepo: ConversationRepository,
-    private widgetRepo: WebchatWidgetRepository,
     private threadRepo: WebchatThreadRepository,
     private auditLog: AuditLogRepository,
   ) {}

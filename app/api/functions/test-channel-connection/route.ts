@@ -32,6 +32,7 @@
  *   500: unexpected error
  */
 import { NextRequest, NextResponse } from 'next/server';
+import { readRequestJsonObject } from '@/lib/http-json';
 import { insforgeAdmin as insforge } from '@/lib/insforge-admin';
 import { getUserFromToken, userHasOrgPermission } from '../_auth';
 import { createProviderRegistry } from '@/lib/provider-registry';
@@ -57,10 +58,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const body = (await req.json().catch(() => ({}))) as {
-      channelType?: unknown;
-      providerAccountId?: unknown;
-    };
+    const body = await readRequestJsonObject(req);
+    if (!body) {
+      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+    }
     const channelType = body.channelType;
     const providerAccountId = body.providerAccountId;
     if (channelType !== 'sms' && channelType !== 'email') {

@@ -26,11 +26,11 @@ The inbound phone number is not registered in `sms_phone_numbers` (or for email,
 - Add the number/address in Settings → Channels, or
 - Insert directly: `INSERT INTO sms_phone_numbers (provider_account_id, organization_id, phone_number) VALUES (...)`.
 
-The function also accepts an `x-organization-id` header as an override, useful for tests.
+For real providers, the function derives the organization from the configured receiving number/address. The `x-organization-id` header is only a mock/local fallback when no receiving route exists.
 
 ### "Webhook signature verification failed"
 
-The `x-signing-secret` header doesn't match the provider's configured webhook secret. For local dev, use `x-provider: mock` — the mock adapter accepts any signature.
+The request signature does not match the stored provider credentials resolved through the receiving number/address or outbound message. For local dev, use `x-provider: mock` — the mock adapter accepts any signature.
 
 ### "Unknown SMS provider: <name>"
 

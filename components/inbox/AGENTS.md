@@ -13,7 +13,7 @@
 | `ConversationItem.tsx` | Single row in the conversation list (avatar, name, preview, time, status pill). |
 | `ConversationList.tsx` | The list itself, with virtualized scroll and selection. |
 | `CustomerSelector.tsx` | Combobox for switching the contact attached to a conversation. |
-| `InboxFilters.tsx` | Left-rail filters: status, channel, assigned_to, date range. (Plumbing TODO for URL params — see `Sidebar.tsx` TODO(3.2).) |
+| `InboxFilters.tsx` | Left-rail filters: status, channel, customer, and search; state is mirrored into `/inbox` URL params by `app/inbox/page.tsx`. |
 | `MessageBubble.tsx` | Single message in the thread (sender alignment, AI badge, delivery status). |
 | `MessageThread.tsx` | The thread itself, paginated with `useInfiniteMessages`. |
 | `ReplyComposer.tsx` | Bottom-of-thread composer: textarea + channel selector + send (calls `send-reply` API route). |
@@ -43,5 +43,5 @@
 - **No barrel file** — the only feature subdir without one.
 - **`AiDraftPanel` is the only consumer of `useAiDecision`** — AI state machine lives in the API routes.
 - **The 3-pane layout is the heart of the app** — changes here affect every agent workflow.
-- **`InboxFilters` has a TODO(3.2) for URL param plumbing** — currently the sidebar's `assigned_to` filter doesn't propagate to the inbox filters.
+- **`InboxFilters` URL state** is owned by `app/inbox/page.tsx` so deep links and back/forward navigation stay consistent.
 - **Virtualization** in `ConversationList` (assumes `react-virtual` or similar — check imports before adding new list items).

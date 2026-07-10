@@ -3,7 +3,7 @@
 **Always loaded** for any work on the Symphony view, the River visualization, or the inbox timeline feature.
 
 ## OVERVIEW
-**Alternate inbox view** — a horizontal "river" of conversation cards laid out on a time axis, with a minimap for navigation. Has its own 7 components, 5 tests, and a data hook (`useSymphony.ts`). Linked from `components/layout/Sidebar.tsx` (line 277-281). Symphony is partially documented: a reference page exists at `docs/reference/symphony.md`, but it is not in the root `README.md` or any `AGENTS.md` summary.
+**Alternate inbox view** — a horizontal "river" of conversation cards laid out on a time axis, with a minimap for navigation. Has its own 7 components, 6 tests, and a data hook (`useSymphony.ts`). Linked from `components/layout/Sidebar.tsx` (line 277-281). Symphony is partially documented: a reference page exists at `docs/reference/symphony.md`, but it is not in the root `README.md` or any `AGENTS.md` summary.
 
 **WARNING**: This is not in any documentation. If you find yourself needing to refactor or extend it, document the change here.
 
@@ -24,7 +24,7 @@ app/symphony/
 Supporting code (outside this dir):
 - `lib/queries/hooks/useSymphony.ts` — data hooks + window math + axis/pill helpers (the largest hook file in the project).
 - `lib/queries/keys.ts` — adds `'symphony-conversations'` and `'symphony-counts'` query keys.
-- `__tests__/symphony/River.test.tsx`, `MiniMap.test.tsx`, `RiverCard.test.tsx`, `RiverExpandedPanel.test.tsx`, `UseSymphonyCounts.test.ts` — 5 component/hook tests.
+- `__tests__/symphony/River.test.tsx`, `MiniMap.test.tsx`, `RiverCard.test.tsx`, `RiverExpandedPanel.test.tsx`, `UseSymphonyCounts.test.ts`, plus `__tests__/properties/symphony-window.property.test.ts` — component/hook coverage plus property tests for window/tick invariants.
 - `design-review/concept-04-symphony.html` — original design mockup.
 
 ## FEATURES
@@ -60,10 +60,10 @@ Supporting code (outside this dir):
 - **Largest data hook file:** `useSymphony.ts` carries both the queries AND the window/axis/pill math.
 - **Uses `useSearchParams` in a client component** — requires the `<Suspense>` boundary at the page level.
 - **Has its own design mockup** at `design-review/concept-04-symphony.html` (24.3 KB).
-- **Tests are component-level only** (`River.test.tsx`, `MiniMap.test.tsx`, `RiverCard.test.tsx`, `RiverExpandedPanel.test.tsx`, `UseSymphonyCounts.test.ts`) — no property tests.
+- **Tests include component coverage and property checks** for the window/tick helpers that drive the time axis.
 - **The "Now" pin on the time axis** (`TimeAxis.tsx`) is a distinctive UI element not seen elsewhere in the app.
 
-## TODO / KNOWN GAPS
+## KNOWN GAPS
 - Not in `README.md` or any `AGENTS.md` summary. A reference page exists at `docs/reference/symphony.md` and it is linked from `docs/README.md`.
-- No property-based tests (only 5 component/hook tests).
+- Property-based window/tick tests exist for deterministic helpers; broaden them if adding new zoom math.
 - The "old settings page" referenced elsewhere is not the Symphony; Symphony is a separate, fully-built feature.

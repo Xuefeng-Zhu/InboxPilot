@@ -13,6 +13,7 @@ export default defineConfig({
       'packages/support-core/__tests__/**/*.prop.test.ts',
       '__tests__/**/*.test.ts',
       '__tests__/**/*.test.tsx',
+      '__tests__/**/*.test.mjs',
       '__tests__/**/*.property.test.ts',
       '__tests__/**/*.property.test.tsx',
       '__tests__/**/*.prop.test.ts',

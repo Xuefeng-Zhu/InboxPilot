@@ -38,13 +38,12 @@ function mapRowToJob(row: Record<string, unknown>): Job {
  * When enqueuing, we check for an existing pending/claimed job with the same
  * job_type and matching values for these payload keys.
  */
-const IDEMPOTENCY_KEYS: Record<string, string[]> = {
+const IDEMPOTENCY_KEYS: Partial<Record<JobType, readonly string[]>> = {
   process_ai_message: ['conversationId', 'messageId'],
   process_knowledge_document: ['documentId'],
-  send_outbound_message: ['conversationId', 'messageId'],
+  send_outbound_message: ['conversationId', 'aiDecisionId'],
   process_delivery_status: ['externalMessageId'],
   record_chunk_refs: ['ai_decision_id'],
-  retry_failed_jobs: [],
 };
 
 export class PostgresJobQueue implements JobQueue {
@@ -61,7 +60,7 @@ export class PostgresJobQueue implements JobQueue {
     orgId: string,
   ): Promise<Job> {
     // Check for existing pending/claimed job with same type and key payload fields
-    const existingJob = await this.findExistingJob(jobType, payload);
+    const existingJob = await this.findExistingJob(jobType, payload, orgId);
     if (existingJob) {
       return existingJob;
     }
@@ -204,29 +203,35 @@ export class PostgresJobQueue implements JobQueue {
   private async findExistingJob(
     jobType: JobType,
     payload: Record<string, unknown>,
+    orgId: string,
   ): Promise<Job | null> {
-    const keys = IDEMPOTENCY_KEYS[jobType] ?? [];
+    const keys = IDEMPOTENCY_KEYS[jobType];
+    if (!keys || keys.length === 0) {
+      return null;
+    }
+
+    const missingKeys = keys.filter((key) => payload[key] === undefined);
+    if (missingKeys.length > 0) {
+      throw new Error(
+        `PostgresJobQueue.enqueue missing idempotency field(s) for ${jobType}: ${missingKeys.join(', ')}`,
+      );
+    }
 
     // Query for pending or claimed jobs of the same type
     let query = this.db
       .from('support_jobs')
       .select()
       .eq('job_type', jobType)
+      .eq('organization_id', orgId)
       .in('status', ['pending', 'claimed']);
 
     // For job types with idempotency keys, filter by matching payload fields
     // We use the contains operator to check that the payload contains the key fields
-    if (keys.length > 0) {
-      const keyPayload: Record<string, unknown> = {};
-      for (const key of keys) {
-        if (payload[key] !== undefined) {
-          keyPayload[key] = payload[key];
-        }
-      }
-      if (Object.keys(keyPayload).length > 0) {
-        query = query.contains('payload', keyPayload);
-      }
+    const keyPayload: Record<string, unknown> = {};
+    for (const key of keys) {
+      keyPayload[key] = payload[key];
     }
+    query = query.contains('payload', keyPayload);
 
     const { data, error } = await query.limit(1).maybeSingle();
 

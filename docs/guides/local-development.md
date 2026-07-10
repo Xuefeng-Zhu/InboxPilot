@@ -138,9 +138,9 @@ WHERE ai_state = 'thinking' AND last_message_at < now() - interval '5 minutes';
 | Symptom | Cause | Fix |
 |---|---|---|
 | "Could not determine organization for receiving phone number" | The receiving phone isn't in `sms_phone_numbers` | Add the number in Settings → SMS, or insert into `sms_phone_numbers` directly |
-| "Webhook signature verification failed" | The signing secret header doesn't match the provider's webhook secret | Use the `mock` provider for local dev (`x-provider: mock`); the mock accepts any signature |
+| "Webhook signature verification failed" | The request signature doesn't match the stored provider credentials resolved for that webhook | Use the `mock` provider for local dev (`x-provider: mock`); the mock accepts any signature |
 | AI processing fails immediately | OpenRouter key is missing or invalid | Set the key in the InsForge project's AI settings; check `ai_settings.model` is valid |
 | RLS blocks a query | The JWT doesn't have the right `sub` claim, or the user isn't a member of the target org | Verify the user's `organization_members` rows; the service role key bypasses RLS — use it for debugging, never in client code |
-| `claim_support_jobs` returns 0 jobs | All jobs are already `claimed` or `dead`, or `run_after` is in the future | The InsForge functions fire-and-forget POST to `/process-jobs`; if a job is stuck, manually POST `{}` to `/functions/v1/process-jobs` to flush |
+| `claim_support_jobs` returns 0 jobs | All jobs are already `claimed` or `dead`, or `run_after` is in the future | The scheduler normally calls `/process-jobs`; if a job is stuck, manually POST `{}` to `/functions/v1/process-jobs` to flush |
 
 See [`debugging.md`](debugging.md) for more.

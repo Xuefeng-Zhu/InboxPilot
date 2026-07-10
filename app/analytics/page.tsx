@@ -54,12 +54,7 @@ function formatDuration(ms: number | null): string {
   return `${hours.toFixed(1)}h`;
 }
 
-function formatPercent(rate: number | null): string {
-  if (rate === null) return '—';
-  return `${(rate * 100).toFixed(1)}%`;
-}
-
-function formatCsat(score: number | null): string {
+function formatRate(score: number | null): string {
   if (score === null) return '—';
   return `${(score * 100).toFixed(1)}%`;
 }
@@ -382,7 +377,7 @@ export default function AnalyticsPage() {
               />
               <StatCard
                 label="AI auto-reply rate"
-                value={formatCsat(refreshing ? null : (metrics?.aiAutoReplyRate ?? null))}
+                value={formatRate(refreshing ? null : (metrics?.aiAutoReplyRate ?? null))}
               />
               <StatCard
                 label="First response"
@@ -464,7 +459,7 @@ export default function AnalyticsPage() {
                 />
                 <StatCard
                   label="Resolution rate"
-                  value={formatCsat(refreshing ? null : (metrics?.resolutionRate ?? null))}
+                  value={formatRate(refreshing ? null : (metrics?.resolutionRate ?? null))}
                 />
                 <StatCard
                   label="Escalated"

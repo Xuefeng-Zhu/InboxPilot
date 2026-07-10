@@ -3,7 +3,7 @@
  * via the InsForge database RPC API.
  *
  * The native publisher is `realtime.publish(...)`, but the database RPC API
- * exposes public-schema functions only. Migration 014 creates a narrow
+ * exposes public-schema functions only. Migration 013 creates a narrow
  * `public.publish_realtime_message(...)` wrapper for server-side callers.
  */
 

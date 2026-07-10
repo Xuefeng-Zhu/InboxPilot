@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { Button } from '@/components/ui';
+import { readResponseJsonObject } from '@/lib/http-json';
 import { getAccessToken } from '@/lib/insforge';
 
 export interface RemovableMember {
@@ -42,8 +43,8 @@ export function RemoveMemberModal({ member, orgId, onClose, onRemoved }: RemoveM
       });
 
       if (!res.ok) {
-        const body = (await res.json().catch(() => ({}))) as { error?: string };
-        setError(body.error ?? `Failed (${res.status})`);
+        const body = await readResponseJsonObject(res, 'remove-member error');
+        setError(typeof body.error === 'string' ? body.error : `Failed (${res.status})`);
         return;
       }
 

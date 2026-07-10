@@ -18,6 +18,7 @@
  *  - records a 'webchat_widget_deleted' audit log entry (with the caller as actor)
  */
 import { NextRequest, NextResponse } from 'next/server';
+import { readRequestJsonObject } from '@/lib/http-json';
 import { getUserFromToken, userHasOrgPermission } from '../_auth';
 import { createInsforgeDbAdapter } from '../_insforge-db-adapter';
 import { WebchatWidgetService } from '@support-core/services/webchat-widget-service';
@@ -31,10 +32,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
     }
 
-    const { organizationId, widgetId } = (await req.json().catch(() => ({}))) as {
-      organizationId?: unknown;
-      widgetId?: unknown;
-    };
+    const requestBody = await readRequestJsonObject(req);
+    if (!requestBody) {
+      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+    }
+    const { organizationId, widgetId } = requestBody;
 
     if (typeof organizationId !== 'string' || typeof widgetId !== 'string') {
       return NextResponse.json(

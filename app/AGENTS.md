@@ -26,7 +26,7 @@
 |---|---|---|---|
 | `POST /api/functions/send-reply` | `{conversationId, body}` | `reply_conversations` | Insert outbound `messages`; for webchat, broadcast to `widget:{widgetId}:{jti}` |
 | `POST /api/functions/approve-ai-draft` | `{conversationId, aiDecisionId, body?}` | `reply_conversations` | Insert `messages` (sender_type=ai); `ai_state=idle`; broadcast if webchat; audit `ai_draft_approved` |
-| `POST /api/functions/regenerate-ai-draft` | `{conversationId}` | `reply_conversations` | `ai_state=thinking`; enqueue `process_ai_message`; fire-and-forget POST to `process-jobs` |
+| `POST /api/functions/regenerate-ai-draft` | `{conversationId}` | `reply_conversations` | `ai_state=thinking`; enqueue `process_ai_message`; best-effort awaited trigger to `process-jobs` |
 | `POST /api/functions/escalate-conversation` | `{conversationId}` | `reply_conversations` | `status=escalated, ai_state=needs_human` |
 | `POST /api/functions/resolve-conversation` | `{conversationId}` | `reply_conversations` | `status=resolved, ai_state=idle` |
 | `POST /api/functions/reopen-conversation` | `{conversationId}` | `reply_conversations` | `status=open, ai_state=idle` |

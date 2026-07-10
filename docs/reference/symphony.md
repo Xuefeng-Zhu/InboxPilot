@@ -49,7 +49,7 @@ Query keys are registered in `lib/queries/keys.ts` as `'symphony-conversations'`
 - `RiverExpandedPanel.test.tsx`
 - `UseSymphonyCounts.test.ts`
 
-All are component/hook-level — no property-based tests (see `app/symphony/AGENTS.md` TODO list).
+Property coverage for `computeSymphonyWindow` and `getAxisTicks` lives in `__tests__/properties/symphony-window.property.test.ts`.
 
 ## Linked from
 

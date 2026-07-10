@@ -21,6 +21,11 @@
 import { createDbClient } from '../_shared/create-db-client.ts';
 import { createRealtimePublisher } from '../_shared/create-realtime-publisher.ts';
 import { createProviderRegistry } from '../_shared/create-provider-registry.ts';
+import {
+  parseSmsWebhookBody,
+  requestHeadersToRecord,
+  resolveSmsInboundWebhookContext,
+} from '../_shared/webhook-credentials.ts';
 
 import { ContactRepository } from '../../../packages/support-core/src/repositories/contact-repository.ts';
 import { ConversationRepository } from '../../../packages/support-core/src/repositories/conversation-repository.ts';
@@ -30,7 +35,11 @@ import { InboundMessageService } from '../../../packages/support-core/src/servic
 
 import type { DatabaseClient } from '../../../packages/support-core/src/interfaces/database-client.ts';
 import type { JobQueue } from '../../../packages/support-core/src/interfaces/job-queue.ts';
-import type { Job, JobType } from '../../../packages/support-core/src/types/index.ts';
+import type {
+  Job,
+  JobType,
+  NormalizedInboundSms,
+} from '../../../packages/support-core/src/types/index.ts';
 
 // ---------------------------------------------------------------------------
 // Minimal JobQueue implementation backed by PostgREST
@@ -100,28 +109,6 @@ class PostgRestJobQueue implements JobQueue {
 }
 
 // ---------------------------------------------------------------------------
-// Helper: look up organization ID from the receiving phone number
-// ---------------------------------------------------------------------------
-
-async function lookupOrgByPhoneNumber(
-  db: DatabaseClient,
-  phoneNumber: string,
-): Promise<string | null> {
-  const { data, error } = await db
-    .from('sms_phone_numbers')
-    .select('organization_id')
-    .eq('phone_number', phoneNumber)
-    .limit(1)
-    .single();
-
-  if (error || !data) {
-    return null;
-  }
-
-  return (data as Record<string, unknown>).organization_id as string;
-}
-
-// ---------------------------------------------------------------------------
 // Helper: JSON response builder
 // ---------------------------------------------------------------------------
 
@@ -138,14 +125,8 @@ function jsonResponse(body: unknown, status = 200): Response {
 
 export default async function (req: Request): Promise<Response> {
   try {
-    // 1. Parse request body
+    // 1. Read request body
     const rawBody = await req.text();
-    let body: unknown;
-    try {
-      body = JSON.parse(rawBody);
-    } catch {
-      return jsonResponse({ error: 'Invalid JSON body' }, 400);
-    }
 
     // 2. Determine SMS provider from header (default: 'mock')
     const provider = req.headers.get('x-provider') ?? 'mock';
@@ -160,26 +141,24 @@ export default async function (req: Request): Promise<Response> {
       return jsonResponse({ error: `Unknown SMS provider: ${provider}` }, 400);
     }
 
-    // 4. Verify webhook signature
-    const signingSecret =
-      req.headers.get('x-signing-secret') ?? '';
-    const headers: Record<string, string> = {};
-    req.headers.forEach((value, key) => {
-      headers[key] = value;
-    });
-
-    const isValid = await adapter.verifyWebhook({
-      headers,
-      body: rawBody,
-      signingSecret,
-    });
-
-    if (!isValid) {
-      return jsonResponse({ error: 'Webhook signature verification failed' }, 401);
+    // 4. Parse body in the provider's native webhook shape.
+    let body: unknown;
+    try {
+      body = parseSmsWebhookBody(rawBody, provider);
+    } catch {
+      return jsonResponse({ error: 'Invalid webhook body' }, 400);
     }
 
     // 5. Parse and normalize inbound payload
-    const normalized = adapter.parseInboundWebhook(body);
+    let normalized: NormalizedInboundSms;
+    try {
+      normalized = adapter.parseInboundWebhook(body);
+    } catch (err) {
+      return jsonResponse(
+        { error: err instanceof Error ? err.message : 'Invalid SMS webhook payload' },
+        400,
+      );
+    }
 
     // 6. Create InsForge database client
     const baseUrl =
@@ -193,12 +172,33 @@ export default async function (req: Request): Promise<Response> {
 
     const db = createDbClient(baseUrl, serviceRoleKey);
 
-    // 7. Determine organization ID from the receiving phone number
-    let orgId = req.headers.get('x-organization-id') ?? null;
+    // 7. Resolve the trusted provider account and signing secret from storage.
+    const webhookContext = await resolveSmsInboundWebhookContext(
+      db,
+      provider,
+      normalized.to,
+      baseUrl,
+      serviceRoleKey,
+    );
 
-    if (!orgId) {
-      orgId = await lookupOrgByPhoneNumber(db, normalized.to);
+    if (!webhookContext && provider !== 'mock') {
+      return jsonResponse({ error: 'Webhook provider account not found' }, 401);
     }
+
+    // 8. Verify webhook signature
+    const isValid = await adapter.verifyWebhook({
+      headers: requestHeadersToRecord(req.headers),
+      body: rawBody,
+      signingSecret: webhookContext?.signingSecret ?? '',
+    });
+
+    if (!isValid) {
+      return jsonResponse({ error: 'Webhook signature verification failed' }, 401);
+    }
+
+    // 9. Determine organization ID from the trusted account context. The
+    // x-organization-id header remains a mock-only local development fallback.
+    const orgId = webhookContext?.organizationId ?? req.headers.get('x-organization-id');
 
     if (!orgId) {
       return jsonResponse(
@@ -207,7 +207,7 @@ export default async function (req: Request): Promise<Response> {
       );
     }
 
-    // 8. Create repositories and service
+    // 10. Create repositories and service
     const contactRepo = new ContactRepository(db);
     const conversationRepo = new ConversationRepository(db);
     const messageRepo = new MessageRepository(db);
@@ -222,21 +222,21 @@ export default async function (req: Request): Promise<Response> {
       auditLogRepo,
     );
 
-    // 9. Delegate to InboundMessageService
+    // 11. Delegate to InboundMessageService
     const message = await inboundService.processInboundSms(
       normalized,
       orgId,
       provider,
     );
 
-    // 10. Publish new_message realtime event
+    // 12. Publish new_message realtime event
     const realtimePublisher = createRealtimePublisher(baseUrl, serviceRoleKey);
     await realtimePublisher.publish(`org:${orgId}`, 'new_message', {
       message,
       conversationId: message.conversationId,
     });
 
-    // 11. The AI job is enqueued above. The `process-jobs` function picks it
+    // 13. The AI job is enqueued above. The `process-jobs` function picks it
     // up on its next cron tick (currently 10 seconds — see schedules in
     // InsForge dashboard). Function-to-function triggers within the same
     // Deno deployment are blocked by 508 LOOP_DETECTED, so a direct trigger
@@ -244,7 +244,7 @@ export default async function (req: Request): Promise<Response> {
     // was attempted but the `http` extension is unreliable in this project.
     // The 10s cron cadence is the practical equivalent of event-driven.
 
-    // 12. Return 200 OK with message data
+    // 14. Return 200 OK with message data
     return jsonResponse({ status: 'ok', data: message });
   } catch (err) {
     console.error('sms-inbound error:', err);

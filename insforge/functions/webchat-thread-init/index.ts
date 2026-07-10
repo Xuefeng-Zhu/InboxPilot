@@ -112,7 +112,6 @@ export default async function (req: Request): Promise<Response> {
     const threadService = new WebchatThreadService(
       contactRepo,
       conversationRepo,
-      widgetRepo,
       threadRepo,
       auditLogRepo,
     );

@@ -10,7 +10,7 @@
  * Convention: secret VALUES are JSON-encoded with provider-specific fields.
  *   - Twilio:    { accountSid: string, authToken: string }
  *   - Postmark:  { serverToken: string }
- *   - Telnyx:    { apiKey: string }
+ *   - Telnyx:    { apiKey: string, webhookPublicKey?: string, publicKey?: string }
  *
  * The Mock provider skips this lookup entirely: callers should short-circuit
  * and not call getSecret when the provider is 'mock' (no remote credentials

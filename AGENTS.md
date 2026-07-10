@@ -133,7 +133,7 @@ Next.js Client (agent actions)
 - **`app/symphony/` is built but undocumented** in `README.md` and the original AGENTS.md. Has its own 7 components, 3 tests, and a data hook (`useSymphony.ts`), linked from Sidebar. Treat as in-progress.
 - **`/team` page has unwired buttons** (Edit Role, Remove) — presentational only.
 - **The "old settings page" referenced in `/settings` placeholders (team/billing/audit) does not exist** — placeholder copy is stale.
-- **`TelnyxSmsAdapter.verifyWebhook` is a stub** (only checks header presence, not ed25519). Marked with TODO.
+- **`TelnyxSmsAdapter.verifyWebhook` verifies ed25519 signatures** using the configured Telnyx public key in `signingSecret` (hex/base64/base64url) and a 5-minute timestamp replay window.
 - **6 of 6 integration test files are 100% `it.todo` placeholders** (45 placeholders total) — they need a real InsForge DB; pass as "todo" without exercising code.
 - **`__tests__/middleware.test.ts` should be `__tests__/proxy.test.ts`** — Next.js 16 rename in flight.
 - **`proxy.ts` checks cookie PRESENCE only** (not JWT validity). Real auth boundary is in `app/api/functions/_auth.ts` and `insforge/functions/_shared/verify-jwt.ts`.

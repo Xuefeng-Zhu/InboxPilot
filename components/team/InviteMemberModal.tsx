@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { Button, Input, Select } from '@/components/ui';
+import { readResponseJsonObject } from '@/lib/http-json';
 import { getAccessToken } from '@/lib/insforge';
 import type { MemberRole } from '@support-core/types';
 
@@ -64,8 +65,8 @@ export function InviteMemberModal({ orgId, onClose, onInvited }: InviteMemberMod
       });
 
       if (!res.ok) {
-        const body = (await res.json().catch(() => ({}))) as { error?: string };
-        setError(body.error ?? `Failed (${res.status})`);
+        const body = await readResponseJsonObject(res, 'invite-member error');
+        setError(typeof body.error === 'string' ? body.error : `Failed (${res.status})`);
         return;
       }
 

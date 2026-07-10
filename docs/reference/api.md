@@ -45,9 +45,9 @@ These live in `insforge/functions/<name>/index.ts` and are deployed as Deno Func
 Handles inbound SMS webhooks from providers.
 
 - **Auth**: Webhook signature verification via the provider adapter.
-- **Headers required**: `x-provider` (default `mock`), `x-signing-secret` (provider webhook secret), `x-organization-id` (optional override).
+- **Headers required**: `x-provider` (default `mock`). Real providers resolve the signing secret from the configured phone number → provider account → `credentials_secret_id` path; never send provider secrets in request headers. `x-organization-id` is only a mock/local fallback when the receiving number is not configured.
 
-**Request body** (Twilio-shaped; normalized by the adapter):
+**Request body** (provider-shaped; normalized by the adapter):
 
 ```json
 {
@@ -76,16 +76,16 @@ Handles inbound SMS webhooks from providers.
 }
 ```
 
-**Side effects**: Creates/updates contact, creates/updates conversation, inserts message, enqueues `process_ai_message` job, writes `audit_logs` row (`action: 'message_received'`), publishes `new_message` on `org:{orgId}`, fire-and-forget POSTs to `/process-jobs` to start AI processing immediately.
+**Side effects**: Creates/updates contact, creates/updates conversation, inserts message, enqueues `process_ai_message` job, writes `audit_logs` row (`action: 'message_received'`), publishes `new_message` on `org:{orgId}`. AI processing is picked up by the scheduled `process-jobs` worker.
 
-**Error responses**: `400` (invalid JSON, unknown provider), `401` (signature verification failed), `404` (could not determine org for receiving phone number), `500`.
+**Error responses**: `400` (invalid webhook body, unknown provider), `401` (provider account not found or signature verification failed), `404` (could not determine org for receiving phone number), `500`.
 
 ### sms-status
 
 Tracks SMS delivery status updates from providers.
 
 - **Auth**: Webhook signature verification.
-- **Headers**: `x-provider`, `x-signing-secret`.
+- **Headers**: `x-provider`. The handler resolves the provider account from the stored outbound message before verifying the callback.
 
 **Request body** (provider-shaped; normalized by the adapter):
 
@@ -112,7 +112,7 @@ Tracks SMS delivery status updates from providers.
 Handles inbound email webhooks from providers.
 
 - **Auth**: Webhook signature verification.
-- **Headers**: `x-provider` (default `mock`), `x-signing-secret`, `x-organization-id` (optional).
+- **Headers**: `x-provider` (default `mock`). Real providers resolve the signing secret from the configured email address → provider account → `credentials_secret_id` path; never send provider secrets in request headers. `x-organization-id` is only a mock/local fallback when the receiving address is not configured.
 
 **Request body** (Postmark-shaped):
 
@@ -158,7 +158,7 @@ Claims and processes pending jobs from the queue. Designed to be called on a sch
 - **Auth**: None (uses service role key from env).
 - **Trigger**: Cron / scheduler / manual HTTP call.
 - **Method**: POST (no body required).
-- **Path**: `/functions/v1/process-jobs` (also invoked internally as a fire-and-forget from inbound functions).
+- **Path**: `/functions/v1/process-jobs` (invoked by the scheduler or manually; inbound functions only enqueue jobs).
 
 **Response (200):**
 
@@ -238,7 +238,7 @@ Handles inbound webchat messages from visitors.
 { "status": "ok", "data": { "message": { /* message row */ }, "conversationId": "uuid" } }
 ```
 
-**Side effects**: Updates `webchat_threads.last_seen_at` (and `page_url` if provided), inserts inbound message (`channel='webchat'`), enqueues `process_ai_message`, publishes `new_message` on `org:{orgId}`, fire-and-forget POSTs to `/process-jobs`, writes `audit_logs` row (`action: 'message_received'`).
+**Side effects**: Updates `webchat_threads.last_seen_at` (and `page_url` if provided), inserts inbound message (`channel='webchat'`), enqueues `process_ai_message`, publishes `new_message` on `org:{orgId}`, writes `audit_logs` row (`action: 'message_received'`). AI processing is picked up by the scheduled `process-jobs` worker.
 
 **Error responses**: `400` (missing `text`), `401` (invalid visitor JWT), `403` (widget inactive), `429` (rate limited), `405`.
 

@@ -30,6 +30,26 @@ interface PostgRestQueryState {
   returnRepresentation: boolean;
 }
 
+async function readJsonObjectBody(res: Response): Promise<Record<string, unknown>> {
+  const text = await res.text();
+  if (!text.trim()) {
+    return {};
+  }
+
+  try {
+    const parsed = JSON.parse(text);
+    return typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)
+      ? parsed as Record<string, unknown>
+      : {};
+  } catch (err) {
+    console.error(
+      `createDbClient: failed to parse error response JSON: ` +
+        `${err instanceof Error ? err.message : String(err)}`,
+    );
+    return {};
+  }
+}
+
 /**
  * A QueryBuilder implementation that accumulates query state and executes
  * against the InsForge PostgREST API when awaited (via .then()).
@@ -236,12 +256,12 @@ class PostgRestQueryBuilder implements QueryBuilder {
           return { data: null, error: null };
         }
 
-        const errorBody = await res.json().catch(() => ({}));
+        const errorBody = await readJsonObjectBody(res);
         const error: QueryError = {
-          message: (errorBody as Record<string, string>).message ?? `HTTP ${res.status}`,
-          code: (errorBody as Record<string, string>).code,
-          details: (errorBody as Record<string, string>).details,
-          hint: (errorBody as Record<string, string>).hint,
+          message: typeof errorBody.message === 'string' ? errorBody.message : `HTTP ${res.status}`,
+          code: typeof errorBody.code === 'string' ? errorBody.code : undefined,
+          details: typeof errorBody.details === 'string' ? errorBody.details : undefined,
+          hint: typeof errorBody.hint === 'string' ? errorBody.hint : undefined,
         };
         return { data: null, error };
       }
@@ -297,12 +317,12 @@ export function createDbClient(baseUrl: string, serviceRoleKey: string): Databas
         });
 
         if (!res.ok) {
-          const errorBody = await res.json().catch(() => ({}));
+          const errorBody = await readJsonObjectBody(res);
           return {
             data: null,
             error: {
               message:
-                (errorBody as Record<string, string>).message ??
+                (typeof errorBody.message === 'string' ? errorBody.message : undefined) ??
                 `RPC ${functionName} failed with HTTP ${res.status}`,
             },
           };

@@ -2,7 +2,15 @@
 
 import { Suspense, useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
+import { readResponseJsonObject } from '@/lib/http-json';
 import { useRealtime } from '@/lib/use-realtime';
+import { PreChatForm } from './PreChatForm';
+import {
+  getWidgetRealtimeChannel,
+  normalizeRealtimeMessage,
+  type ChatMessage,
+} from './chat-utils';
+import './wchat.css';
 
 /**
  * Widget iframe page — fully isolated (no app shell, no auth gate).
@@ -13,17 +21,6 @@ import { useRealtime } from '@/lib/use-realtime';
  */
 
 // ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-interface ChatMessage {
-  id: string;
-  body: string;
-  sender_type: 'contact' | 'user' | 'ai' | 'system';
-  created_at: string;
-}
-
-// ---------------------------------------------------------------------------
 // Realtime subscription is handled by `useRealtime` from lib/use-realtime.ts
 // (consumed in WidgetChatContent below). It uses the @insforge/sdk's
 // Socket.IO-based Realtime client — NOT a raw WebSocket. A raw WebSocket
@@ -31,50 +28,6 @@ interface ChatMessage {
 // engine.io/Socket.IO framing), so the wchat page would never receive any
 // agent/AI messages. The agent inbox uses the same hook on `org:${orgId}`.
 // ---------------------------------------------------------------------------
-
-// ---------------------------------------------------------------------------
-// Pre-chat form component
-// ---------------------------------------------------------------------------
-
-function PreChatForm({ color, onSubmit }: {
-  color: string;
-  onSubmit: (data: { name: string; email: string }) => void;
-}) {
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!email.trim()) return;
-    onSubmit({ name: name.trim(), email: email.trim() });
-  };
-
-  return (
-    <form onSubmit={handleSubmit} className="wchat-prechat-form">
-      <p className="wchat-prechat-title">Before we start, tell us about yourself:</p>
-      <input
-        type="text"
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        placeholder="Your name"
-        className="wchat-prechat-input"
-        aria-label="Your name"
-      />
-      <input
-        type="email"
-        value={email}
-        onChange={(e) => setEmail(e.target.value)}
-        placeholder="Your email *"
-        required
-        className="wchat-prechat-input"
-        aria-label="Your email"
-      />
-      <button type="submit" className="wchat-prechat-btn" style={{ background: color }}>
-        Start Chat
-      </button>
-    </form>
-  );
-}
 
 // ---------------------------------------------------------------------------
 // Main component
@@ -137,19 +90,7 @@ function WidgetChatContent() {
   // `widget_token` (e.g. `wt_abc123`), a different value from the internal
   // UUID, and would produce a channel that no broadcast ever targets.
   const realtimeChannel = useMemo(() => {
-    if (!visitorToken) return undefined;
-    try {
-      const parts = visitorToken.split('.');
-      if (parts.length !== 3) return undefined;
-      const payload = JSON.parse(
-        atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')),
-      ) as { widget?: unknown; jti?: unknown };
-      if (typeof payload.widget !== 'string' || !payload.widget) return undefined;
-      if (typeof payload.jti !== 'string' || !payload.jti) return undefined;
-      return `widget:${payload.widget}:${payload.jti}`;
-    } catch {
-      return undefined;
-    }
+    return visitorToken ? getWidgetRealtimeChannel(visitorToken) : undefined;
   }, [visitorToken]);
 
   // The InsForge SDK Realtime payload shape has been observed as
@@ -158,23 +99,13 @@ function WidgetChatContent() {
   // the payload itself as the message row.
   const onRealtime = useCallback(
     (payload: Record<string, unknown>) => {
-      const candidate =
-        payload.message && typeof payload.message === 'object'
-          ? (payload.message as Record<string, unknown>)
-          : payload;
-      if (typeof candidate.body !== 'string' || !candidate.body) return;
-      handleRealtimeMessage({
-        id:
-          (typeof candidate.id === 'string' ? candidate.id : undefined) ??
-          `rt_${Date.now()}`,
-        body: candidate.body,
-        sender_type:
-          (candidate.sender_type as ChatMessage['sender_type']) ??
-          (candidate.senderType as ChatMessage['sender_type']) ??
-          'user',
-        created_at:
-          (candidate.created_at as string) ?? new Date().toISOString(),
-      });
+      const timestamp = Date.now();
+      const message = normalizeRealtimeMessage(
+        payload,
+        `rt_${timestamp}`,
+        new Date(timestamp).toISOString(),
+      );
+      if (message) handleRealtimeMessage(message);
     },
     [handleRealtimeMessage],
   );
@@ -189,9 +120,15 @@ function WidgetChatContent() {
 
   // Fetch session info on mount
   useEffect(() => {
+    let cancelled = false;
+    const abortController = new AbortController();
+
     if (!visitorToken) {
       setError('Unable to initialize chat session. Please close and reopen the chat.');
-      return;
+      return () => {
+        cancelled = true;
+        abortController.abort();
+      };
     }
 
     async function loadSession() {
@@ -200,7 +137,10 @@ function WidgetChatContent() {
           method: 'GET',
           headers: { Authorization: `Bearer ${visitorToken}` },
           credentials: 'omit',
+          signal: abortController.signal,
         });
+        if (cancelled) return;
+
         if (res.status === 401) {
           // Token expired — notify parent to re-init
           window.parent.postMessage({ type: 'inboxpilot:auth_expired' }, '*');
@@ -208,12 +148,18 @@ function WidgetChatContent() {
         }
 
         if (!res.ok) {
-          const json = await res.json().catch(() => ({}));
-          setError((json as { error?: string }).error ?? 'Unable to load this chat session.');
+          const json = await readResponseJsonObject(res, 'webchat-session-info error');
+          if (cancelled) return;
+          setError(
+            typeof json.error === 'string'
+              ? json.error
+              : 'Unable to load this chat session.',
+          );
           return;
         }
 
         const json = await res.json();
+        if (cancelled) return;
         if (json.data?.history) {
           const history = json.data.history as ChatMessage[];
           history.forEach((m) => messageIdsRef.current.add(m.id));
@@ -228,12 +174,20 @@ function WidgetChatContent() {
           }
         }
         setSessionReady(true);
-      } catch {
+      } catch (err) {
+        if (
+          cancelled ||
+          (err instanceof DOMException && err.name === 'AbortError')
+        ) return;
         setError('Network error while loading chat. Please try again.');
       }
     }
 
-    loadSession();
+    void loadSession();
+    return () => {
+      cancelled = true;
+      abortController.abort();
+    };
   }, [visitorToken, searchParams]);
 
   // Read color from URL
@@ -259,19 +213,34 @@ function WidgetChatContent() {
         credentials: 'omit',
         body: JSON.stringify({ email: data.email, name: data.name }),
       });
-      if (res.ok) {
-        const json = await res.json();
-        if (json.data?.visitorToken) {
-          setVisitorToken(json.data.visitorToken);
-          // Notify parent of token rotation
-          window.parent.postMessage({
-            type: 'inboxpilot:token_rotated',
-            token: json.data.visitorToken,
-          }, '*');
-        }
+      if (!res.ok) {
+        const payload = await readResponseJsonObject(res, 'webchat-identify error');
+        setError(
+          typeof payload.error === 'string'
+            ? payload.error
+            : 'Unable to identify this chat visitor.',
+        );
+        return;
       }
-    } catch { /* identification is best-effort */ }
-    setShowPreChat(false);
+
+      const json = await res.json();
+      if (typeof json.data?.visitorToken !== 'string') {
+        setError('Unable to refresh this chat session.');
+        return;
+      }
+      setVisitorToken(json.data.visitorToken);
+      window.parent.postMessage({
+        type: 'inboxpilot:token_rotated',
+        token: json.data.visitorToken,
+      }, '*');
+      setShowPreChat(false);
+    } catch (err) {
+      console.warn(
+        'wchat: visitor identification failed',
+        err instanceof Error ? err.message : String(err),
+      );
+      setError('Network error while identifying this chat visitor.');
+    }
   };
 
   const handleSend = async () => {
@@ -312,8 +281,8 @@ function WidgetChatContent() {
       }
 
       if (!res.ok) {
-        const errBody = await res.json().catch(() => ({ error: 'Send failed' }));
-        setError(errBody.error ?? 'Send failed');
+        const errBody = await readResponseJsonObject(res, 'webchat-inbound error');
+        setError(typeof errBody.error === 'string' ? errBody.error : 'Send failed');
         messageIdsRef.current.delete(optimisticMsg.id);
         setMessages((prev) => prev.filter((m) => m.id !== optimisticMsg.id));
       }
@@ -328,30 +297,6 @@ function WidgetChatContent() {
 
   return (
     <>
-      <style>{`
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        .wchat-root { font-family: var(--font-inter), Inter, system-ui, -apple-system, sans-serif; height: 100vh; display: flex; flex-direction: column; background: var(--m03-bg); }
-        .wchat-header { padding: 12px 16px; border-bottom: 1px solid var(--m03-line); display: flex; align-items: center; gap: 8px; }
-        .wchat-header-dot { width: 8px; height: 8px; border-radius: 50%; }
-        .wchat-header-title { font-size: 14px; font-weight: 600; color: var(--m03-fg); }
-        .wchat-messages { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
-        .wchat-msg { max-width: 80%; padding: 8px 12px; border-radius: 8px; font-size: 14px; line-height: 1.4; word-wrap: break-word; }
-        .wchat-msg-contact { align-self: flex-end; background: var(--wchat-color); color: white; border-bottom-right-radius: 4px; }
-        .wchat-msg-other { align-self: flex-start; background: var(--m03-line-2); color: var(--m03-fg-2); border-bottom-left-radius: 4px; }
-        .wchat-msg-system { align-self: center; background: transparent; color: var(--m03-fg-3); font-size: 12px; font-style: italic; }
-        .wchat-composer { padding: 12px 16px; border-top: 1px solid var(--m03-line); display: flex; gap: 8px; }
-        .wchat-composer input { flex: 1; border: 1px solid var(--m03-line); border-radius: 6px; padding: 8px 12px; font-size: 14px; outline: none; }
-        .wchat-composer input:focus { border-color: var(--wchat-color); box-shadow: 0 0 0 2px color-mix(in srgb, var(--wchat-color) 20%, transparent); }
-        .wchat-composer button { background: var(--wchat-color); color: white; border: none; border-radius: 6px; width: 36px; height: 36px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
-        .wchat-composer button:disabled { opacity: 0.5; cursor: not-allowed; }
-        .wchat-error { padding: 8px 16px; background: var(--m03-bg); color: var(--m03-red); border-bottom: 1px solid var(--m03-red-line); font-size: 12px; text-align: center; }
-        .wchat-prechat-form { display: flex; flex-direction: column; gap: 12px; padding: 24px 16px; flex: 1; justify-content: center; }
-        .wchat-prechat-title { font-size: 14px; font-weight: 500; color: var(--m03-fg-2); text-align: center; margin-bottom: 4px; }
-        .wchat-prechat-input { border: 1px solid var(--m03-line); border-radius: 6px; padding: 10px 14px; font-size: 14px; outline: none; }
-        .wchat-prechat-input:focus { border-color: var(--wchat-color); box-shadow: 0 0 0 2px color-mix(in srgb, var(--wchat-color) 20%, transparent); }
-        .wchat-prechat-btn { border: none; border-radius: 6px; padding: 10px 16px; font-size: 14px; font-weight: 500; color: white; cursor: pointer; }
-        .wchat-prechat-btn:hover { opacity: 0.9; }
-      `}</style>
       <div className="wchat-root" style={{ '--wchat-color': color } as React.CSSProperties}>
         <div className="wchat-header">
           <span className="wchat-header-dot" style={{ backgroundColor: color }} />

@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { insforgeAdmin as insforge } from '@/lib/insforge-admin';
+import { publishRealtimeMessage } from '@/lib/realtime-publisher';
+import { assertInsforgeSuccess } from '@/lib/insforge-result';
 import { getUserFromToken, userHasOrgPermission } from '../_auth';
 
 export async function POST(req: NextRequest) {
@@ -75,10 +77,14 @@ export async function POST(req: NextRequest) {
     const message = Array.isArray(msg) ? msg[0] : msg;
 
     // Update conversation
-    await insforge.database
+    const conversationUpdateResult = await insforge.database
       .from('conversations')
       .update({ ai_state: 'idle', last_message_at: new Date().toISOString() })
       .eq('id', conversationId);
+    assertInsforgeSuccess(
+      conversationUpdateResult,
+      'approve-ai-draft failed to update conversation',
+    );
 
     // For webchat: publish to the visitor's realtime channel
     if (conversation.channel === 'webchat') {
@@ -90,27 +96,23 @@ export async function POST(req: NextRequest) {
 
       const thread = Array.isArray(threadData) ? threadData[0] : threadData;
       if (thread) {
-        const baseUrl = process.env.NEXT_PUBLIC_INSFORGE_URL ?? '';
-        const serviceRoleKey = process.env.INSFORGE_SERVICE_ROLE_KEY ?? '';
-
-        fetch(`${baseUrl}/api/database/rpc/publish_realtime_message`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            apikey: serviceRoleKey,
-            Authorization: `Bearer ${serviceRoleKey}`,
-          },
-          body: JSON.stringify({
-            p_channel_name: `widget:${thread.widget_id}:${thread.visitor_token_jti}`,
-            p_event_name: 'new_message',
-            p_payload: { message, conversationId },
-          }),
-        }).catch(() => { /* non-critical */ });
+        try {
+          await publishRealtimeMessage(
+            `widget:${thread.widget_id}:${thread.visitor_token_jti}`,
+            'new_message',
+            { message, conversationId },
+          );
+        } catch (err) {
+          console.warn(
+            'approve-ai-draft: failed to publish webchat realtime message',
+            err instanceof Error ? err.message : String(err),
+          );
+        }
       }
     }
 
     // Audit log
-    await insforge.database
+    const auditResult = await insforge.database
       .from('audit_logs')
       .insert([{
         organization_id: conversation.organization_id,
@@ -121,6 +123,7 @@ export async function POST(req: NextRequest) {
         resource_id: aiDecisionId,
         metadata: { conversationId, messageId: message?.id, body_preview: (bodyOverride ?? decision.response_text).slice(0, 200) },
       }]);
+    assertInsforgeSuccess(auditResult, 'approve-ai-draft failed to write audit log');
 
     return NextResponse.json({ status: 'ok', data: { message } });
   } catch (err) {

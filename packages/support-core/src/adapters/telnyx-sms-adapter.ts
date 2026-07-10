@@ -4,10 +4,9 @@
  * Implements the full SmsProviderAdapter interface for Telnyx without
  * depending on the Telnyx SDK. Uses native `fetch` for HTTP calls.
  *
- * Telnyx uses ed25519 signature verification for webhooks. For simplicity,
- * this implementation performs a basic check that the signature header exists
- * and is non-empty. A full ed25519 verification would require the Telnyx
- * public key.
+ * Telnyx uses ed25519 signature verification for webhooks. The adapter treats
+ * `WebhookVerificationRequest.signingSecret` as the configured Telnyx public
+ * key, encoded as hex or base64/base64url.
  */
 
 import type { SmsProviderAdapter } from '../interfaces/sms-provider-adapter.js';
@@ -19,6 +18,81 @@ import type {
   WebhookVerificationRequest,
   DeliveryStatus,
 } from '../types/index.js';
+
+const WEBHOOK_TIMESTAMP_TOLERANCE_SECONDS = 5 * 60;
+
+function getHeader(headers: Record<string, string>, name: string): string | undefined {
+  const wanted = name.toLowerCase();
+  for (const [key, value] of Object.entries(headers)) {
+    if (key.toLowerCase() === wanted) {
+      return value;
+    }
+  }
+  return undefined;
+}
+
+function bodyToString(body: string | Buffer): string {
+  if (typeof body === 'string') {
+    return body;
+  }
+  return new TextDecoder().decode(body);
+}
+
+function decodeHex(value: string): Uint8Array | null {
+  if (!/^[0-9a-fA-F]+$/.test(value) || value.length % 2 !== 0) {
+    return null;
+  }
+
+  const bytes = new Uint8Array(value.length / 2);
+  for (let i = 0; i < value.length; i += 2) {
+    bytes[i / 2] = Number.parseInt(value.slice(i, i + 2), 16);
+  }
+  return bytes;
+}
+
+function decodeBase64(value: string): Uint8Array | null {
+  const normalized = value.replace(/-/g, '+').replace(/_/g, '/');
+  const padded = normalized.padEnd(normalized.length + ((4 - (normalized.length % 4)) % 4), '=');
+
+  try {
+    if (typeof atob === 'function') {
+      const binary = atob(padded);
+      return Uint8Array.from(binary, (char) => char.charCodeAt(0));
+    }
+
+    const maybeBuffer = (globalThis as { Buffer?: { from(input: string, encoding: 'base64'): Uint8Array } }).Buffer;
+    return maybeBuffer?.from(padded, 'base64') ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function decodeKeyOrSignature(value: string): Uint8Array | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+
+  return decodeHex(trimmed) ?? decodeBase64(trimmed);
+}
+
+function bytesToArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  const buffer = new ArrayBuffer(bytes.byteLength);
+  new Uint8Array(buffer).set(bytes);
+  return buffer;
+}
+
+function isTimestampFresh(timestamp: string): boolean {
+  if (!/^\d+$/.test(timestamp)) {
+    return false;
+  }
+
+  const timestampSeconds = Number(timestamp);
+  if (!Number.isSafeInteger(timestampSeconds)) {
+    return false;
+  }
+
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  return Math.abs(nowSeconds - timestampSeconds) <= WEBHOOK_TIMESTAMP_TOLERANCE_SECONDS;
+}
 
 /**
  * Map Telnyx status values to our normalized DeliveryStatus.
@@ -243,39 +317,49 @@ export class TelnyxSmsAdapter implements SmsProviderAdapter {
   /**
    * Verify the authenticity of a Telnyx webhook request.
    *
-   * Telnyx uses ed25519 signature verification. The signature is in the
-   * `telnyx-signature-ed25519` header and the timestamp in `telnyx-timestamp`.
-   *
-   * TODO: Implement full ed25519 signature verification using the Telnyx
-   * public key. This requires fetching the public key from Telnyx's API
-   * or configuring it in the provider settings. For now, we perform a
-   * basic check that the required headers exist and are non-empty.
+   * Telnyx signs the raw request body together with the timestamp. Configure
+   * the Telnyx public key as this adapter's `signingSecret`.
    */
   async verifyWebhook(req: WebhookVerificationRequest): Promise<boolean> {
-    const signature =
-      req.headers['telnyx-signature-ed25519'] || req.headers['Telnyx-Signature-Ed25519'];
-    const timestamp =
-      req.headers['telnyx-timestamp'] || req.headers['Telnyx-Timestamp'];
+    const signature = getHeader(req.headers, 'telnyx-signature-ed25519');
+    const timestamp = getHeader(req.headers, 'telnyx-timestamp');
 
     if (!signature || !timestamp) {
       return false;
     }
 
-    // Basic validation: ensure the signature and timestamp are non-empty strings
-    if (typeof signature !== 'string' || signature.trim() === '') {
+    if (!isTimestampFresh(timestamp.trim())) {
       return false;
     }
 
-    if (typeof timestamp !== 'string' || timestamp.trim() === '') {
+    const signatureBytes = decodeKeyOrSignature(signature);
+    const publicKeyBytes = decodeKeyOrSignature(req.signingSecret);
+    if (!signatureBytes || !publicKeyBytes || publicKeyBytes.length !== 32) {
       return false;
     }
 
-    // TODO: Full ed25519 verification would:
-    // 1. Concatenate timestamp + body
-    // 2. Verify the ed25519 signature against the Telnyx public key
-    // 3. Check that the timestamp is within an acceptable window
-    // For now, the presence of valid headers is sufficient.
+    const cryptoApi = globalThis.crypto?.subtle;
+    if (!cryptoApi) {
+      return false;
+    }
 
-    return true;
+    try {
+      const publicKey = await cryptoApi.importKey(
+        'raw',
+        bytesToArrayBuffer(publicKeyBytes),
+        { name: 'Ed25519' },
+        false,
+        ['verify'],
+      );
+      const signedPayload = `${timestamp.trim()}|${bodyToString(req.body)}`;
+      return await cryptoApi.verify(
+        { name: 'Ed25519' },
+        publicKey,
+        bytesToArrayBuffer(signatureBytes),
+        new TextEncoder().encode(signedPayload),
+      );
+    } catch {
+      return false;
+    }
   }
 }

@@ -6,7 +6,8 @@
  *
  * Webhook verification: Postmark doesn't use HMAC signatures by default.
  * We verify by checking for a `x-postmark-server-token` header matching
- * the configured token. TODO: Add IP-based verification for production.
+ * the configured token. Source-IP allowlisting belongs at the route/proxy
+ * boundary because this portable adapter receives only headers/body/token.
  */
 
 import { timingSafeEqual } from 'crypto';
@@ -205,8 +206,8 @@ export class PostmarkEmailAdapter implements EmailProviderAdapter {
    *
    * Postmark doesn't use HMAC signatures by default. We verify by checking
    * for a `x-postmark-server-token` header matching the configured token.
-   *
-   * TODO: Add IP-based verification for production environments.
+   * Source-IP allowlisting, if enabled, should run before this adapter at the
+   * HTTP route/proxy boundary where the trusted client IP is available.
    */
   async verifyWebhook(req: WebhookVerificationRequest): Promise<boolean> {
     const token =

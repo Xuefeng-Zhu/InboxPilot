@@ -19,6 +19,7 @@
  * to name-only profiles — the team page still renders, just without emails.
  */
 import { NextRequest, NextResponse } from 'next/server';
+import { readRequestJsonObject } from '@/lib/http-json';
 import { getUserFromToken, userHasOrgPermission } from '../_auth';
 import { insforgeAdmin } from '@/lib/insforge-admin';
 
@@ -48,7 +49,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
     }
 
-    const body = (await req.json().catch(() => ({}))) as { organizationId?: unknown };
+    const body = await readRequestJsonObject(req);
+    if (!body) {
+      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+    }
     const organizationId = body.organizationId;
     if (typeof organizationId !== 'string' || !organizationId) {
       return NextResponse.json(

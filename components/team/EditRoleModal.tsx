@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { Button, Select } from '@/components/ui';
+import { readResponseJsonObject } from '@/lib/http-json';
 import { getAccessToken } from '@/lib/insforge';
 import type { MemberRole } from '@support-core/types';
 
@@ -77,8 +78,8 @@ export function EditRoleModal({
       });
 
       if (!res.ok) {
-        const body = (await res.json().catch(() => ({}))) as { error?: string };
-        setError(body.error ?? `Failed (${res.status})`);
+        const body = await readResponseJsonObject(res, 'change-member-role error');
+        setError(typeof body.error === 'string' ? body.error : `Failed (${res.status})`);
         return;
       }
 

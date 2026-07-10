@@ -13,6 +13,7 @@
 
 import { createDbClient } from '../_shared/create-db-client.ts';
 import { createRealtimePublisher } from '../_shared/create-realtime-publisher.ts';
+import { publishRealtimeBestEffort } from '../_shared/publish-realtime-best-effort.ts';
 import { createProviderRegistry } from '../_shared/create-provider-registry.ts';
 import { getSecret } from '../_shared/insforge-secrets.ts';
 import { PostgresJobQueue } from '../../../packages/support-core/src/services/postgres-job-queue.ts';
@@ -61,11 +62,11 @@ function getBaseUrl(): string | undefined {
   return getRuntimeEnv('INSFORGE_BASE_URL');
 }
 
-function getServiceRoleKey(req: Request): string | null {
+function getServiceRoleKey(): string | null {
   return getRuntimeEnv('INSFORGE_SERVICE_ROLE_KEY') ??
     getRuntimeEnv('SERVICE_ROLE_KEY') ??
     getRuntimeEnv('API_KEY') ??
-    req.headers.get('apikey');
+    null;
 }
 
 // ---------------------------------------------------------------------------
@@ -203,14 +204,13 @@ function buildJobHandlers(
       conversationId, body, null, providerConfig, { writeAuditLog: false },
     );
 
-    try {
-      await db.from('messages')
-        .update({ sender_type: 'ai', sender_id: null })
-        .eq('id', message.id);
-    } catch (err) {
+    const { error: senderPatchError } = await db.from('messages')
+      .update({ sender_type: 'ai', sender_id: null })
+      .eq('id', message.id);
+    if (senderPatchError) {
       console.error(
         `sendAutoReply: failed to patch sender_type=ai on message ${message.id}: ` +
-          (err instanceof Error ? err.message : String(err)),
+          senderPatchError.message,
       );
     }
 
@@ -240,32 +240,38 @@ function buildJobHandlers(
     if (conversation.channel === 'webchat') {
       const thread = await webchatThreadRepo.findByConversationId(conversation.id);
       if (thread) {
-        try {
-          await realtime.publish(
-            `widget:${thread.widgetId}:${thread.visitorTokenJti}`,
-            'new_message',
-            { message: correctedMessage, conversationId: correctedMessage.conversationId },
-          );
-        } catch (err) {
-          console.error(
-            `sendAutoReply: failed to publish webchat realtime for message ${message.id}: ` +
-              (err instanceof Error ? err.message : String(err)),
-          );
-        }
+        await publishRealtimeBestEffort(
+          realtime,
+          `widget:${thread.widgetId}:${thread.visitorTokenJti}`,
+          'new_message',
+          { message: correctedMessage, conversationId: correctedMessage.conversationId },
+          `sendAutoReply message ${message.id}`,
+        );
       }
     }
 
-    await realtime.publish(`org:${conversation.organizationId}`, 'new_message', {
-      message: correctedMessage,
-      conversationId: correctedMessage.conversationId,
-    });
+    await publishRealtimeBestEffort(
+      realtime,
+      `org:${conversation.organizationId}`,
+      'new_message',
+      {
+        message: correctedMessage,
+        conversationId: correctedMessage.conversationId,
+      },
+      `sendAutoReply message ${message.id}`,
+    );
 
     if (aiDecisionId) {
       try {
         await aiDecisionRepo.update(aiDecisionId, {
           metadata: { autoSent: true, sentAt: new Date().toISOString() },
         });
-      } catch { /* non-critical */ }
+      } catch (err) {
+        console.error(
+          `sendAutoReply: failed to update AI decision ${aiDecisionId} metadata after sending ` +
+            `message ${message.id}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
     }
   }
 
@@ -308,10 +314,10 @@ function buildJobHandlers(
             await jobQueue.enqueue(
               'send_outbound_message',
               {
-                conversation_id: conversationId,
+                conversationId,
                 body: decision.responseText,
-                sender_type: 'ai',
-                ai_decision_id: decision.id,
+                senderType: 'ai',
+                aiDecisionId: decision.id,
               },
               orgId,
             );
@@ -319,11 +325,17 @@ function buildJobHandlers(
         }
       }
 
-      await realtime.publish(`org:${orgId}`, 'conversation_updated', {
-        conversationId,
-        aiDecisionId: decision.id,
-        decisionType: decision.decisionType,
-      });
+      await publishRealtimeBestEffort(
+        realtime,
+        `org:${orgId}`,
+        'conversation_updated',
+        {
+          conversationId,
+          aiDecisionId: decision.id,
+          decisionType: decision.decisionType,
+        },
+        `process_ai_message job ${job.id}`,
+      );
     },
 
     async process_knowledge_document(job: Job) {
@@ -341,10 +353,13 @@ function buildJobHandlers(
 
       await ingestionService.processDocument(documentId);
 
-      await realtime.publish(`org:${orgId}`, 'knowledge_document_updated', {
-        documentId,
-        status: 'ready',
-      });
+      await publishRealtimeBestEffort(
+        realtime,
+        `org:${orgId}`,
+        'knowledge_document_updated',
+        { documentId, status: 'ready' },
+        `process_knowledge_document job ${job.id}`,
+      );
     },
 
     async send_outbound_message(job: Job) {
@@ -353,7 +368,9 @@ function buildJobHandlers(
       // fallback enqueue there, or any externally-enqueued send_outbound_message jobs.
       const conversationId = (job.payload.conversation_id ?? job.payload.conversationId) as string;
       const body = (job.payload.body as string) ?? '';
-      const aiDecisionId = (job.payload.ai_decision_id as string) ?? null;
+      const aiDecisionId = (
+        job.payload.aiDecisionId ?? job.payload.ai_decision_id
+      ) as string | null;
       if (!conversationId || !body) {
         throw new Error('send_outbound_message: missing conversation_id or body');
       }
@@ -365,11 +382,11 @@ function buildJobHandlers(
       // Delivery status is processed synchronously by the sms-status and
       // email-status function entrypoints. This job type is reserved for
       // async retry of failed status processing.
-      // TODO: Wire DeliveryStatusService for async retries.
+      throw new Error('process_delivery_status retry handler is not implemented');
     },
 
     async retry_failed_jobs(_job: Job) {
-      // TODO: Implement retry logic — re-enqueue failed jobs as pending.
+      throw new Error('retry_failed_jobs handler is not implemented');
     },
 
     async record_chunk_refs(job: Job) {
@@ -429,7 +446,7 @@ function buildJobHandlers(
 export default async function (_req: Request): Promise<Response> {
   try {
     const baseUrl = getBaseUrl();
-    const serviceRoleKey = getServiceRoleKey(_req);
+    const serviceRoleKey = getServiceRoleKey();
 
     if (!baseUrl || !serviceRoleKey) {
       return new Response(

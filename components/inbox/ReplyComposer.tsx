@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { readResponseJsonObject } from '@/lib/http-json';
 import { getAccessToken } from '@/lib/insforge';
 import { queryKeys, MESSAGE_PAGE_SIZE } from '@/lib/queries/keys';
 
@@ -45,8 +46,8 @@ export function ReplyComposer({
         body: JSON.stringify({ conversationId, body: trimmedBody }),
       });
       if (!res.ok) {
-        const data = (await res.json().catch(() => ({}))) as Record<string, string>;
-        throw new Error(data.error ?? 'Failed to send reply');
+        const data = await readResponseJsonObject(res, 'send-reply error');
+        throw new Error(typeof data.error === 'string' ? data.error : 'Failed to send reply');
       }
       return res.json();
     },

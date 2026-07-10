@@ -13,7 +13,6 @@ import { handleCorsPreFlight, corsJsonResponse } from '../_shared/cors.ts';
 import { ContactRepository } from '../../../packages/support-core/src/repositories/contact-repository.ts';
 import { ConversationRepository } from '../../../packages/support-core/src/repositories/conversation-repository.ts';
 import { AuditLogRepository } from '../../../packages/support-core/src/repositories/audit-log-repository.ts';
-import { WebchatWidgetRepository } from '../../../packages/support-core/src/repositories/webchat-widget-repository.ts';
 import { WebchatThreadRepository } from '../../../packages/support-core/src/repositories/webchat-thread-repository.ts';
 import { WebchatThreadService } from '../../../packages/support-core/src/services/webchat-thread-service.ts';
 
@@ -63,14 +62,12 @@ export default async function (req: Request): Promise<Response> {
     // 4. Identify thread
     const contactRepo = new ContactRepository(db);
     const conversationRepo = new ConversationRepository(db);
-    const widgetRepo = new WebchatWidgetRepository(db);
     const threadRepo = new WebchatThreadRepository(db);
     const auditLogRepo = new AuditLogRepository(db);
 
     const threadService = new WebchatThreadService(
       contactRepo,
       conversationRepo,
-      widgetRepo,
       threadRepo,
       auditLogRepo,
     );

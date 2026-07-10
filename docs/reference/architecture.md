@@ -112,15 +112,15 @@ sequenceDiagram
   participant DB as Postgres
   participant RT as Realtime
 
-  Provider->>Func: POST webhook<br/>(x-provider, x-signing-secret)
-  Func->>Func: Parse JSON, look up adapter
+  Provider->>Func: POST webhook<br/>(x-provider)
+  Func->>Func: Parse provider body, look up adapter
   Func->>Reg: getSmsAdapter(provider)
   Reg-->>Func: SmsProviderAdapter
-  Func->>Func: verifyWebhook(headers, body, secret)
   Func->>Reg: parseInboundWebhook(body)
   Reg-->>Func: NormalizedInboundSms
-  Func->>DB: lookup org by receiving phone
-  DB-->>Func: orgId
+  Func->>DB: lookup provider account by receiving phone
+  DB-->>Func: orgId + credentials_secret_id
+  Func->>Func: load secret and verifyWebhook(headers, body, secret)
   Func->>IMS: processInboundSms(normalized, orgId, provider)
   IMS->>DB: dedup check (provider, externalMessageId)
   IMS->>DB: find-or-create contact
@@ -131,7 +131,7 @@ sequenceDiagram
   IMS->>DB: insert audit_log (message_received)
   IMS-->>Func: message
   Func->>RT: publish org:{orgId} new_message
-  Func->>Func: fire-and-forget POST /process-jobs
+  Note over Func,DB: process-jobs scheduler claims the queued job
   Func-->>Provider: 200 OK { data: message }
 ```
 

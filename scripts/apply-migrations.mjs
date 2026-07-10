@@ -22,9 +22,9 @@
 // a secrets store. The `npx @insforge/cli db connection-string` command
 // prints the URL once you are authenticated.
 //
-// TODO: Once the InsForge CLI's `db migrations up` command correctly reloads
-// the PostgREST cache and handles multi-statement PL/pgSQL bodies, this
-// script becomes a stopgap.
+// Stopgap note: once the InsForge CLI's `db migrations up` command correctly
+// reloads the PostgREST cache and handles multi-statement PL/pgSQL bodies,
+// this script can be retired.
 
 import { Client } from 'pg';
 import { readFileSync } from 'fs';

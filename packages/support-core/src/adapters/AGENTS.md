@@ -7,7 +7,7 @@ Provider integrations. **All adapters are stateless** — no constructor params,
 ### SMS — Real
 - `MockSmsAdapter` — `providerId: 'mock'`, in-memory, deterministic `mock_sms_N` IDs, `sentMessages` getter, `clear()`.
 - `TwilioSmsAdapter` — `providerId: 'twilio'`, HMAC-SHA1 webhook verification (timing-safe compare), Twilio REST `/Messages.json`.
-- `TelnyxSmsAdapter` — `providerId: 'telnyx'`, Bearer-token auth, **ed25519 verification is a stub** (header-presence check only — TODO for full crypto).
+- `TelnyxSmsAdapter` — `providerId: 'telnyx'`, Bearer-token auth, ed25519 webhook verification using the configured public key in `signingSecret` plus a 5-minute timestamp replay window.
 
 ### SMS — Stubs (throw "not implemented")
 - `BandwidthSmsAdapter` (`'bandwidth'`)
@@ -47,4 +47,4 @@ Provider integrations. **All adapters are stateless** — no constructor params,
 ## UNIQUE
 - `MockSmsAdapter` and `MockEmailAdapter` are used both in dev (driven by `scripts/mock-sms.mjs`) AND in tests as real test doubles (not mocked).
 - The 8 stubs are a deliberate "registry completeness" trick: the `ProviderRegistry` lists 13 providers total (5 real + 8 stubs), so the type system enforces "all known providers have an entry" without forcing the impl.
-- `Telnyx` ed25519 is the only known stub that affects production (header-presence check ≠ real verification).
+- `Telnyx` ed25519 verification depends on `signingSecret` carrying the Telnyx public key (hex/base64/base64url), not an HMAC secret.

@@ -31,7 +31,7 @@ export interface FileContentFetcher {
    * Implementations should handle PDF, TXT, MD, CSV, and DOCX extraction.
    * Returns the extracted plain text.
    */
-  fetchTextContent(url: string, fileName: string): Promise<string>;
+  fetchTextContent(url: string, fileName: string, fileKey?: string | null): Promise<string>;
 }
 
 export class KnowledgeIngestionService {
@@ -67,6 +67,7 @@ export class KnowledgeIngestionService {
           const fileContent = await this.fileFetcher.fetchTextContent(
             document.fileUrl,
             document.fileName,
+            document.fileKey,
           );
           if (fileContent.trim()) {
             // Append file content after body, separated by double newline

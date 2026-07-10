@@ -1,6 +1,6 @@
 # API Reference
 
-> Two parallel surfaces: **9 InsForge Deno Functions** (webhooks + scheduled jobs) and **7 Next.js API Routes** under `/api/functions/*` (InsForge-verified, RBAC-checked frontend actions).
+> Two parallel surfaces: **9 InsForge Deno Functions** (webhooks + scheduled jobs) and **12 Next.js API Routes** under `/api/functions/*` (InsForge-verified, RBAC-checked frontend actions).
 
 ## Overview
 
@@ -9,7 +9,7 @@ InboxPilot exposes two distinct HTTP surfaces. The split is deliberate: webhook 
 | Surface | Where | Count | Auth |
 |---|---|---|---|
 | **InsForge Deno Functions** | `insforge/functions/*/index.ts` | 9 | Webhook signature, Visitor JWT, or none (internal) |
-| **Next.js API Routes** | `app/api/functions/*/route.ts` | 7 | InsForge session verification + org RBAC |
+| **Next.js API Routes** | `app/api/functions/*/route.ts` | 12 | InsForge session verification + org RBAC |
 
 All response bodies are JSON. Errors use this shape:
 
@@ -45,7 +45,7 @@ These live in `insforge/functions/<name>/index.ts` and are deployed as Deno Func
 Handles inbound SMS webhooks from providers.
 
 - **Auth**: Webhook signature verification via the provider adapter.
-- **Headers required**: `x-provider` (default `mock`). Real providers resolve the signing secret from the configured phone number → provider account → `credentials_secret_id` path; never send provider secrets in request headers. `x-organization-id` is only a mock/local fallback when the receiving number is not configured.
+- **Headers required**: `x-provider`. The receiving number must resolve to an active account for the same provider; the function derives the organization from that route and never trusts a caller-supplied organization. Real providers resolve the signing secret through the route's `credentials_secret_id`. The mock adapter is available only with explicit opt-in and loopback request/base URLs, never on a deployed endpoint.
 
 **Request body** (provider-shaped; normalized by the adapter):
 
@@ -85,7 +85,7 @@ Handles inbound SMS webhooks from providers.
 Tracks SMS delivery status updates from providers.
 
 - **Auth**: Webhook signature verification.
-- **Headers**: `x-provider`. The handler resolves the provider account from the stored outbound message before verifying the callback.
+- **Headers**: `x-provider`. The handler resolves the provider account from the stored outbound message before verifying the callback. Missing providers fail closed; the mock adapter is allowed only under the explicit loopback development guard used by inbound handlers.
 
 **Request body** (provider-shaped; normalized by the adapter):
 
@@ -112,7 +112,7 @@ Tracks SMS delivery status updates from providers.
 Handles inbound email webhooks from providers.
 
 - **Auth**: Webhook signature verification.
-- **Headers**: `x-provider` (default `mock`). Real providers resolve the signing secret from the configured email address → provider account → `credentials_secret_id` path; never send provider secrets in request headers. `x-organization-id` is only a mock/local fallback when the receiving address is not configured.
+- **Headers required**: `x-provider`. The receiving address must resolve to an active account for the same provider; the function derives the organization from that route and never trusts a caller-supplied organization. Real providers resolve the signing secret through the route's `credentials_secret_id`. The mock adapter is local-only under the same explicit loopback guard as `sms-inbound`.
 
 **Request body** (Postmark-shaped):
 
@@ -149,7 +149,7 @@ Handles inbound email webhooks from providers.
 
 ### email-status
 
-Same pattern as `sms-status`, but for email delivery events (`email_delivery_events`).
+Same pattern as `sms-status`, including its explicit-provider and local-only mock rules, but for email delivery events (`email_delivery_events`).
 
 ### process-jobs
 
@@ -300,11 +300,26 @@ Limits to 100 most recent messages.
 
 ---
 
-## Next.js API Routes (7)
+## Next.js API Routes (12)
 
 These live in `app/api/functions/<name>/route.ts` and are served from the same Next.js app as the frontend. Path: `/api/functions/<name>`. Auth: same-origin JWT (cookie or `Authorization: Bearer`), validated by `_auth.ts`.
 
-All routes use `insforgeAdmin` (the service role key) for DB writes, bypassing RLS. This is safe because the routes are server-side and the caller is the authenticated user — but the routes do **not** enforce role-based permissions. (RBAC is enforced at the RLS layer for direct DB reads; for these write paths, all authenticated org members can perform any action. This is a known gap; see [`../plans/refactor.md`](../plans/refactor.md).)
+Routes authenticate the InsForge session and check the required organization permission before using trusted server-side database access. Conversation mutations require `reply_conversations`; team mutations require `manage_members`; provider/widget mutations require `manage_settings`. Ownership promotion, demotion, or removal also requires the owner-only `delete_org` permission.
+
+| Route | Purpose |
+|---|---|
+| `send-reply` | Dispatch an agent reply through SMS, email, or webchat |
+| `approve-ai-draft` | Dispatch an approved or edited AI draft |
+| `regenerate-ai-draft` | Queue a replacement draft |
+| `escalate-conversation` | Escalate a conversation |
+| `resolve-conversation` | Resolve a conversation |
+| `reopen-conversation` | Reopen a conversation |
+| `test-channel-connection` | Run the configured provider adapter health check |
+| `invite-member` | Add an existing InsForge user to the organization |
+| `change-member-role` | Change a member role or transfer ownership |
+| `remove-member` | Remove an organization member |
+| `team-member-info` | Enrich member rows with safe auth-profile fields |
+| `delete-widget` | Delete a webchat widget through the audited service path |
 
 ### POST /api/functions/send-reply
 
@@ -335,7 +350,7 @@ Sends a reply message on an existing conversation.
 ```
 
 **Behaviour by channel**:
-- **SMS / email** — `provider = 'mock'`, `external_message_id = "reply_<timestamp>"`, `delivery_status = 'queued'`. (The real provider send is expected to happen via the legacy `send-reply` InsForge function, which is no longer deployed. Replies are currently recorded but not actually transmitted — see [`../plans/refactor.md`](../plans/refactor.md).)
+- **SMS / email** — loads the organization's configured default route and provider secret, dispatches through `OutboundMessageService`, then records the real provider id/status. Provider failures reject the request instead of creating a false sent message.
 - **Webchat** — `provider = 'webchat'`, `delivery_status = 'sent'`. Publishes `new_message` on the visitor's `widget:{widgetId}:{visitorTokenJti}` channel via InsForge Realtime.
 
 Updates `conversations.last_message_at`.
@@ -349,7 +364,11 @@ Approves and sends an AI-drafted response.
 **Request body:**
 
 ```json
-{ "conversationId": "uuid", "aiDecisionId": "uuid" }
+{
+  "conversationId": "uuid",
+  "aiDecisionId": "uuid",
+  "body": "Optional edited response"
+}
 ```
 
 **Response (200):**
@@ -358,7 +377,7 @@ Approves and sends an AI-drafted response.
 { "status": "ok", "data": { "message": { /* outbound message row */ } } }
 ```
 
-**Behaviour**: Loads the latest `ai_decision` matching `(conversationId, aiDecisionId)`; if no `response_text`, returns `404`. Creates an outbound message (channel = conversation.channel, sender_type = `ai`, sender_id = current user), updates `conversation.ai_state = 'idle'` and `last_message_at`. For webchat, publishes `new_message` on the visitor's realtime channel. Writes `audit_logs` row (`action: 'ai_draft_approved'`).
+**Behaviour**: Loads the matching `ai_decision`; an optional non-empty `body` overrides the generated text for edit-before-send. It dispatches through `OutboundMessageService` with AI actor attribution. Only after provider delivery and message persistence succeed does it clear `conversation.ai_state`; a provider failure leaves the draft available to retry. Webchat replies publish on the visitor's realtime channel. Writes `audit_logs` row (`action: 'ai_draft_approved'`).
 
 **Errors**: `400`, `401`, `404` (decision missing or no response text), `500`.
 
@@ -457,13 +476,26 @@ Verifies a provider account is configured and active.
 ```json
 {
   "status": "ok",
-  "data": { "provider": "twilio", "active": true }
+  "data": {
+    "ok": true,
+    "message": "Provider is reachable",
+    "provider": "twilio",
+    "active": true
+  }
 }
 ```
 
-**Behaviour**: Looks up `sms_provider_accounts` or `email_provider_accounts` by id; returns `provider` and `is_active` (mapped to `active`). **No actual provider connectivity test** is performed — only a DB lookup. The endpoint name is somewhat aspirational; see [`../plans/refactor.md`](../plans/refactor.md).
+**Behaviour**: Loads the account and secret, resolves the configured adapter, and calls its health check. The HTTP request succeeds when the check runs; callers must inspect `data.ok` (and `data.reason` when present) to distinguish a reachable provider from a failed check. Mock accounts return a local no-remote-ping result.
 
-**Errors**: `400`, `401`, `404`, `500`.
+**Errors**: `400`, `401`, `403`, `404`, `422` (referenced secret missing), `500`.
+
+### Team and widget routes
+
+- `POST /api/functions/invite-member` — `{ organizationId, email, role }`; `manage_members`; invited users must already have an InsForge account, and `owner` is not an invite role.
+- `POST /api/functions/change-member-role` — `{ organizationId, memberId, newRole }`; `manage_members`; only the current owner can transfer or change ownership.
+- `POST /api/functions/remove-member` — `{ organizationId, memberId }`; `manage_members`; removing the owner is owner-only and the last-owner invariant is enforced.
+- `POST /api/functions/team-member-info` — `{ organizationId }`; available to organization members; returns only id, email, name, and avatar fields for members of that organization.
+- `POST /api/functions/delete-widget` — `{ organizationId, widgetId }`; `manage_settings`; validates ownership and records an audit event through `WebchatWidgetService`.
 
 ---
 
@@ -502,3 +534,8 @@ The widget iframe receives events via `postMessage` from the parent page; the ag
 | `/api/functions/resolve-conversation` | Next.js | Same-origin JWT | POST | `{ conversationId }` |
 | `/api/functions/reopen-conversation` | Next.js | Same-origin JWT | POST | `{ conversationId }` |
 | `/api/functions/test-channel-connection` | Next.js | Same-origin JWT | POST | `{ channelType, providerAccountId }` |
+| `/api/functions/invite-member` | Next.js | Same-origin JWT | POST | `{ organizationId, email, role }` |
+| `/api/functions/change-member-role` | Next.js | Same-origin JWT | POST | `{ organizationId, memberId, newRole }` |
+| `/api/functions/remove-member` | Next.js | Same-origin JWT | POST | `{ organizationId, memberId }` |
+| `/api/functions/team-member-info` | Next.js | Same-origin JWT | POST | `{ organizationId }` |
+| `/api/functions/delete-widget` | Next.js | Same-origin JWT | POST | `{ organizationId, widgetId }` |

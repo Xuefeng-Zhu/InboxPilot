@@ -14,12 +14,12 @@ InboxPilot is a multi-tenant AI customer support platform on Next.js App Router 
 ## STRUCTURE
 ```
 app/                          Next.js pages – inbox, knowledge, analytics, settings, login, register, team, wchat, symphony
-app/api/functions/            7 JWT-authed Next.js Route Handlers (send-reply, approve-ai-draft, etc.)
+app/api/functions/            12 JWT-authed Next.js Route Handlers (send-reply, team actions, etc.)
 components/                   React components – inbox/, knowledge/, customers/, landing/, layout/, ui/
 lib/                          Frontend utilities & React Query hooks (insforge.ts, auth-context.tsx, queries/)
 packages/support-core/        Portable business logic (see packages/support-core/AGENTS.md)
 insforge/functions/           9 Deno serverless entrypoints (see insforge/functions/AGENTS.md)
-insforge/migrations/          8 SQL migrations + seed.sql (docs claim 5 — stale)
+insforge/migrations/          16 SQL migration files + seed.sql
 widget-src/                   Vite + TS webchat widget bundle
 docs/                         Architecture, database, API, RBAC, audit, jobs, webchat, testing references + guides
 ```
@@ -112,8 +112,8 @@ Next.js Client (agent actions)
 | `npm run build:widget` | Vite build of `widget-src/` → `public/widget.js` |
 | `npm test` | Run all tests (Vitest) |
 | `npm run test:watch` | Test watch mode |
-| `npm run test:core` | ⚠ Currently broken — `vitest.config.ts` has no `projects` field |
-| `npm run lint` | `tsc --noEmit` (no ESLint configured) |
+| `npm run test:core` | Run support-core tests only |
+| `npm run lint` | `tsc --noEmit`, Deno safety scan, and `deno check` for all 9 function entrypoints |
 | `cd packages/support-core && npm test` | Support-core tests only |
 | `node scripts/mock-sms.mjs inbound "Hi"` | Simulate SMS traffic against real backend |
 
@@ -128,11 +128,9 @@ Next.js Client (agent actions)
 ## KNOWN ISSUES / GOTCHAS
 
 - **Repository count: 15, not 16.** `PostgresJobQueue` lives in `services/` (not `repositories/`) — it implements the `JobQueue` interface and carries business logic (idempotency, backoff, dead-lettering), not table CRUD. Update the README if you touch this.
-- **Table count: 20, not 19.** 20th is `ai_decision_chunks` (added in migration 007). `docs/reference/database.md` is stale.
-- **Migration count: 10, not 5.** `006`, `007`, `008`, `009`, `010` are missing from the docs.
+- **Table count: 20 application tables.** The 20th is `ai_decision_chunks` (added in migration 007); storage/realtime platform tables are not included.
+- **Migration count: 16 files.** This includes numbered migrations `001` through `014` plus two timestamped job-trigger migrations; preserve the documented application order because the second timestamped file drops the first file's unreliable trigger.
 - **`app/symphony/` is built but undocumented** in `README.md` and the original AGENTS.md. Has its own 7 components, 3 tests, and a data hook (`useSymphony.ts`), linked from Sidebar. Treat as in-progress.
-- **`/team` page has unwired buttons** (Edit Role, Remove) — presentational only.
-- **The "old settings page" referenced in `/settings` placeholders (team/billing/audit) does not exist** — placeholder copy is stale.
 - **`TelnyxSmsAdapter.verifyWebhook` verifies ed25519 signatures** using the configured Telnyx public key in `signingSecret` (hex/base64/base64url) and a 5-minute timestamp replay window.
 - **6 of 6 integration test files are 100% `it.todo` placeholders** (45 placeholders total) — they need a real InsForge DB; pass as "todo" without exercising code.
 - **`__tests__/middleware.test.ts` should be `__tests__/proxy.test.ts`** — Next.js 16 rename in flight.

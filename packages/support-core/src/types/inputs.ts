@@ -109,6 +109,9 @@ export interface CreateDocumentInput {
   title: string;
   sourceType: string;
   body: string;
+  fileUrl?: string | null;
+  fileName?: string | null;
+  fileKey?: string | null;
 }
 
 export interface CreateChunkInput {

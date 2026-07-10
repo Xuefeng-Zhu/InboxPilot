@@ -114,6 +114,20 @@ describe('RiverCard', () => {
     expect(onSelect).toHaveBeenCalledWith('c-1');
   });
 
+  it('fires onSelect when a collapsed card is activated by keyboard', () => {
+    const onSelect = vi.fn();
+    const { getByRole } = renderWithClient(
+      <RiverCard data={baseCard()} isActive={false} onSelect={onSelect} />,
+    );
+    const card = getByRole('button');
+
+    fireEvent.keyDown(card, { key: 'Enter' });
+    fireEvent.keyDown(card, { key: ' ' });
+
+    expect(onSelect).toHaveBeenCalledTimes(2);
+    expect(onSelect).toHaveBeenNthCalledWith(1, 'c-1');
+  });
+
   it('marks the active card with aria-current=true and exposes the expanded panel', () => {
     const { getByTestId, container } = renderWithClient(
       <RiverCard data={baseCard()} isActive={true} onSelect={() => {}} />,

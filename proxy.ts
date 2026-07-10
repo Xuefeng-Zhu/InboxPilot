@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 /**
  * Auth proxy — redirects unauthenticated users to /login.
  *
- * Protected routes: everything except /login, /register, and static assets.
+ * Protected routes: everything except public auth/recovery routes and static assets.
  * Authentication is determined by the presence of the `insforge_access_token`
  * cookie or the token stored in localStorage (checked client-side).
  *
@@ -15,7 +15,7 @@ import { NextRequest, NextResponse } from 'next/server';
  */
 
 /** Routes that do not require authentication. */
-const PUBLIC_PATHS = ['/', '/login', '/register'];
+const PUBLIC_PATHS = ['/', '/login', '/register', '/forgot-password', '/reset-password'];
 
 export default function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;

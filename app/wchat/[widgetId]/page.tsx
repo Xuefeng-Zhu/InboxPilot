@@ -70,9 +70,13 @@ function WidgetChatContent() {
   const [error, setError] = useState<string | null>(null);
   const [color, setColor] = useState('#2563eb');
   const [showPreChat, setShowPreChat] = useState(false);
+  const [identifying, setIdentifying] = useState(false);
+  const [identifyError, setIdentifyError] = useState<string | null>(null);
   const [sessionReady, setSessionReady] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messageIdsRef = useRef(new Set<string>());
+  const identifyingRef = useRef(false);
+  const preChatCompletedRef = useRef(false);
 
   // Deduplicated message handler for realtime
   const handleRealtimeMessage = useCallback((msg: ChatMessage) => {
@@ -169,7 +173,7 @@ function WidgetChatContent() {
         if (json.data?.history?.length === 0 || !json.data?.history) {
           // We'll check pre-chat from URL param
           const preChatParam = searchParams.get('prechat');
-          if (preChatParam === '1') {
+          if (preChatParam === '1' && !preChatCompletedRef.current) {
             setShowPreChat(true);
           }
         }
@@ -203,6 +207,12 @@ function WidgetChatContent() {
 
   // Pre-chat submit — identify the visitor
   const handlePreChatSubmit = async (data: { name: string; email: string }) => {
+    if (identifyingRef.current) return;
+
+    identifyingRef.current = true;
+    setIdentifying(true);
+    setIdentifyError(null);
+
     try {
       const res = await fetch(`/functions/v1/webchat-identify`, {
         method: 'POST',
@@ -215,7 +225,7 @@ function WidgetChatContent() {
       });
       if (!res.ok) {
         const payload = await readResponseJsonObject(res, 'webchat-identify error');
-        setError(
+        setIdentifyError(
           typeof payload.error === 'string'
             ? payload.error
             : 'Unable to identify this chat visitor.',
@@ -225,21 +235,26 @@ function WidgetChatContent() {
 
       const json = await res.json();
       if (typeof json.data?.visitorToken !== 'string') {
-        setError('Unable to refresh this chat session.');
+        setIdentifyError('Unable to refresh this chat session.');
         return;
       }
+      preChatCompletedRef.current = true;
       setVisitorToken(json.data.visitorToken);
       window.parent.postMessage({
         type: 'inboxpilot:token_rotated',
         token: json.data.visitorToken,
       }, '*');
+      setIdentifyError(null);
       setShowPreChat(false);
     } catch (err) {
       console.warn(
         'wchat: visitor identification failed',
         err instanceof Error ? err.message : String(err),
       );
-      setError('Network error while identifying this chat visitor.');
+      setIdentifyError('Network error while identifying this chat visitor.');
+    } finally {
+      identifyingRef.current = false;
+      setIdentifying(false);
     }
   };
 
@@ -304,7 +319,12 @@ function WidgetChatContent() {
         </div>
 
         {showPreChat ? (
-          <PreChatForm color={color} onSubmit={handlePreChatSubmit} />
+          <PreChatForm
+            color={color}
+            error={identifyError}
+            submitting={identifying}
+            onSubmit={handlePreChatSubmit}
+          />
         ) : (
           <>
             <div className="wchat-messages">

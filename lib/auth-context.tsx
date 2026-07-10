@@ -9,6 +9,7 @@ import {
   useState,
 } from 'react';
 import type { ReactNode } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { insforge, type InsForgeUser } from '@/lib/insforge';
 
 // ---------------------------------------------------------------------------
@@ -59,6 +60,7 @@ function clearCookie(): void {
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AuthState>({ user: null, loading: true });
+  const queryClient = useQueryClient();
 
   // Hydrate session on mount
   useEffect(() => {
@@ -83,9 +85,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (data.accessToken) {
       setCookie(data.accessToken, remember);
     }
+    queryClient.clear();
     setState({ user: data.user as InsForgeUser, loading: false });
     return { error: null };
-  }, []);
+  }, [queryClient]);
 
   const signUp = useCallback(async (email: string, password: string) => {
     const { data, error } = await insforge.auth.signUp({
@@ -97,17 +100,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     if (data.accessToken) {
       setCookie(data.accessToken, true);
+      queryClient.clear();
       setState({ user: data.user as InsForgeUser, loading: false });
     }
     // If email verification is required, user won't have an accessToken yet
     return { error: null };
-  }, []);
+  }, [queryClient]);
 
   const signOut = useCallback(async () => {
-    await insforge.auth.signOut();
-    clearCookie();
-    setState({ user: null, loading: false });
-  }, []);
+    try {
+      await insforge.auth.signOut();
+    } finally {
+      clearCookie();
+      queryClient.clear();
+      setState({ user: null, loading: false });
+    }
+  }, [queryClient]);
 
   const value = useMemo<AuthContextValue>(
     () => ({ ...state, signIn, signUp, signOut }),

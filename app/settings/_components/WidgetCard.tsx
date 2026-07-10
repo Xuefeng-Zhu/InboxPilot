@@ -10,9 +10,10 @@ interface WidgetCardProps {
   widget: WebchatWidgetRow;
   onRefresh: () => void;
   onDelete: (widgetId: string) => Promise<void>;
+  readOnly?: boolean;
 }
 
-export function WidgetCard({ widget, onRefresh, onDelete }: WidgetCardProps) {
+export function WidgetCard({ widget, onRefresh, onDelete, readOnly = false }: WidgetCardProps) {
   const [showSnippet, setShowSnippet] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
   const [toggling, setToggling] = useState(false);
@@ -43,7 +44,7 @@ export function WidgetCard({ widget, onRefresh, onDelete }: WidgetCardProps) {
               : 'All origins (dev mode)'}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        {!readOnly && <div className="flex items-center gap-2">
           <button
             type="button"
             role="switch"
@@ -65,7 +66,7 @@ export function WidgetCard({ widget, onRefresh, onDelete }: WidgetCardProps) {
               }`}
             />
           </button>
-        </div>
+        </div>}
       </div>
 
       <div className="mt-3 flex items-center gap-3 font-mono text-[10px] text-[var(--m03-fg-3)]">
@@ -79,17 +80,21 @@ export function WidgetCard({ widget, onRefresh, onDelete }: WidgetCardProps) {
 
       <div className="mt-3 flex items-center justify-between gap-2">
         <button
+          type="button"
           onClick={() => setShowSnippet(!showSnippet)}
           className="rounded-md border border-[var(--m03-line)] bg-white px-3 py-1.5 text-[12px] font-medium text-[var(--m03-fg)] transition-colors hover:bg-[var(--m03-line-2)]"
         >
           {showSnippet ? 'Hide snippet' : 'Embed snippet'}
         </button>
-        <button
-          onClick={() => setShowDelete(true)}
-          className="rounded-md border border-transparent px-3 py-1.5 text-[12px] font-medium text-[var(--m03-red)] transition-colors hover:bg-[var(--m03-red-fill)]"
-        >
-          Delete
-        </button>
+        {!readOnly && (
+          <button
+            type="button"
+            onClick={() => setShowDelete(true)}
+            className="rounded-md border border-transparent px-3 py-1.5 text-[12px] font-medium text-[var(--m03-red)] transition-colors hover:bg-[var(--m03-red-fill)]"
+          >
+            Delete
+          </button>
+        )}
       </div>
 
       {showSnippet && <EmbedSnippet widget={widget} />}

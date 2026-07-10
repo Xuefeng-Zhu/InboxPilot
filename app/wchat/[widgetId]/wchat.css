@@ -18,5 +18,7 @@
 .wchat-prechat-title { font-size: 14px; font-weight: 500; color: var(--m03-fg-2); text-align: center; margin-bottom: 4px; }
 .wchat-prechat-input { border: 1px solid var(--m03-line); border-radius: 6px; padding: 10px 14px; font-size: 14px; outline: none; }
 .wchat-prechat-input:focus { border-color: var(--wchat-color); box-shadow: 0 0 0 2px color-mix(in srgb, var(--wchat-color) 20%, transparent); }
+.wchat-prechat-input:disabled { background: var(--m03-line-2); cursor: not-allowed; }
 .wchat-prechat-btn { border: none; border-radius: 6px; padding: 10px 16px; font-size: 14px; font-weight: 500; color: white; cursor: pointer; }
 .wchat-prechat-btn:hover { opacity: 0.9; }
+.wchat-prechat-btn:disabled { opacity: 0.6; cursor: not-allowed; }

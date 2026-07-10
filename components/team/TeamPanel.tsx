@@ -75,6 +75,7 @@ export function TeamPanel() {
   const { data: currentMembership } = useCurrentMembership(user?.id);
   const currentOrgId = currentMembership?.organizationId;
   const currentUserRole = currentMembership?.role;
+  const canManageMembers = currentUserRole === 'owner' || currentUserRole === 'admin';
   const queryClient = useQueryClient();
 
   // Map user_id → display info (name + email) for fast lookup at render time.
@@ -91,7 +92,9 @@ export function TeamPanel() {
   const [invitingOpen, setInvitingOpen] = useState(false);
 
   const invalidate = () => {
-    void queryClient.invalidateQueries({ queryKey: queryKeys.teamMembers() });
+    void queryClient.invalidateQueries({
+      queryKey: queryKeys.teamMembers(currentOrgId ?? ''),
+    });
     void queryClient.invalidateQueries({ queryKey: queryKeys.teamMemberInfo(currentOrgId ?? '') });
   };
 
@@ -133,19 +136,26 @@ export function TeamPanel() {
             <h2 className="text-[18px] font-semibold tracking-tight text-[var(--m03-fg)]">
               Team
             </h2>
-            <Button
-              variant="primary"
-              size="sm"
-              onClick={() => setInvitingOpen(true)}
-            >
-              Invite member
-            </Button>
+            {canManageMembers && (
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => setInvitingOpen(true)}
+              >
+                Invite member
+              </Button>
+            )}
           </div>
         }
       >
         <p className="m-0 text-[13px] text-[var(--m03-fg-2)]">
           Manage members and their roles.
         </p>
+        {!canManageMembers && (
+          <p className="mt-2 text-[12px] text-[var(--m03-fg-3)]">
+            Only owners and admins can invite, remove, or change member roles.
+          </p>
+        )}
 
         {isLoading ? (
           <p className="mt-4 text-[13px] text-[var(--m03-fg-2)]">Loading team members…</p>
@@ -211,7 +221,7 @@ export function TeamPanel() {
                           )}
                         </p>
                       </div>
-                      <div className="flex shrink-0 items-center gap-2">
+                      {canManageMembers && <div className="flex shrink-0 items-center gap-2">
                         <button
                           type="button"
                           onClick={() =>
@@ -234,7 +244,7 @@ export function TeamPanel() {
                         ) : (
                           removeButton
                         )}
-                      </div>
+                      </div>}
                     </div>
                   </Card>
                 );
@@ -244,7 +254,7 @@ export function TeamPanel() {
         )}
       </Card>
 
-      {editingMember && currentOrgId && currentUserRole && (
+      {canManageMembers && editingMember && currentOrgId && currentUserRole && (
         <EditRoleModal
           member={editingMember}
           orgId={currentOrgId}
@@ -257,7 +267,7 @@ export function TeamPanel() {
         />
       )}
 
-      {removingMember && currentOrgId && (
+      {canManageMembers && removingMember && currentOrgId && (
         <RemoveMemberModal
           member={removingMember}
           orgId={currentOrgId}
@@ -269,7 +279,7 @@ export function TeamPanel() {
         />
       )}
 
-      {invitingOpen && currentOrgId && (
+      {canManageMembers && invitingOpen && currentOrgId && (
         <InviteMemberModal
           orgId={currentOrgId}
           onClose={() => setInvitingOpen(false)}

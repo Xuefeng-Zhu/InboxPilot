@@ -13,6 +13,19 @@
 import type { FileContentFetcher } from '../services/knowledge-ingestion-service.js';
 
 /**
+ * Portable download boundary used by the content extractor.
+ *
+ * A deployment may use `fileKey` to resolve a fixed, authenticated object
+ * storage URL. Keeping this callback injected prevents support-core from
+ * depending on a storage vendor and prevents service credentials from being
+ * attached to an arbitrary persisted `file_url`.
+ */
+export type FileResponseFetcher = (
+  url: string,
+  fileKey?: string | null,
+) => Promise<Response>;
+
+/**
  * Get file extension from filename, normalized to lowercase.
  */
 function getExtension(fileName: string): string {
@@ -116,10 +129,16 @@ async function extractTextFromDocx(buffer: ArrayBuffer): Promise<string> {
  * Creates a FileContentFetcher that uses fetch() to download files
  * and extracts text based on file extension.
  */
-export function createFileContentFetcher(): FileContentFetcher {
+export function createFileContentFetcher(
+  fetchFile: FileResponseFetcher = (url) => fetch(url),
+): FileContentFetcher {
   return {
-    async fetchTextContent(url: string, fileName: string): Promise<string> {
-      const response = await fetch(url);
+    async fetchTextContent(
+      url: string,
+      fileName: string,
+      fileKey?: string | null,
+    ): Promise<string> {
+      const response = await fetchFile(url, fileKey);
       if (!response.ok) {
         throw new Error(`Failed to fetch file: HTTP ${response.status}`);
       }

@@ -4,7 +4,7 @@ import { Suspense, useCallback, useMemo } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { AppShell } from '@/components/layout';
 import { useAuth } from '@/lib/auth-context';
-import { useOrgMembership, useOrganization } from '@/lib/queries';
+import { useCurrentMembership, useOrganization } from '@/lib/queries';
 import { TeamPanel } from '@/components/team/TeamPanel';
 import AiSettingsPanel from './_components/AiSettingsPanel';
 import AuditLogSettingsPanel from './_components/AuditLogSettingsPanel';
@@ -99,8 +99,8 @@ function PlaceholderCard({ title, body }: { title: string; body: string }) {
 
 export default function SettingsPage() {
   const { user } = useAuth();
-  const { data: orgId } = useOrgMembership(user?.id);
-  const { data: org } = useOrganization(orgId ?? undefined);
+  const { data: membership, isLoading: membershipLoading } = useCurrentMembership(user?.id);
+  const { data: org } = useOrganization(membership?.organizationId);
 
   return (
     <AppShell>
@@ -112,9 +112,20 @@ export default function SettingsPage() {
           </p>
         </div>
 
-        <Suspense fallback={<p className="text-[13px] text-[var(--m03-fg-2)]">Loading…</p>}>
-          <SettingsTabs />
-        </Suspense>
+        {membershipLoading ? (
+          <p className="text-[13px] text-[var(--m03-fg-2)]">Loading…</p>
+        ) : membership?.role === 'viewer' ? (
+          <div
+            role="alert"
+            className="rounded-lg border border-[var(--m03-line)] bg-white p-5 text-[13px] text-[var(--m03-fg-2)]"
+          >
+            Your viewer role does not include access to workspace settings.
+          </div>
+        ) : (
+          <Suspense fallback={<p className="text-[13px] text-[var(--m03-fg-2)]">Loading…</p>}>
+            <SettingsTabs />
+          </Suspense>
+        )}
       </div>
     </AppShell>
   );

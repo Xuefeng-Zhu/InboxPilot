@@ -26,11 +26,11 @@ The inbound phone number is not registered in `sms_phone_numbers` (or for email,
 - Add the number/address in Settings → Channels, or
 - Insert directly: `INSERT INTO sms_phone_numbers (provider_account_id, organization_id, phone_number) VALUES (...)`.
 
-For real providers, the function derives the organization from the configured receiving number/address. The `x-organization-id` header is only a mock/local fallback when no receiving route exists.
+The function derives the organization from the configured receiving number/address and requires that route's account to match `x-provider`. Caller-supplied organization headers are ignored; add or correct the receiving route instead.
 
 ### "Webhook signature verification failed"
 
-The request signature does not match the stored provider credentials resolved through the receiving number/address or outbound message. For local dev, use `x-provider: mock` — the mock adapter accepts any signature.
+The request signature does not match the stored provider credentials resolved through the receiving number/address or outbound message. For local-only mock testing, set `INBOXPILOT_ALLOW_LOCAL_MOCK_WEBHOOKS=true`, use loopback request and InsForge base URLs, and send `x-provider: mock`. Deployed endpoints always reject the mock adapter.
 
 ### "Unknown SMS provider: <name>"
 
@@ -97,9 +97,9 @@ The escalation reason is in `ai_decisions.raw_response.escalationRule` (and the 
 
 ### "Reply sent" but the customer never received it
 
-Two different paths:
-- **SMS / email via the legacy InsForge function** — there is currently no real send implementation in the Next.js `send-reply` route. It records the message but `provider = 'mock'`. The actual provider send needs to be re-wired.
-- **Webchat** — the message is published on `widget:{widgetId}:{visitorTokenJti}` via InsForge Realtime. If the visitor doesn't see it, check the channel and the visitor's JWT.
+Check the channel-specific delivery path:
+- **SMS / email** — `send-reply` and AI-draft approval load the configured default route, resolve its provider credentials, and call the provider adapter before recording the outbound result. Check the provider account/route, stored secret, adapter response, and resulting `delivery_status`.
+- **Webchat** — the message is recorded and published on `widget:{widgetId}:{visitorTokenJti}` via InsForge Realtime. If the visitor doesn't see it, check the channel and the visitor's JWT.
 
 Check the audit log:
 

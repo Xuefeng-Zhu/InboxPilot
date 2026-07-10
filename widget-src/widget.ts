@@ -15,7 +15,23 @@
  * 5. Communication: parent ↔ iframe via postMessage.
  */
 
+interface InboxPilotWidgetApi {
+  destroy: () => void;
+}
+
+interface InboxPilotWidgetWindow extends Window {
+  InboxPilotWidget?: InboxPilotWidgetApi;
+}
+
 (function () {
+  const widgetWindow = window as InboxPilotWidgetWindow;
+
+  // Loading the bundle twice replaces the previous instance instead of
+  // leaving duplicate launchers and global message listeners behind.
+  widgetWindow.InboxPilotWidget?.destroy();
+  document.getElementById('inboxpilot-widget-btn')?.remove();
+  document.getElementById('inboxpilot-widget-container')?.remove();
+
   // Find our script tag
   const scripts = document.querySelectorAll('script[data-widget-id]');
   const scriptTag = scripts[scripts.length - 1] as HTMLScriptElement | undefined;
@@ -25,11 +41,12 @@
     return;
   }
 
-  const widgetId = scriptTag.getAttribute('data-widget-id');
-  if (!widgetId) {
+  const widgetIdAttribute = scriptTag.getAttribute('data-widget-id');
+  if (!widgetIdAttribute) {
     console.warn('[InboxPilot] data-widget-id is empty.');
     return;
   }
+  const widgetId: string = widgetIdAttribute;
 
   const position = scriptTag.getAttribute('data-position') ?? 'bottom-right';
   const color = scriptTag.getAttribute('data-color') ?? '#2563eb';
@@ -45,6 +62,9 @@
   let visitorToken: string | null = localStorage.getItem(STORAGE_KEY);
   let iframeEl: HTMLIFrameElement | null = null;
   let isOpen = false;
+  let destroyed = false;
+  let togglePending = false;
+  const requestAbortController = new AbortController();
 
   // ---------------------------------------------------------------------------
   // Token validation — check if stored token is expired before using it
@@ -78,6 +98,7 @@
 
   const btn = document.createElement('button');
   btn.id = 'inboxpilot-widget-btn';
+  btn.type = 'button';
   btn.setAttribute('aria-label', 'Open chat');
   btn.innerHTML = CHAT_ICON_SVG;
 
@@ -99,8 +120,16 @@
     transition: 'transform 0.2s',
   });
 
-  btn.addEventListener('mouseenter', () => { btn.style.transform = 'scale(1.05)'; });
-  btn.addEventListener('mouseleave', () => { btn.style.transform = 'scale(1)'; });
+  function handleLauncherMouseEnter() {
+    btn.style.transform = 'scale(1.05)';
+  }
+
+  function handleLauncherMouseLeave() {
+    btn.style.transform = 'scale(1)';
+  }
+
+  btn.addEventListener('mouseenter', handleLauncherMouseEnter);
+  btn.addEventListener('mouseleave', handleLauncherMouseLeave);
 
   function updateLauncherIcon() {
     btn.innerHTML = isOpen ? CLOSE_ICON_SVG : CHAT_ICON_SVG;
@@ -116,10 +145,12 @@
   Object.assign(container.style, {
     position: 'fixed',
     bottom: '90px',
-    [position === 'bottom-left' ? 'left' : 'right']: '20px',
+    [position === 'bottom-left' ? 'left' : 'right']: '12px',
     width: '380px',
     height: '520px',
-    maxHeight: 'calc(100vh - 120px)',
+    maxWidth: 'calc(100vw - 24px)',
+    maxHeight: 'calc(100vh - 112px)',
+    boxSizing: 'border-box',
     borderRadius: '12px',
     overflow: 'hidden',
     boxShadow: '0 8px 30px rgba(0,0,0,0.12)',
@@ -131,6 +162,7 @@
   // Header close button (overlay on the chat panel)
   const panelCloseBtn = document.createElement('button');
   panelCloseBtn.id = 'inboxpilot-widget-panel-close';
+  panelCloseBtn.type = 'button';
   panelCloseBtn.setAttribute('aria-label', 'Close chat');
   panelCloseBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#374151" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`;
   Object.assign(panelCloseBtn.style, {
@@ -150,17 +182,23 @@
     zIndex: '1',
     boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
   });
-  panelCloseBtn.addEventListener('mouseenter', () => {
+  function handlePanelCloseMouseEnter() {
     panelCloseBtn.style.background = 'rgba(243, 244, 246, 1)';
-  });
-  panelCloseBtn.addEventListener('mouseleave', () => {
+  }
+
+  function handlePanelCloseMouseLeave() {
     panelCloseBtn.style.background = 'rgba(255, 255, 255, 0.95)';
-  });
-  panelCloseBtn.addEventListener('click', () => {
+  }
+
+  function closeWidget() {
     container.style.display = 'none';
     isOpen = false;
     updateLauncherIcon();
-  });
+  }
+
+  panelCloseBtn.addEventListener('mouseenter', handlePanelCloseMouseEnter);
+  panelCloseBtn.addEventListener('mouseleave', handlePanelCloseMouseLeave);
+  panelCloseBtn.addEventListener('click', closeWidget);
   container.appendChild(panelCloseBtn);
 
   // ---------------------------------------------------------------------------
@@ -175,6 +213,7 @@
           method: 'GET',
           headers: { Authorization: `Bearer ${visitorToken}` },
           credentials: 'omit',
+          signal: requestAbortController.signal,
         });
         if (checkRes.ok) return { token: visitorToken, preChatEnabled: false };
         // Token rejected — clear and create new session
@@ -191,9 +230,10 @@
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-widget-token': widgetId!,
+          'x-widget-token': widgetId,
         },
         credentials: 'omit',
+        signal: requestAbortController.signal,
         body: JSON.stringify({
           page_url: window.location.href,
           referrer: document.referrer || null,
@@ -212,7 +252,9 @@
         return { token, preChatEnabled };
       }
     } catch (err) {
-      console.error('[InboxPilot] Failed to init session:', err);
+      if (!destroyed) {
+        console.error('[InboxPilot] Failed to init session:', err);
+      }
     }
     return null;
   }
@@ -237,34 +279,49 @@
   }
 
   async function toggleWidget() {
+    if (destroyed || togglePending) return;
+
     if (isOpen) {
-      container.style.display = 'none';
-      isOpen = false;
+      closeWidget();
+      return;
+    }
+
+    togglePending = true;
+    btn.disabled = true;
+
+    try {
+      const session = await initSession();
+      if (destroyed) return;
+      if (!session) {
+        console.error('[InboxPilot] Could not initialize chat session.');
+        return;
+      }
+
+      mountIframe(session.token, session.preChatEnabled);
+      container.style.display = 'block';
+      isOpen = true;
       updateLauncherIcon();
-      return;
+    } finally {
+      togglePending = false;
+      if (!destroyed) btn.disabled = false;
     }
-
-    const session = await initSession();
-    if (!session) {
-      console.error('[InboxPilot] Could not initialize chat session.');
-      return;
-    }
-
-    mountIframe(session.token, session.preChatEnabled);
-    container.style.display = 'block';
-    isOpen = true;
-    updateLauncherIcon();
   }
 
-  btn.addEventListener('click', toggleWidget);
+  function handleLauncherClick() {
+    void toggleWidget();
+  }
+
+  btn.addEventListener('click', handleLauncherClick);
 
   // Listen for messages from iframe (e.g. close request, token rotation, auth failure)
-  window.addEventListener('message', (event) => {
-    if (event.origin !== appOrigin) return;
+  function handleWidgetMessage(event: MessageEvent) {
+    if (
+      event.origin !== appOrigin ||
+      event.source !== iframeEl?.contentWindow
+    ) return;
+
     if (event.data?.type === 'inboxpilot:close') {
-      container.style.display = 'none';
-      isOpen = false;
-      updateLauncherIcon();
+      closeWidget();
     }
     if (event.data?.type === 'inboxpilot:token_rotated' && event.data.token) {
       visitorToken = event.data.token;
@@ -282,7 +339,35 @@
       isOpen = false;
       updateLauncherIcon();
     }
-  });
+  }
+
+  window.addEventListener('message', handleWidgetMessage);
+
+  function destroy() {
+    if (destroyed) return;
+    destroyed = true;
+    requestAbortController.abort();
+
+    window.removeEventListener('message', handleWidgetMessage);
+    btn.removeEventListener('mouseenter', handleLauncherMouseEnter);
+    btn.removeEventListener('mouseleave', handleLauncherMouseLeave);
+    btn.removeEventListener('click', handleLauncherClick);
+    panelCloseBtn.removeEventListener('mouseenter', handlePanelCloseMouseEnter);
+    panelCloseBtn.removeEventListener('mouseleave', handlePanelCloseMouseLeave);
+    panelCloseBtn.removeEventListener('click', closeWidget);
+
+    iframeEl?.remove();
+    iframeEl = null;
+    btn.remove();
+    container.remove();
+    isOpen = false;
+
+    if (widgetWindow.InboxPilotWidget === widgetApi) {
+      delete widgetWindow.InboxPilotWidget;
+    }
+  }
+
+  const widgetApi: InboxPilotWidgetApi = { destroy };
 
   // ---------------------------------------------------------------------------
   // Mount elements
@@ -290,4 +375,7 @@
 
   document.body.appendChild(btn);
   document.body.appendChild(container);
+  widgetWindow.InboxPilotWidget = widgetApi;
 })();
+
+export {};

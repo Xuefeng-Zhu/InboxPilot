@@ -1,5 +1,4 @@
 import Link from 'next/link';
-import Script from 'next/script';
 import {
   Radio,
   Quote,
@@ -9,6 +8,7 @@ import {
   ScrollText,
 } from 'lucide-react';
 import { Topbar } from '@/components/Topbar';
+import { LandingWidget } from '@/components/landing/LandingWidget';
 
 const demoWidgetId = process.env.NEXT_PUBLIC_DEMO_WIDGET_ID ?? '';
 
@@ -19,21 +19,21 @@ export default function HomePage() {
 
       <main className="flex-1">
         {/* Hero */}
-        <section className="mx-auto max-w-[920px] px-6 pt-[88px] pb-16 text-center">
+        <section className="mx-auto max-w-[920px] px-4 pt-14 pb-12 text-center sm:px-6 sm:pt-[88px] sm:pb-16">
           <span className="mb-6 inline-flex items-center gap-1.5 rounded-full border border-[var(--m03-line)] bg-[var(--m03-line-2)] px-2.5 py-1 text-[11px] font-medium text-[var(--m03-fg-2)]">
             <span className="h-1.5 w-1.5 rounded-full bg-[var(--m03-green)]" />
             Now with webchat channels
           </span>
-          <h1 className="mb-4 text-[64px] font-medium leading-[1.0] tracking-[-0.04em] text-[var(--m03-fg)]">
+          <h1 className="mb-4 text-[42px] font-medium leading-[1.02] tracking-[-0.04em] text-[var(--m03-fg)] sm:text-[56px] lg:text-[64px]">
             The shared inbox
             <br />
             that actually replies.
           </h1>
-          <p className="mx-auto mb-8 max-w-[600px] text-[18px] leading-[1.55] text-[var(--m03-fg-2)]">
+          <p className="mx-auto mb-8 max-w-[600px] text-[16px] leading-[1.55] text-[var(--m03-fg-2)] sm:text-[18px]">
             InboxPilot drafts, sends, and escalates customer messages across SMS, email, and webchat
             — with a knowledge base that grounds every AI reply in your real policies.
           </p>
-          <div className="flex justify-center gap-2.5">
+          <div className="flex flex-wrap justify-center gap-2.5">
             <Link
               href="/register"
               className="rounded bg-[var(--m03-fg)] px-5 py-2.5 text-[14px] font-medium text-[var(--m03-bg)] hover:bg-[var(--m03-fg-2)]"
@@ -47,7 +47,7 @@ export default function HomePage() {
               See features
             </Link>
           </div>
-          <div className="mt-12 flex justify-center gap-8 font-mono text-[11px] uppercase tracking-[0.08em] text-[var(--m03-fg-3)]">
+          <div className="mt-10 flex flex-wrap justify-center gap-x-4 gap-y-2 font-mono text-[10px] uppercase tracking-[0.06em] text-[var(--m03-fg-3)] sm:mt-12 sm:gap-8 sm:text-[11px] sm:tracking-[0.08em]">
             <span>
               <strong className="font-medium text-[var(--m03-fg)]">10k+</strong> conversations/day
             </span>
@@ -63,7 +63,7 @@ export default function HomePage() {
         </section>
 
         {/* Product preview */}
-        <section className="px-6 pb-20">
+        <section className="px-4 pb-16 sm:px-6 sm:pb-20">
           <div className="mx-auto max-w-[1100px] overflow-hidden rounded-lg border border-[var(--m03-line)] bg-white shadow-level-3">
             {/* Browser bar */}
             <div className="flex items-center gap-2 border-b border-[var(--m03-line)] bg-[var(--m03-line-2)] px-4 py-2.5">
@@ -77,7 +77,7 @@ export default function HomePage() {
               </div>
             </div>
             {/* Body */}
-            <div className="grid min-h-[420px] grid-cols-[200px_1fr]">
+            <div className="grid min-h-[420px] grid-cols-[108px_1fr] sm:grid-cols-[160px_1fr] lg:grid-cols-[200px_1fr]">
               {/* Sidebar */}
               <div className="border-r border-[var(--m03-line)] bg-[var(--m03-line-2)] py-3.5 px-2">
                 <div className="px-2.5 pt-3 pb-1 text-[10px] font-medium uppercase tracking-wider text-[var(--m03-fg-3)]">
@@ -96,11 +96,11 @@ export default function HomePage() {
               </div>
               {/* Conversation */}
               <div className="flex flex-col gap-2 bg-white p-[18px]">
-                <div className="msg in max-w-[60%] self-start rounded-lg bg-[var(--m03-line-2)] px-3 py-2 text-[12px] leading-[1.5] text-[var(--m03-fg)]">
+                <div className="msg in max-w-[90%] self-start rounded-lg bg-[var(--m03-line-2)] px-3 py-2 text-[12px] leading-[1.5] text-[var(--m03-fg)] sm:max-w-[75%] lg:max-w-[60%]">
                   Hi, I was charged on the 14th and the refund was supposed to land in 3–5 business
                   days. It&rsquo;s day 6.
                 </div>
-                <div className="msg ai max-w-[60%] self-start rounded-lg border border-[var(--m03-green)] bg-white px-3 py-2 text-[12px] leading-[1.5] text-[var(--m03-fg)]">
+                <div className="msg ai max-w-[90%] self-start rounded-lg border border-[var(--m03-green)] bg-white px-3 py-2 text-[12px] leading-[1.5] text-[var(--m03-fg)] sm:max-w-[75%] lg:max-w-[60%]">
                   <span className="mb-0.5 block font-mono text-[9px] font-semibold uppercase tracking-wider text-[var(--m03-green)]">
                     AI • 92% conf
                   </span>
@@ -108,10 +108,10 @@ export default function HomePage() {
                   1–2 more business days. If it doesn&rsquo;t land by Friday I&rsquo;ll personally
                   escalate.
                 </div>
-                <div className="msg out max-w-[60%] self-end rounded-lg bg-[var(--m03-fg)] px-3 py-2 text-[12px] leading-[1.5] text-[var(--m03-bg)]">
+                <div className="msg out max-w-[90%] self-end rounded-lg bg-[var(--m03-fg)] px-3 py-2 text-[12px] leading-[1.5] text-[var(--m03-bg)] sm:max-w-[75%] lg:max-w-[60%]">
                   Thanks for following up so fast.
                 </div>
-                <div className="msg in max-w-[60%] self-start rounded-lg bg-[var(--m03-line-2)] px-3 py-2 text-[12px] leading-[1.5] text-[var(--m03-fg)]">
+                <div className="msg in max-w-[90%] self-start rounded-lg bg-[var(--m03-line-2)] px-3 py-2 text-[12px] leading-[1.5] text-[var(--m03-fg)] sm:max-w-[75%] lg:max-w-[60%]">
                   That worked, it just landed. Lifesaver.
                 </div>
               </div>
@@ -147,16 +147,7 @@ export default function HomePage() {
         <span>© 2026 InboxPilot</span>
       </footer>
 
-      {demoWidgetId && (
-        <Script
-          id="inboxpilot-landing-widget"
-          src="/widget.js"
-          strategy="lazyOnload"
-          data-widget-id={demoWidgetId}
-          data-position="bottom-right"
-          data-color="#0070f3"
-        />
-      )}
+      {demoWidgetId && <LandingWidget widgetId={demoWidgetId} />}
     </div>
   );
 }

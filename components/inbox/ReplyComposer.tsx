@@ -26,6 +26,10 @@ export function ReplyComposer({
   const [body, setBody] = useState('');
   const queryClient = useQueryClient();
 
+  useEffect(() => {
+    setBody('');
+  }, [conversationId]);
+
   // Adopt external prefill (e.g. "Fill composer" from the AI Draft panel)
   useEffect(() => {
     if (typeof prefillBody === 'string' && prefillBody.trim().length > 0) {

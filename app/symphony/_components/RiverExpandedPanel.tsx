@@ -183,7 +183,7 @@ export function RiverExpandedPanel({
             <button
               type="button"
               onClick={() => approve.mutate(editedBody)}
-              disabled={approve.isPending}
+              disabled={!canApprove || !editedBody.trim() || approve.isPending}
               className="flex-1 rounded border border-[var(--m03-fg)] bg-[var(--m03-fg)] px-2 py-2 text-[12px] font-semibold text-[var(--m03-bg)] disabled:opacity-50"
             >
               {approve.isPending ? 'Sending…' : 'Save & send'}
@@ -207,7 +207,8 @@ export function RiverExpandedPanel({
             <button
               type="button"
               onClick={onStartEdit}
-              className="flex-1 rounded border border-[var(--m03-line)] bg-transparent px-2 py-2 text-[12px] font-semibold text-[var(--m03-fg-2)] hover:bg-[var(--m03-line-2)]"
+              disabled={!canApprove || !aiDraftBody}
+              className="flex-1 rounded border border-[var(--m03-line)] bg-transparent px-2 py-2 text-[12px] font-semibold text-[var(--m03-fg-2)] hover:bg-[var(--m03-line-2)] disabled:cursor-not-allowed disabled:opacity-50"
             >
               Edit
             </button>

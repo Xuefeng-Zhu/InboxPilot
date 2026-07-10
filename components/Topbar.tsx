@@ -14,7 +14,7 @@ interface TopbarProps {
 
 export function Topbar({ nav, cta }: TopbarProps) {
   return (
-    <header className="flex items-center gap-6 border-b border-[var(--m03-line)] bg-white px-6 h-14">
+    <header className="flex h-14 items-center gap-3 border-b border-[var(--m03-line)] bg-white px-4 sm:gap-6 sm:px-6">
       <Link
         href="/"
         className="flex items-center gap-2 font-medium text-[14px] tracking-tight text-[var(--m03-fg)]"
@@ -23,7 +23,7 @@ export function Topbar({ nav, cta }: TopbarProps) {
         InboxPilot
       </Link>
       {nav && nav.length > 0 && (
-        <nav className="flex items-center gap-4">
+        <nav className="hidden items-center gap-4 md:flex">
           {nav.map((item) => (
             <Link
               key={item.href}
@@ -41,13 +41,13 @@ export function Topbar({ nav, cta }: TopbarProps) {
           <>
             <Link
               href="/login"
-              className="rounded px-3 py-1.5 text-[13px] font-medium text-[var(--m03-fg-2)] hover:bg-[var(--m03-line-2)] hover:text-[var(--m03-fg)]"
+              className="hidden rounded px-3 py-1.5 text-[13px] font-medium text-[var(--m03-fg-2)] hover:bg-[var(--m03-line-2)] hover:text-[var(--m03-fg)] sm:inline-flex"
             >
               Sign in
             </Link>
             <Link
               href="/register"
-              className="rounded bg-[var(--m03-fg)] px-3.5 py-1.5 text-[13px] font-medium text-[var(--m03-bg)] hover:bg-[var(--m03-fg-2)]"
+              className="whitespace-nowrap rounded bg-[var(--m03-fg)] px-3 py-1.5 text-[13px] font-medium text-[var(--m03-bg)] hover:bg-[var(--m03-fg-2)] sm:px-3.5"
             >
               Start free
             </Link>

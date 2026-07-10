@@ -35,7 +35,7 @@ export default function ProviderSettingsPanel({
   }));
   const idPrefix = config.channel;
 
-  if (settings.authLoading || settings.loading) {
+  if (settings.authLoading || settings.membershipLoading || settings.loading) {
     return <p className="text-[14px] text-[var(--m03-fg-2)]">Loading {config.channelLabel} settings…</p>;
   }
 
@@ -45,15 +45,21 @@ export default function ProviderSettingsPanel({
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex items-center justify-end">
-        <Button
-          variant={settings.showAddForm ? 'secondary' : 'primary'}
-          size="md"
-          onClick={() => settings.setShowAddForm(!settings.showAddForm)}
-        >
-          {settings.showAddForm ? 'Cancel' : 'Add Account'}
-        </Button>
-      </div>
+      {settings.canManage ? (
+        <div className="flex items-center justify-end">
+          <Button
+            variant={settings.showAddForm ? 'secondary' : 'primary'}
+            size="md"
+            onClick={() => settings.setShowAddForm(!settings.showAddForm)}
+          >
+            {settings.showAddForm ? 'Cancel' : 'Add Account'}
+          </Button>
+        </div>
+      ) : (
+        <div className="rounded border border-[var(--m03-line)] bg-[var(--m03-line-2)] p-3 text-[13px] text-[var(--m03-fg-2)]">
+          These settings are read-only. An owner or admin can manage provider accounts.
+        </div>
+      )}
 
       {settings.error && (
         <div className="rounded border border-[var(--m03-red-line)] bg-[var(--m03-red-fill)] p-3" role="alert">
@@ -66,7 +72,7 @@ export default function ProviderSettingsPanel({
         </div>
       )}
 
-      {settings.showAddForm && (
+      {settings.canManage && settings.showAddForm && (
         <Card header={<h2 className="text-[18px] font-semibold tracking-tight text-[var(--m03-fg)]">Add {config.channelLabel} Provider Account</h2>}>
           <div className="grid gap-3 sm:grid-cols-2">
             <Select
@@ -111,7 +117,11 @@ export default function ProviderSettingsPanel({
         <Card>
           <div className="py-8 text-center">
             <p className="text-[14px] text-[var(--m03-fg-2)]">No {config.channelLabel} provider accounts configured.</p>
-            <p className="mt-1 text-[12px] text-[var(--m03-fg-3)]">Click &quot;Add Account&quot; to get started.</p>
+            <p className="mt-1 text-[12px] text-[var(--m03-fg-3)]">
+              {settings.canManage
+                ? 'Add an account to get started.'
+                : 'An owner or admin can add the first account.'}
+            </p>
           </div>
         </Card>
       ) : settings.accounts.map((account) => {
@@ -146,7 +156,7 @@ export default function ProviderSettingsPanel({
                   <StatusBadge status={account.is_active ? 'connected' : 'disconnected'} />
                 </div>
               </div>
-              <div className="flex items-center gap-2">
+              {settings.canManage && <div className="flex flex-wrap items-center justify-end gap-2">
                 <Button
                   variant="secondary"
                   size="sm"
@@ -172,7 +182,7 @@ export default function ProviderSettingsPanel({
                 <Button variant="ghost" size="sm" onClick={() => void settings.removeAccount(account.id)} aria-label={`Remove ${account.label}`}>
                   Remove
                 </Button>
-              </div>
+              </div>}
             </div>
 
             {result && (
@@ -180,7 +190,7 @@ export default function ProviderSettingsPanel({
                 className={`mt-3 rounded-md border p-3 text-[13px] ${result.success
                   ? 'border-[var(--m03-green-line)] bg-[var(--m03-green-fill)] text-[var(--m03-green)]'
                   : 'border-[var(--m03-red-line)] bg-[var(--m03-red-fill)] text-[var(--m03-red)]'}`}
-                role="status"
+                role={result.success ? 'status' : 'alert'}
               >
                 {result.message}
               </div>

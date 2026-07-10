@@ -38,11 +38,13 @@ export const queryKeys = {
   messagesInfinite: (conversationId: string, pageSize = MESSAGE_PAGE_SIZE) =>
     ['messages', 'infinite', conversationId, pageSize] as const,
   conversation: (id: string) => ['conversation', id] as const,
-  contacts: (filters?: Record<string, unknown>) => ['contacts', filters] as const,
-  contact: (id: string) => ['contact', id] as const,
-  knowledgeDocs: () => ['knowledge-documents'] as const,
-  knowledgeDoc: (id: string) => ['knowledge-document', id] as const,
-  teamMembers: () => ['team-members'] as const,
+  contacts: (orgId: string, filters?: Record<string, unknown>) =>
+    ['contacts', orgId, filters] as const,
+  contact: (orgId: string, id: string) => ['contact', orgId, id] as const,
+  knowledgeDocs: (orgId: string) => ['knowledge-documents', orgId] as const,
+  knowledgeDoc: (orgId: string, id: string) =>
+    ['knowledge-document', orgId, id] as const,
+  teamMembers: (orgId: string) => ['team-members', orgId] as const,
   teamMemberInfo: (orgId: string) => ['team-member-info', orgId] as const,
   organization: (orgId: string) => ['organization', orgId] as const,
   aiDecision: (conversationId: string) => ['ai-decision', conversationId] as const,
@@ -59,5 +61,6 @@ export const queryKeys = {
     ['kanban-lane', orgId, userId, lane, pageSize] as const,
   kanbanLanes: (orgId: string, userId: string) =>
     ['kanban-lanes', orgId, userId] as const,
-  auditLogs: (filters?: Record<string, unknown>) => ['audit-logs', filters] as const,
+  auditLogs: (orgId: string, filters?: Record<string, unknown>) =>
+    ['audit-logs', orgId, filters] as const,
 };

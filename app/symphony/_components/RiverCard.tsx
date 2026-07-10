@@ -82,7 +82,16 @@ export function RiverCard({ data, isActive, onSelect, onApproved }: RiverCardPro
           : 'h-[280px] w-[220px] border-[var(--m03-line)] opacity-55 hover:translate-y-[-2px] hover:opacity-85',
       )}
       aria-current={isActive ? 'true' : undefined}
+      aria-expanded={isActive}
+      role={isActive ? undefined : 'button'}
+      tabIndex={isActive ? undefined : 0}
       onClick={() => onSelect(data.id)}
+      onKeyDown={(event) => {
+        if (!isActive && (event.key === 'Enter' || event.key === ' ')) {
+          event.preventDefault();
+          onSelect(data.id);
+        }
+      }}
       data-testid={`river-card-${data.id}`}
     >
       {/* Header */}

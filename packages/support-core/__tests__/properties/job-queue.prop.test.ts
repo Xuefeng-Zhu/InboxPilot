@@ -422,6 +422,35 @@ describe('Job queue property tests', () => {
     ]);
   });
 
+  it('propagates idempotency lookup errors instead of inserting a duplicate job', async () => {
+    let insertCalled = false;
+    const db = createMockDb({
+      fromSelectResult: {
+        data: null,
+        error: { message: 'invalid input syntax for type json' },
+      },
+      onInsert: () => {
+        insertCalled = true;
+      },
+    });
+    const queue = new PostgresJobQueue(db);
+
+    await expect(
+      queue.enqueue(
+        'send_outbound_message',
+        {
+          conversationId: 'conv-123',
+          aiDecisionId: 'decision-123',
+          body: 'Hello',
+        },
+        'org-123',
+      ),
+    ).rejects.toThrow(
+      'Failed to check for existing send_outbound_message job: invalid input syntax for type json',
+    );
+    expect(insertCalled).toBe(false);
+  });
+
   /**
    * Property 10: Job claim respects limit and pending status
    *

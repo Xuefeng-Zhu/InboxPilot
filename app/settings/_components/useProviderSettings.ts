@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { getAccessToken, insforge } from '@/lib/insforge';
 import { readResponseJsonObject } from '@/lib/http-json';
+import { useCurrentMembership } from '@/lib/queries';
 
 export type ProviderChannel = 'sms' | 'email';
 
@@ -22,7 +23,6 @@ export interface ProviderAccount {
   organization_id: string;
   provider: string;
   label: string;
-  credentials_secret_id: string;
   is_active: boolean;
   metadata: Record<string, unknown>;
   created_at: string;
@@ -50,6 +50,9 @@ function errorMessage(err: unknown, fallback: string): string {
 
 export function useProviderSettings(config: ProviderSettingsConfig) {
   const { user, loading: authLoading } = useAuth();
+  const { data: membership, isLoading: membershipLoading } = useCurrentMembership(user?.id);
+  const organizationId = membership?.organizationId ?? null;
+  const canManage = membership?.role === 'owner' || membership?.role === 'admin';
   const [accounts, setAccounts] = useState<ProviderAccount[]>([]);
   const [routes, setRoutes] = useState<ProviderRoute[]>([]);
   const [loading, setLoading] = useState(true);
@@ -75,13 +78,20 @@ export function useProviderSettings(config: ProviderSettingsConfig) {
 
   const fetchData = useCallback(async () => {
     const requestGeneration = ++requestGenerationRef.current;
+    if (!organizationId) {
+      setAccounts([]);
+      setRoutes([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
       const [accountsResult, routesResult] = await Promise.all([
         insforge.database
           .from(config.accountTable)
-          .select('id,organization_id,provider,label,credentials_secret_id,is_active,metadata,created_at,updated_at')
+          .select('id,organization_id,provider,label,is_active,metadata,created_at,updated_at')
+          .eq('organization_id', organizationId)
           .order('created_at', { ascending: true }),
         insforge.database
           .from(config.routeTable)
@@ -127,18 +137,19 @@ export function useProviderSettings(config: ProviderSettingsConfig) {
     config.channelLabel,
     config.routeTable,
     config.routeValueKey,
+    organizationId,
   ]);
 
   useEffect(() => {
-    if (!authLoading && user) {
+    if (!authLoading && !membershipLoading && user && organizationId) {
       void fetchData();
-    } else if (!authLoading) {
+    } else if (!authLoading && !membershipLoading) {
       setLoading(false);
     }
     return () => {
       requestGenerationRef.current++;
     };
-  }, [authLoading, user, fetchData]);
+  }, [authLoading, organizationId, membershipLoading, user, fetchData]);
 
   useEffect(() => () => {
     if (successTimerRef.current) clearTimeout(successTimerRef.current);
@@ -165,19 +176,11 @@ export function useProviderSettings(config: ProviderSettingsConfig) {
   }, [config.resourceType, user?.id]);
 
   const addAccount = useCallback(async () => {
-    if (!user || !newLabel.trim() || !newCredentialsId.trim()) return;
+    if (!user || !canManage || !newLabel.trim() || !newCredentialsId.trim()) return;
     setAddingAccount(true);
     setError(null);
     try {
-      const { data: membership, error: membershipError } = await insforge.database
-        .from('organization_members')
-        .select('organization_id')
-        .eq('user_id', user.id)
-        .maybeSingle();
-      if (membershipError || !membership) {
-        throw new Error(membershipError?.message ?? 'No organization found for current user');
-      }
-      const organizationId = (membership as { organization_id: string }).organization_id;
+      if (!organizationId) throw new Error('No organization found for current user');
       const { error: insertError } = await insforge.database
         .from(config.accountTable)
         .insert([{
@@ -215,17 +218,19 @@ export function useProviderSettings(config: ProviderSettingsConfig) {
   }, [
     config.accountTable,
     config.channelLabel,
+    canManage,
     fetchData,
     newCredentialsId,
     newLabel,
     newProvider,
+    organizationId,
     showSuccess,
     user,
     writeAudit,
   ]);
 
   const saveEdit = useCallback(async (accountId: string) => {
-    if (!editLabel.trim()) return;
+    if (!canManage || !editLabel.trim()) return;
     setError(null);
     try {
       const { error: updateError } = await insforge.database
@@ -252,9 +257,10 @@ export function useProviderSettings(config: ProviderSettingsConfig) {
     } catch (err) {
       setError(errorMessage(err, 'Failed to update account'));
     }
-  }, [accounts, config.accountTable, editLabel, fetchData, showSuccess, writeAudit]);
+  }, [accounts, canManage, config.accountTable, editLabel, fetchData, showSuccess, writeAudit]);
 
   const removeAccount = useCallback(async (accountId: string) => {
+    if (!canManage) return;
     if (!window.confirm(config.removeConfirmation)) return;
     setError(null);
     try {
@@ -283,6 +289,7 @@ export function useProviderSettings(config: ProviderSettingsConfig) {
     }
   }, [
     accounts,
+    canManage,
     config.accountTable,
     config.removeConfirmation,
     fetchData,
@@ -291,6 +298,7 @@ export function useProviderSettings(config: ProviderSettingsConfig) {
   ]);
 
   const testConnection = useCallback(async (accountId: string) => {
+    if (!canManage) return;
     setTestingId(accountId);
     setTestResult(null);
     try {
@@ -307,13 +315,22 @@ export function useProviderSettings(config: ProviderSettingsConfig) {
         }),
       });
       const data = await readResponseJsonObject(response, 'provider connection test');
-      const succeeded = response.ok && data.status === 'ok';
+      const healthData =
+        data.data && typeof data.data === 'object' && !Array.isArray(data.data)
+          ? data.data as Record<string, unknown>
+          : null;
+      const succeeded = response.ok && data.status === 'ok' && healthData?.ok === true;
+      const detail =
+        (typeof healthData?.message === 'string' && healthData.message) ||
+        (typeof healthData?.reason === 'string' && healthData.reason) ||
+        (typeof data.error === 'string' && data.error) ||
+        null;
       setTestResult({
         id: accountId,
         success: succeeded,
         message: succeeded
-          ? 'Connection successful'
-          : typeof data.error === 'string' ? data.error : 'Connection failed',
+          ? detail ?? 'Connection successful'
+          : detail ?? 'Connection failed',
       });
     } catch (err) {
       setTestResult({
@@ -324,11 +341,13 @@ export function useProviderSettings(config: ProviderSettingsConfig) {
     } finally {
       setTestingId(null);
     }
-  }, [config.channel]);
+  }, [canManage, config.channel]);
 
   return {
     user,
     authLoading,
+    membershipLoading,
+    canManage,
     accounts,
     routes,
     loading,

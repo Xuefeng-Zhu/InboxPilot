@@ -31,6 +31,7 @@ import type {
 
 const ORG_ID = 'org-001';
 const USER_ID = 'user-001';
+const USER_ACTOR = { type: 'user', id: USER_ID } as const;
 
 const SMS_CONVERSATION: Conversation = {
   id: 'conv-sms-001',
@@ -353,7 +354,7 @@ describe('OutboundMessageService', () => {
 
   describe('sendReply — SMS channel', () => {
     it('sends an SMS reply through the full flow', async () => {
-      const result = await service.sendReply('conv-sms-001', 'We can help you with that!', USER_ID);
+      const result = await service.sendReply('conv-sms-001', 'We can help you with that!', USER_ACTOR);
 
       // 1. Load conversation
       expect(conversationRepo.findById).toHaveBeenCalledWith('conv-sms-001');
@@ -430,7 +431,7 @@ describe('OutboundMessageService', () => {
     });
 
     it('sends an email reply through the full flow', async () => {
-      const result = await service.sendReply('conv-email-001', 'We can help you with that!', USER_ID);
+      const result = await service.sendReply('conv-email-001', 'We can help you with that!', USER_ACTOR);
 
       // 1. Load conversation
       expect(conversationRepo.findById).toHaveBeenCalledWith('conv-email-001');
@@ -491,7 +492,7 @@ describe('OutboundMessageService', () => {
       const noSubjectConv = { ...EMAIL_CONVERSATION, subject: null };
       vi.mocked(conversationRepo.findById).mockResolvedValue(noSubjectConv);
 
-      await service.sendReply('conv-email-001', 'Reply body', USER_ID);
+      await service.sendReply('conv-email-001', 'Reply body', USER_ACTOR);
 
       expect(emailAdapter.sendEmail).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -512,7 +513,7 @@ describe('OutboundMessageService', () => {
     it('forwards a non-empty providerConfig to the SMS adapter', async () => {
       const providerConfig = { accountSid: 'AC_test_sid', authToken: 'twilio_secret' };
 
-      await service.sendReply('conv-sms-001', 'Body', USER_ID, providerConfig);
+      await service.sendReply('conv-sms-001', 'Body', USER_ACTOR, providerConfig);
 
       expect(smsAdapter.sendSms).toHaveBeenCalledWith(
         expect.objectContaining({ providerConfig }),
@@ -524,7 +525,7 @@ describe('OutboundMessageService', () => {
       vi.mocked(conversationRepo.findById).mockResolvedValue(EMAIL_CONVERSATION);
       vi.mocked(contactRepo.findById).mockResolvedValue(EMAIL_CONTACT);
 
-      await service.sendReply('conv-email-001', 'Body', USER_ID, providerConfig);
+      await service.sendReply('conv-email-001', 'Body', USER_ACTOR, providerConfig);
 
       expect(emailAdapter.sendEmail).toHaveBeenCalledWith(
         expect.objectContaining({ providerConfig }),
@@ -534,7 +535,7 @@ describe('OutboundMessageService', () => {
     it('defaults providerConfig to an empty object when omitted', async () => {
       // Three-arg call shape is the historical default and is used by
       // any caller that has not been updated to pass credentials.
-      await service.sendReply('conv-sms-001', 'Body', USER_ID);
+      await service.sendReply('conv-sms-001', 'Body', USER_ACTOR);
 
       expect(smsAdapter.sendSms).toHaveBeenCalledWith(
         expect.objectContaining({ providerConfig: {} }),
@@ -544,19 +545,33 @@ describe('OutboundMessageService', () => {
 
   describe('sendReply — writeAuditLog option', () => {
     it('writes the audit log by default', async () => {
-      await service.sendReply('conv-sms-001', 'Body', USER_ID);
+      await service.sendReply('conv-sms-001', 'Body', USER_ACTOR);
 
       expect(auditLog.create).toHaveBeenCalledTimes(1);
     });
 
     it('skips the audit log when writeAuditLog is false', async () => {
       // The AI auto-reply path in process-jobs#send_outbound_message
-      // passes writeAuditLog: false so it can write a single
-      // actorType='ai' row in place of the service's default
-      // actorType='user' row.
-      await service.sendReply('conv-sms-001', 'Body', USER_ID, {}, { writeAuditLog: false });
+      // passes writeAuditLog: false so it can write a single specialized
+      // audit row with auto-reply metadata.
+      await service.sendReply('conv-sms-001', 'Body', USER_ACTOR, {}, { writeAuditLog: false });
 
       expect(auditLog.create).not.toHaveBeenCalled();
+    });
+
+    it('persists a typed AI actor without coercing a null sender ID', async () => {
+      await service.sendReply(
+        'conv-sms-001',
+        'AI reply',
+        { type: 'ai', id: null },
+      );
+
+      expect(messageRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({ senderType: 'ai', senderId: null }),
+      );
+      expect(auditLog.create).toHaveBeenCalledWith(
+        expect.objectContaining({ actorType: 'ai', actorId: null }),
+      );
     });
   });
 
@@ -565,7 +580,7 @@ describe('OutboundMessageService', () => {
       vi.mocked(conversationRepo.findById).mockResolvedValue(null);
 
       await expect(
-        service.sendReply('nonexistent', 'body', USER_ID),
+        service.sendReply('nonexistent', 'body', USER_ACTOR),
       ).rejects.toThrow('Conversation not found: nonexistent');
     });
 
@@ -573,7 +588,7 @@ describe('OutboundMessageService', () => {
       vi.mocked(contactRepo.findById).mockResolvedValue(null);
 
       await expect(
-        service.sendReply('conv-sms-001', 'body', USER_ID),
+        service.sendReply('conv-sms-001', 'body', USER_ACTOR),
       ).rejects.toThrow('Contact not found: contact-001');
     });
 
@@ -581,7 +596,7 @@ describe('OutboundMessageService', () => {
       vi.mocked(smsAccountRepo.findDefaultPhoneNumber).mockResolvedValue(null);
 
       await expect(
-        service.sendReply('conv-sms-001', 'body', USER_ID),
+        service.sendReply('conv-sms-001', 'body', USER_ACTOR),
       ).rejects.toThrow('No default SMS phone number configured');
     });
 
@@ -589,7 +604,7 @@ describe('OutboundMessageService', () => {
       vi.mocked(smsAccountRepo.findById).mockResolvedValue(null);
 
       await expect(
-        service.sendReply('conv-sms-001', 'body', USER_ID),
+        service.sendReply('conv-sms-001', 'body', USER_ACTOR),
       ).rejects.toThrow('SMS provider account not found');
     });
 
@@ -598,7 +613,7 @@ describe('OutboundMessageService', () => {
       vi.mocked(contactRepo.findById).mockResolvedValue(noPhoneContact);
 
       await expect(
-        service.sendReply('conv-sms-001', 'body', USER_ID),
+        service.sendReply('conv-sms-001', 'body', USER_ACTOR),
       ).rejects.toThrow('has no phone number for SMS reply');
     });
 
@@ -608,7 +623,7 @@ describe('OutboundMessageService', () => {
       vi.mocked(emailAccountRepo.findDefaultEmailAddress).mockResolvedValue(null);
 
       await expect(
-        service.sendReply('conv-email-001', 'body', USER_ID),
+        service.sendReply('conv-email-001', 'body', USER_ACTOR),
       ).rejects.toThrow('No default email address configured');
     });
 
@@ -618,7 +633,7 @@ describe('OutboundMessageService', () => {
       vi.mocked(emailAccountRepo.findById).mockResolvedValue(null);
 
       await expect(
-        service.sendReply('conv-email-001', 'body', USER_ID),
+        service.sendReply('conv-email-001', 'body', USER_ACTOR),
       ).rejects.toThrow('Email provider account not found');
     });
 
@@ -628,7 +643,7 @@ describe('OutboundMessageService', () => {
       vi.mocked(contactRepo.findById).mockResolvedValue(noEmailContact);
 
       await expect(
-        service.sendReply('conv-email-001', 'body', USER_ID),
+        service.sendReply('conv-email-001', 'body', USER_ACTOR),
       ).rejects.toThrow('has no email address for email reply');
     });
   });
@@ -651,7 +666,7 @@ describe('OutboundMessageService', () => {
       const result = await service.sendReply(
         'conv-webchat-001',
         'We can help you with that!',
-        USER_ID,
+        USER_ACTOR,
       );
 
       // 1. No adapter was touched (no SMS, no email path)
@@ -694,8 +709,8 @@ describe('OutboundMessageService', () => {
     });
 
     it('generates a unique externalMessageId for each call', async () => {
-      await service.sendReply('conv-webchat-001', 'First reply', USER_ID);
-      await service.sendReply('conv-webchat-001', 'Second reply', USER_ID);
+      await service.sendReply('conv-webchat-001', 'First reply', USER_ACTOR);
+      await service.sendReply('conv-webchat-001', 'Second reply', USER_ACTOR);
 
       expect(messageRepo.create).toHaveBeenCalledTimes(2);
       const firstId = vi.mocked(messageRepo.create).mock.calls[0][0].externalMessageId;

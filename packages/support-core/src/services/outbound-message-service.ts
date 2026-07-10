@@ -21,6 +21,7 @@
  * caller (the route or the Deno function) must publish the `new_message`
  * event itself with the correct `senderType` for the widget payload:
  *   - `app/api/functions/send-reply` → 'user' (human agent reply)
+ *   - `app/api/functions/approve-ai-draft` → 'ai' (approved AI draft)
  *   - `insforge/functions/process-jobs#send_outbound_message` → 'ai'
  * Hard-coding the sender type inside the service was unsafe because the
  * service cannot tell a human reply from an AI auto-reply.
@@ -36,6 +37,19 @@ import type { SmsProviderAccountRepository } from '../repositories/sms-provider-
 import type { EmailProviderAccountRepository } from '../repositories/email-provider-account-repository.js';
 import type { ProviderRegistry } from '../interfaces/provider-registry.js';
 import type { Message } from '../types/index.js';
+
+/**
+ * Identity attached to a persisted outbound message and its default audit row.
+ *
+ * Keeping the sender type and nullable ID together prevents automation callers
+ * from passing `null` through a parameter that was typed as a human user ID,
+ * while still allowing an approving user to be recorded on an AI-authored
+ * draft.
+ */
+export type OutboundMessageActor =
+  | { type: 'user'; id: string }
+  | { type: 'ai'; id: string | null }
+  | { type: 'system'; id: string | null };
 
 export class OutboundMessageService {
   constructor(
@@ -53,7 +67,7 @@ export class OutboundMessageService {
    *
    * @param conversationId - The conversation to reply on
    * @param body - The message body text
-   * @param userId - The user sending the reply
+   * @param actor - The user, AI, or system identity sending the reply
    * @param providerConfig - Per-call credentials for the provider adapter
    *   (e.g. `{ accountSid, authToken }` for Twilio, `{ serverToken }` for
    *   Postmark, `{ apiKey }` for Telnyx). The Mock adapter ignores it.
@@ -62,12 +76,10 @@ export class OutboundMessageService {
    *   adapter constructor (none of the current adapters do).
    * @param options - Optional behavior flags:
    *   - `writeAuditLog` (default `true`): when `false`, the service skips
-   *     its own `message_sent` audit entry. The AI auto-reply path in
-   *     `process-jobs#send_outbound_message` passes `writeAuditLog: false`
-   *     so it can write a single `actorType: 'ai'` audit row in place of
-   *     the service's default `actorType: 'user'` row (which would be
-   *     misleading for AI-sent messages). Realtime publishing for AI
-   *     auto-replies also lives in that caller (with
+   *     its own `message_sent` audit entry. Callers that need a specialized
+   *     event (AI auto-reply metadata or draft approval) pass
+   *     `writeAuditLog: false` and write that event themselves. Realtime
+   *     publishing for AI auto-replies also lives in that caller (with
    *     `senderType: 'ai'`), since the service no longer publishes
    *     realtime itself.
    * @returns The created outbound Message
@@ -75,7 +87,7 @@ export class OutboundMessageService {
   async sendReply(
     conversationId: string,
     body: string,
-    userId: string,
+    actor: OutboundMessageActor,
     providerConfig: Record<string, unknown> = {},
     options: { writeAuditLog?: boolean } = {},
   ): Promise<Message> {
@@ -181,8 +193,8 @@ export class OutboundMessageService {
     // 6. Create outbound message record
     const message = await this.messageRepo.create({
       conversationId: conversation.id,
-      senderType: 'user',
-      senderId: userId,
+      senderType: actor.type,
+      senderId: actor.id,
       direction: 'outbound',
       channel,
       body,
@@ -202,8 +214,8 @@ export class OutboundMessageService {
     if (options.writeAuditLog !== false) {
       await this.auditLog.create({
         organizationId: conversation.organizationId,
-        actorId: userId,
-        actorType: 'user',
+        actorId: actor.id,
+        actorType: actor.type,
         action: 'message_sent',
         resourceType: 'message',
         resourceId: message.id,

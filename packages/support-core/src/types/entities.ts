@@ -204,6 +204,7 @@ export interface KnowledgeDocument {
   errorMessage: string | null;
   fileUrl: string | null;
   fileName: string | null;
+  fileKey: string | null;
   createdAt: Date;
   updatedAt: Date;
 }

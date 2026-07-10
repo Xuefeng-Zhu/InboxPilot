@@ -5,11 +5,11 @@
  * Delegates to: InboundMessageService.processInboundSms
  *
  * Flow:
- * 1. Parse request body
- * 2. Determine SMS provider from x-provider header (default: 'mock')
- * 3. Verify webhook signature via adapter — return 401 if invalid
- * 4. Parse inbound payload via adapter
- * 5. Look up organization ID from the receiving phone number (sms_phone_numbers table)
+ * 1. Require the SMS provider in x-provider and reject non-local mock use
+ * 2. Parse the inbound payload via the selected adapter
+ * 3. Resolve the active provider account from the receiving phone route
+ * 4. Verify the webhook with credentials from that trusted account
+ * 5. Derive organization and provider from the trusted account context
  * 6. Create repositories and InboundMessageService
  * 7. Delegate to processInboundSms()
  * 8. Publish new_message realtime event on org:{orgId} channel
@@ -22,7 +22,9 @@ import { createDbClient } from '../_shared/create-db-client.ts';
 import { createRealtimePublisher } from '../_shared/create-realtime-publisher.ts';
 import { createProviderRegistry } from '../_shared/create-provider-registry.ts';
 import {
+  isLocalMockWebhookAllowed,
   parseSmsWebhookBody,
+  readWebhookProvider,
   requestHeadersToRecord,
   resolveSmsInboundWebhookContext,
 } from '../_shared/webhook-credentials.ts';
@@ -125,13 +127,33 @@ function jsonResponse(body: unknown, status = 200): Response {
 
 export default async function (req: Request): Promise<Response> {
   try {
-    // 1. Read request body
+    // 1. Require an explicit provider. Missing/blank headers must not silently
+    // downgrade to the unauthenticated mock adapter.
+    const provider = readWebhookProvider(req.headers);
+    if (!provider) {
+      return jsonResponse({ error: 'x-provider header is required' }, 400);
+    }
+
+    // 2. Load runtime configuration before parsing mock payloads so deployed
+    // endpoints reject the mock adapter without touching the database.
+    const baseUrl =
+      (typeof Deno !== 'undefined' ? Deno.env.get('INSFORGE_BASE_URL') : undefined) ??
+      process.env.NEXT_PUBLIC_INSFORGE_URL ??
+      '';
+    const localMockOptIn =
+      (typeof Deno !== 'undefined'
+        ? Deno.env.get('INBOXPILOT_ALLOW_LOCAL_MOCK_WEBHOOKS')
+        : undefined) ??
+      process.env.INBOXPILOT_ALLOW_LOCAL_MOCK_WEBHOOKS;
+
+    if (provider === 'mock' && !isLocalMockWebhookAllowed(req.url, baseUrl, localMockOptIn)) {
+      return jsonResponse({ error: 'Mock SMS webhooks are disabled outside local development' }, 403);
+    }
+
+    // 3. Read request body
     const rawBody = await req.text();
 
-    // 2. Determine SMS provider from header (default: 'mock')
-    const provider = req.headers.get('x-provider') ?? 'mock';
-
-    // 3. Build provider registry and get adapter
+    // 4. Build provider registry and get adapter
     const registry = createProviderRegistry();
 
     let adapter;
@@ -141,7 +163,7 @@ export default async function (req: Request): Promise<Response> {
       return jsonResponse({ error: `Unknown SMS provider: ${provider}` }, 400);
     }
 
-    // 4. Parse body in the provider's native webhook shape.
+    // 5. Parse body in the provider's native webhook shape.
     let body: unknown;
     try {
       body = parseSmsWebhookBody(rawBody, provider);
@@ -149,7 +171,7 @@ export default async function (req: Request): Promise<Response> {
       return jsonResponse({ error: 'Invalid webhook body' }, 400);
     }
 
-    // 5. Parse and normalize inbound payload
+    // 6. Parse and normalize inbound payload
     let normalized: NormalizedInboundSms;
     try {
       normalized = adapter.parseInboundWebhook(body);
@@ -160,11 +182,7 @@ export default async function (req: Request): Promise<Response> {
       );
     }
 
-    // 6. Create InsForge database client
-    const baseUrl =
-      (typeof Deno !== 'undefined' ? Deno.env.get('INSFORGE_BASE_URL') : undefined) ??
-      process.env.NEXT_PUBLIC_INSFORGE_URL ??
-      '';
+    // 7. Create InsForge database client
     const serviceRoleKey =
       (typeof Deno !== 'undefined' ? Deno.env.get('INSFORGE_SERVICE_ROLE_KEY') : undefined) ??
       process.env.INSFORGE_SERVICE_ROLE_KEY ??
@@ -172,7 +190,7 @@ export default async function (req: Request): Promise<Response> {
 
     const db = createDbClient(baseUrl, serviceRoleKey);
 
-    // 7. Resolve the trusted provider account and signing secret from storage.
+    // 8. Resolve the trusted provider account and signing secret from storage.
     const webhookContext = await resolveSmsInboundWebhookContext(
       db,
       provider,
@@ -181,33 +199,26 @@ export default async function (req: Request): Promise<Response> {
       serviceRoleKey,
     );
 
-    if (!webhookContext && provider !== 'mock') {
+    if (!webhookContext) {
       return jsonResponse({ error: 'Webhook provider account not found' }, 401);
     }
 
-    // 8. Verify webhook signature
+    // 9. Verify webhook signature
     const isValid = await adapter.verifyWebhook({
       headers: requestHeadersToRecord(req.headers),
       body: rawBody,
-      signingSecret: webhookContext?.signingSecret ?? '',
+      signingSecret: webhookContext.signingSecret,
     });
 
     if (!isValid) {
       return jsonResponse({ error: 'Webhook signature verification failed' }, 401);
     }
 
-    // 9. Determine organization ID from the trusted account context. The
-    // x-organization-id header remains a mock-only local development fallback.
-    const orgId = webhookContext?.organizationId ?? req.headers.get('x-organization-id');
+    // 10. Use only the active route/account context for tenant and provider.
+    const orgId = webhookContext.organizationId;
+    const trustedProvider = webhookContext.provider;
 
-    if (!orgId) {
-      return jsonResponse(
-        { error: 'Could not determine organization for receiving phone number' },
-        404,
-      );
-    }
-
-    // 10. Create repositories and service
+    // 11. Create repositories and service
     const contactRepo = new ContactRepository(db);
     const conversationRepo = new ConversationRepository(db);
     const messageRepo = new MessageRepository(db);
@@ -222,21 +233,21 @@ export default async function (req: Request): Promise<Response> {
       auditLogRepo,
     );
 
-    // 11. Delegate to InboundMessageService
+    // 12. Delegate to InboundMessageService
     const message = await inboundService.processInboundSms(
       normalized,
       orgId,
-      provider,
+      trustedProvider,
     );
 
-    // 12. Publish new_message realtime event
+    // 13. Publish new_message realtime event
     const realtimePublisher = createRealtimePublisher(baseUrl, serviceRoleKey);
     await realtimePublisher.publish(`org:${orgId}`, 'new_message', {
       message,
       conversationId: message.conversationId,
     });
 
-    // 13. The AI job is enqueued above. The `process-jobs` function picks it
+    // 14. The AI job is enqueued above. The `process-jobs` function picks it
     // up on its next cron tick (currently 10 seconds — see schedules in
     // InsForge dashboard). Function-to-function triggers within the same
     // Deno deployment are blocked by 508 LOOP_DETECTED, so a direct trigger
@@ -244,7 +255,7 @@ export default async function (req: Request): Promise<Response> {
     // was attempted but the `http` extension is unreliable in this project.
     // The 10s cron cadence is the practical equivalent of event-driven.
 
-    // 14. Return 200 OK with message data
+    // 15. Return 200 OK with message data
     return jsonResponse({ status: 'ok', data: message });
   } catch (err) {
     console.error('sms-inbound error:', err);

@@ -1,10 +1,10 @@
 # Database Reference
 
-> PostgreSQL schema reference. 20 tables, 10 migrations, 6 RPCs, RLS on all tenant-scoped tables.
+> PostgreSQL schema reference. 20 application tables, 16 migration files, 6 application-callable RPCs, and role-aware RLS on tenant-scoped data.
 
 ## Migration files
 
-Apply in order. All files are idempotent (`CREATE OR REPLACE`, `IF NOT EXISTS`).
+Apply pending files in the order shown. Do not replay the whole set against an initialized schema; not every historical migration is idempotent.
 
 | File | Purpose |
 |---|---|
@@ -18,8 +18,14 @@ Apply in order. All files are idempotent (`CREATE OR REPLACE`, `IF NOT EXISTS`).
 | `insforge/migrations/008_claim_failed_jobs.sql` | Drops old `idx_support_jobs_pending`; new `idx_support_jobs_claimable` index; replaces `claim_support_jobs` with overload using `claim_limit` that also claims failed jobs |
 | `insforge/migrations/009_org_sla_thresholds.sql` | Adds `organizations.sla_thresholds jsonb`; `conversations.last_message_direction text`; backfill from `messages.direction` |
 | `insforge/migrations/010_drop_pending_status.sql` | Drops `'pending'` from `conversations.status` CHECK (was in 001 but never assigned by code) |
+| `insforge/migrations/011_ai_settings_embedding_model.sql` | Adds `ai_settings.embedding_model`; changes the chat-model default |
+| `insforge/migrations/012_replace_knowledge_chunks.sql` | Adds the transactional `replace_knowledge_chunks` RPC |
+| `insforge/migrations/013_webchat_realtime_widget_channel.sql` | Registers org/widget realtime channels and adds the server-only `publish_realtime_message` RPC |
+| `insforge/migrations/20260615074718_trigger-process-jobs-on-insert.sql` | Adds an HTTP job trigger (superseded by the next migration after the extension proved unreliable) |
+| `insforge/migrations/20260615080500_drop-broken-trigger.sql` | Drops the unreliable HTTP job trigger; scheduled processing remains the active path |
+| `insforge/migrations/014_role_aware_rls_and_knowledge_storage.sql` | Adds role-aware settings/knowledge/job policies, secret-safe client grants, file keys, and organization-scoped storage policies |
 
-Apply via the InsForge SQL editor or migrations API.
+Apply via the InsForge SQL editor or migrations API. Migration `014` cannot change bucket configuration: after applying it, mark the existing `knowledge-files` bucket **private** in the InsForge dashboard. Storage object keys must use `<organization-id>/documents/...` so its policies can derive the tenant from the first path segment.
 
 ---
 
@@ -166,7 +172,7 @@ resolved → open (reopen)
 | `organization_id` | `uuid` | NOT NULL, FK → `organizations` (CASCADE) | |
 | `provider` | `text` | NOT NULL | `twilio`, `telnyx`, … |
 | `label` | `text` | NOT NULL | |
-| `credentials_secret_id` | `text` | NOT NULL | Reference to stored secrets — **column-level SELECT revoked** |
+| `credentials_secret_id` | `text` | NOT NULL | Server-only secret reference — excluded from authenticated client SELECT grants by migration 014 |
 | `is_active` | `boolean` | NOT NULL, default `true` | |
 | `metadata` | `jsonb` | NOT NULL, default `'{}'` | |
 | `created_at` | `timestamptz` | NOT NULL | |
@@ -200,7 +206,7 @@ resolved → open (reopen)
 
 #### email_provider_accounts
 
-Identical structure to `sms_provider_accounts`, with the same `credentials_secret_id` column-level revocation.
+Identical structure to `sms_provider_accounts`; `credentials_secret_id` is excluded from authenticated client SELECT grants.
 
 #### email_addresses
 
@@ -225,7 +231,8 @@ Identical structure to `sms_delivery_events`.
 | `knowledge_similarity_threshold` | `numeric(3,2)` | NOT NULL, default `0.70` | Min cosine similarity to consider a chunk |
 | `escalation_keywords` | `text[]` | NOT NULL, default `'{}'` | Custom `KeywordRule` triggers |
 | `system_prompt` | `text` | nullable | Custom LLM system prompt |
-| `model` | `text` | NOT NULL, default `'openai/gpt-4o-mini'` | LLM model identifier |
+| `model` | `text` | NOT NULL, default `'openai/gpt-5-mini'` (since 011) | Chat model identifier |
+| `embedding_model` | `text` | NOT NULL, default `'openai/text-embedding-3-small'` (since 011) | Knowledge embedding model; changing it requires re-indexing |
 | `created_at` | `timestamptz` | NOT NULL | |
 | `updated_at` | `timestamptz` | NOT NULL | |
 
@@ -271,6 +278,9 @@ Identical structure to `sms_delivery_events`.
 | `title` | `text` | NOT NULL | |
 | `source_type` | `text` | NOT NULL | `manual`, `upload`, … |
 | `body` | `text` | NOT NULL | Full document text |
+| `file_url` | `text` | nullable | Legacy/source URL for uploaded content |
+| `file_name` | `text` | nullable | Original upload filename |
+| `file_key` | `text` | nullable | Object key in the private `knowledge-files` bucket; new uploads use `<organization-id>/documents/...` |
 | `status` | `text` | NOT NULL, default `'pending'`, CHECK `('pending','processing','ready','failed')` | |
 | `error_message` | `text` | nullable | |
 | `created_at` | `timestamptz` | NOT NULL | |
@@ -309,7 +319,7 @@ Identical structure to `sms_delivery_events`.
 | `updated_at` | `timestamptz` | NOT NULL | |
 | `completed_at` | `timestamptz` | nullable | |
 
-**Indexes:** `idx_support_jobs_pending` — partial on `(status, run_after)` `WHERE status = 'pending'`.
+**Indexes:** `idx_support_jobs_claimable` — partial on `(run_after, created_at)` where status is `pending` or `failed`.
 
 #### audit_logs
 
@@ -350,7 +360,7 @@ Identical structure to `sms_delivery_events`.
 
 **Indexes:** `idx_webchat_widgets_org`.
 
-> **Security note:** `hmac_secret` is intended to remain server-side. The current RLS policies do not revoke SELECT on this column at the SQL level (unlike `credentials_secret_id`); callers should restrict access at the application layer.
+> **Security note:** Migration `014` replaces the broad client SELECT grant with a safe column list that excludes `hmac_secret`.
 
 #### webchat_threads
 
@@ -388,9 +398,9 @@ Called by `KnowledgeRepository.matchChunks()`.
 
 ### `claim_support_jobs(claim_limit int DEFAULT 5)`
 
-Atomically claims up to N pending jobs whose `run_after <= now()`, setting their status to `claimed`. Uses `SELECT FOR UPDATE SKIP LOCKED` to prevent contention between concurrent workers.
+Atomically claims up to N pending or retryable failed jobs whose `run_after <= now()`, setting their status to `claimed`. Uses `SELECT FOR UPDATE SKIP LOCKED` to prevent contention between concurrent workers.
 
-> **Note:** The current `PostgresJobQueue.claim(limit)` calls this RPC with `{ max_count: limit }` (the parameter name in the RPC is `claim_limit` but the queue calls it `max_count` — they may need to be aligned; see [`jobs.md`](jobs.md#known-quirks)).
+`PostgresJobQueue.claim(limit)` first calls the live-compatible `max_count` signature and retries with `claim_limit` when the backend exposes the migration-008 signature.
 
 ### `ai_decision_chunks_validate()`
 
@@ -410,49 +420,38 @@ Throws:
 
 Called by `lib/onboarding.ts` after signup.
 
+### `replace_knowledge_chunks(p_document_id uuid, p_organization_id uuid, p_chunks jsonb)`
+
+Atomically deletes and replaces all chunks for one knowledge document. It verifies the document belongs to `p_organization_id`, so a failed replacement rolls back without losing the last known-good chunks.
+
+### `publish_realtime_message(p_channel_name text, p_event_name text, p_payload jsonb)`
+
+Server-only wrapper around `realtime.publish`. Execute permission is granted only to `project_admin`; browser roles cannot publish through this RPC.
+
 ---
 
 ## RLS policies
 
-All 20 tables have RLS enabled. The general pattern:
+Migration `014` upgrades membership-only settings policies to the application RBAC matrix. Its `SECURITY DEFINER` helpers use a pinned search path and prevent recursive `organization_members` policy evaluation.
 
-| Operation | Policy |
-|---|---|
-| `SELECT` | `organization_id IN (SELECT user_org_ids())` |
-| `INSERT` | `WITH CHECK (organization_id IN (SELECT user_org_ids()))` |
-| `UPDATE` | `USING (organization_id IN (SELECT user_org_ids()))` |
-| `DELETE` | `USING (organization_id IN (SELECT user_org_ids()))` |
+| Resource | Read | Create/update/delete |
+|---|---|---|
+| Organizations and memberships | organization members | organization creation only through the onboarding RPC; member writes only through trusted team APIs; org update owner/admin and delete owner-only |
+| Provider accounts/addresses | owner, admin, agent | owner/admin |
+| AI settings and webchat widgets | owner, admin, agent | owner/admin |
+| Knowledge documents/chunks and private files | all organization roles | owner/admin |
+| `support_jobs` | owner/admin | owner/admin may enqueue only `process_knowledge_document`; browser updates/deletes are denied |
+| `audit_logs` | organization members | owner/admin/agent may append with `actor_type = 'user'` and `actor_id = auth.uid()`; viewers cannot write |
 
-`user_org_ids()` is a `SECURITY DEFINER` SQL function in `insforge/migrations/003_rls_policies.sql`:
+Conversation/message policies remain tenant-scoped through organization membership; delivery-event tables join through their message and conversation. Server-side workers use the project-admin/service role for trusted queue and provider operations.
 
-```sql
-CREATE OR REPLACE FUNCTION public.user_org_ids()
-RETURNS SETOF uuid
-LANGUAGE sql STABLE SECURITY DEFINER
-AS $$
-  SELECT om.organization_id
-  FROM organization_members om
-  WHERE om.user_id = auth.uid()::text;
-$$;
-```
+### Secret-safe client reads
 
-### Exceptions
+Migration `014` first revokes broad table SELECT, then grants authenticated users only explicit safe columns. `sms_provider_accounts.credentials_secret_id`, `email_provider_accounts.credentials_secret_id`, and `webchat_widgets.hmac_secret` are therefore not exposed through client PostgREST reads. A column-level REVOKE alone would not override a pre-existing table-level grant.
 
-- **`organizations` INSERT** — `WITH CHECK (true)`. Any authenticated user can create an org. Membership is assigned in the same transaction by the application layer (or by the `create_organization_with_owner` RPC).
-- **`audit_logs`** — Append-only. Only `SELECT` and `INSERT` policies exist. No `UPDATE` or `DELETE` policies, so RLS denies those by default.
-- **`messages`, `sms_delivery_events`, `email_delivery_events`** — no direct `organization_id`; access is determined by joining through `messages → conversations` to reach the org.
-- **`webchat_widgets`, `webchat_threads`** (in 005) — the RLS policies use a slightly different pattern: they read the user ID from `current_setting('request.jwt.claims', true)::json->>'sub'` directly, rather than calling `user_org_ids()`. They are functionally equivalent but use the raw JWT claim instead of the helper. This is a minor inconsistency worth noting if you change JWT handling.
+### Knowledge storage
 
-### Column-level credential protection
-
-`credentials_secret_id` on both `sms_provider_accounts` and `email_provider_accounts` has column-level `SELECT` revoked from `anon` and `authenticated` roles. PostgREST will never return this column to clients.
-
-```sql
-REVOKE SELECT (credentials_secret_id) ON sms_provider_accounts FROM anon;
-REVOKE SELECT (credentials_secret_id) ON sms_provider_accounts FROM authenticated;
-REVOKE SELECT (credentials_secret_id) ON email_provider_accounts FROM anon;
-REVOKE SELECT (credentials_secret_id) ON email_provider_accounts FROM authenticated;
-```
+`storage.objects` policies authorize by the organization UUID in the first object-key segment. All organization roles can read; only owners/admins can insert, update, or delete. Uploads must also record the authenticated user as `uploaded_by`. Restrictive companion policies prevent another permissive storage policy from bypassing these role checks. These SQL policies do not make a public bucket private, so the dashboard visibility step after migration `014` is mandatory.
 
 ---
 
@@ -469,7 +468,7 @@ REVOKE SELECT (credentials_secret_id) ON email_provider_accounts FROM authentica
 | `messages` | `idx_messages_provider_external_id` | **unique partial** `(provider, external_message_id) WHERE provider IS NOT NULL AND external_message_id IS NOT NULL` | Dedup |
 | `knowledge_documents` | `idx_knowledge_documents_org_id` | btree | Org lookup |
 | `knowledge_chunks` | `idx_knowledge_chunks_embedding` | **HNSW** `(embedding vector_cosine_ops)` | Vector similarity |
-| `support_jobs` | `idx_support_jobs_pending` | **partial** `(status, run_after) WHERE status = 'pending'` | Queue claim |
+| `support_jobs` | `idx_support_jobs_claimable` | **partial** `(run_after, created_at) WHERE status IN ('pending','failed')` | Pending and retryable job claims |
 | `audit_logs` | `idx_audit_logs_org_created` | btree `(organization_id, created_at DESC)` | Chronological audit query |
 | `ai_decision_chunks` | `idx_ai_decision_chunks_decision` | btree `(ai_decision_id)` | Lookup by decision |
 | `ai_decision_chunks` | `idx_ai_decision_chunks_org` | btree `(organization_id)` | Org lookup |

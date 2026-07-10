@@ -235,7 +235,13 @@ export class PostgresJobQueue implements JobQueue {
 
     const { data, error } = await query.limit(1).maybeSingle();
 
-    if (error || !data) {
+    if (error) {
+      throw new Error(
+        `Failed to check for existing ${jobType} job: ${error.message}`,
+      );
+    }
+
+    if (!data) {
       return null;
     }
 

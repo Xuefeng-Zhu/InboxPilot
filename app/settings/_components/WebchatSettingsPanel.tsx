@@ -2,14 +2,16 @@
 
 import { useState } from 'react';
 import { useAuth } from '@/lib/auth-context';
-import { useOrgMembership } from '@/lib/queries';
+import { useCurrentMembership } from '@/lib/queries';
 import { useWebchatWidgets } from './useWebchatWidgets';
 import { CreateWidgetModal } from './CreateWidgetModal';
 import { WidgetCard } from './WidgetCard';
 
 export default function WebchatSettingsPanel() {
   const { user } = useAuth();
-  const { data: orgId } = useOrgMembership(user?.id);
+  const { data: membership } = useCurrentMembership(user?.id);
+  const orgId = membership?.organizationId ?? null;
+  const canManage = membership?.role === 'owner' || membership?.role === 'admin';
   const { widgets, loading, error, refresh, deleteWidget } = useWebchatWidgets(orgId ?? null);
   const [showCreate, setShowCreate] = useState(false);
 
@@ -22,17 +24,26 @@ export default function WebchatSettingsPanel() {
             Create embeddable chat widgets for your websites.
           </p>
         </div>
-        <button
-          onClick={() => setShowCreate(true)}
-          className="rounded-md border border-[var(--m03-fg)] bg-[var(--m03-fg)] px-3 py-1.5 text-[13px] font-medium text-[var(--m03-bg)] transition-colors hover:bg-[var(--m03-fg-2)]"
-        >
-          Create Widget
-        </button>
+        {canManage && (
+          <button
+            type="button"
+            onClick={() => setShowCreate(true)}
+            className="rounded-md border border-[var(--m03-fg)] bg-[var(--m03-fg)] px-3 py-1.5 text-[13px] font-medium text-[var(--m03-bg)] transition-colors hover:bg-[var(--m03-fg-2)]"
+          >
+            Create Widget
+          </button>
+        )}
       </header>
 
       {error && (
         <div role="alert" className="mt-6 rounded border border-[var(--m03-red-line)] bg-[var(--m03-red-fill)] p-3 text-[13px] text-[var(--m03-red)]">
           {error}
+        </div>
+      )}
+
+      {!canManage && (
+        <div className="mt-4 rounded border border-[var(--m03-line)] bg-[var(--m03-line-2)] p-3 text-[13px] text-[var(--m03-fg-2)]">
+          Widgets are read-only. An owner or admin can create, edit, or delete them.
         </div>
       )}
 
@@ -53,12 +64,18 @@ export default function WebchatSettingsPanel() {
       ) : (
         <div className="mt-6 flex flex-col gap-3">
           {widgets.map((widget) => (
-            <WidgetCard key={widget.id} widget={widget} onRefresh={refresh} onDelete={deleteWidget} />
+            <WidgetCard
+              key={widget.id}
+              widget={widget}
+              onRefresh={refresh}
+              onDelete={deleteWidget}
+              readOnly={!canManage}
+            />
           ))}
         </div>
       )}
 
-      {showCreate && orgId && (
+      {canManage && showCreate && orgId && (
         <CreateWidgetModal
           orgId={orgId}
           onClose={() => setShowCreate(false)}

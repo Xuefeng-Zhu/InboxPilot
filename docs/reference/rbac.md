@@ -61,11 +61,13 @@ RBAC is enforced at two layers:
 
 ### Database layer (RLS)
 
-The `user_org_ids()` SQL function (in `003_rls_policies.sql`) returns the user's org IDs. Every tenant-scoped table has a RLS policy that filters to `organization_id IN (SELECT user_org_ids())`. This is the primary enforcement — a user can only read or modify rows in orgs they belong to, regardless of role.
+Migration `014_role_aware_rls_and_knowledge_storage.sql` aligns organization, settings, provider, widget, knowledge, queue, audit, and private-file policies with this matrix. Owners/admins may mutate settings and knowledge; agents can read settings; all roles can read knowledge; organization deletion is owner-only. Direct organization creation is denied in favor of the onboarding RPC, and membership writes are limited to trusted team APIs so users cannot self-promote. Browser clients may only enqueue `process_knowledge_document` jobs as owner/admin and cannot update/delete jobs. Owner/admin/agent audit inserts must identify the authenticated user; viewers remain read-only.
 
-### Known gaps
+The role helpers are `SECURITY DEFINER` functions with pinned search paths so membership lookup does not recurse through `organization_members` RLS. Trusted webhook and worker operations use the service/project-admin role at server-side boundaries.
 
-Direct client-side database writes still rely on RLS for tenant isolation and do not all enforce role-level permissions at a shared application boundary. Prefer routing significant mutations through a server-side call site that verifies the InsForge session and calls `userHasOrgPermission`.
+### Secret and storage boundaries
+
+Authenticated client SELECT grants exclude provider `credentials_secret_id` fields and `webchat_widgets.hmac_secret`. Knowledge-file keys are organization-prefixed; all organization roles can read private files, while only owners/admins can upload, replace, or delete them. Restrictive storage policies keep those role checks effective even if another permissive object policy exists. The `knowledge-files` bucket must also be configured as private in the InsForge dashboard after applying migration `014`.
 
 ## Adding a new permission
 

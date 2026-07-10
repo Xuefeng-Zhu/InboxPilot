@@ -4,6 +4,9 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { readResponseJsonObject } from '@/lib/http-json';
 import { insforge, getAccessToken } from '@/lib/insforge';
 
+export const WEBCHAT_WIDGET_SAFE_COLUMNS =
+  'id,organization_id,name,widget_token,allowed_domains,position,primary_color,greeting,pre_chat_enabled,ai_mode_override,is_active,created_at,updated_at' as const;
+
 export interface WebchatWidgetRow {
   id: string;
   organization_id: string;
@@ -38,7 +41,7 @@ export function useWebchatWidgets(orgId: string | null) {
     setLoading(true);
     const { data, error: err } = await insforge.database
       .from('webchat_widgets')
-      .select('*')
+      .select(WEBCHAT_WIDGET_SAFE_COLUMNS)
       .eq('organization_id', orgId)
       .order('created_at', { ascending: false });
 

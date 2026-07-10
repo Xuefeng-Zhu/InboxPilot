@@ -30,6 +30,17 @@ interface PostgRestQueryState {
   returnRepresentation: boolean;
 }
 
+/** Match postgrest-js serialization for the `cs` (contains) operator. */
+function serializeContainsValue(value: unknown): string {
+  if (typeof value === 'string') {
+    return value;
+  }
+  if (Array.isArray(value)) {
+    return `{${value.join(',')}}`;
+  }
+  return JSON.stringify(value);
+}
+
 async function readJsonObjectBody(res: Response): Promise<Record<string, unknown>> {
   const text = await res.text();
   if (!text.trim()) {
@@ -206,6 +217,8 @@ class PostgRestQueryBuilder implements QueryBuilder {
         url.searchParams.set(f.column, `in.(${(f.value as unknown[]).join(',')})`);
       } else if (f.operator === 'is') {
         url.searchParams.set(f.column, `is.${f.value}`);
+      } else if (f.operator === 'cs') {
+        url.searchParams.set(f.column, `cs.${serializeContainsValue(f.value)}`);
       } else {
         url.searchParams.set(f.column, `${f.operator}.${f.value}`);
       }

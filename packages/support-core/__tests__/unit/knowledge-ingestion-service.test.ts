@@ -28,6 +28,7 @@ const SAMPLE_DOCUMENT: KnowledgeDocument = {
   errorMessage: null,
   fileUrl: null,
   fileName: null,
+  fileKey: null,
   createdAt: new Date('2024-01-01'),
   updatedAt: new Date('2024-01-01'),
 };
@@ -163,6 +164,34 @@ describe('KnowledgeIngestionService', () => {
           resourceType: 'knowledge_document',
           resourceId: DOC_ID,
         }),
+      );
+    });
+
+    it('passes the storage key to the injected file fetcher', async () => {
+      const fileFetcher = {
+        fetchTextContent: vi.fn().mockResolvedValue('File-backed knowledge content.'),
+      };
+      vi.mocked(knowledgeRepo.getDocument).mockResolvedValue({
+        ...SAMPLE_DOCUMENT,
+        body: '',
+        fileUrl: 'https://storage.example.invalid/object',
+        fileName: 'policy.txt',
+        fileKey: `${ORG_ID}/documents/policy.txt`,
+      });
+      service = new KnowledgeIngestionService(
+        knowledgeRepo,
+        aiClient,
+        auditLog,
+        fileFetcher,
+        aiSettingsRepo,
+      );
+
+      await service.processDocument(DOC_ID);
+
+      expect(fileFetcher.fetchTextContent).toHaveBeenCalledWith(
+        'https://storage.example.invalid/object',
+        'policy.txt',
+        `${ORG_ID}/documents/policy.txt`,
       );
     });
 

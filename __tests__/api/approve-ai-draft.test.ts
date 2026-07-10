@@ -43,6 +43,7 @@ interface Scenario {
   updates: Array<{ table: string; values: Record<string, unknown> }>;
   inserts: Array<{ table: string; values: unknown }>;
   claimAvailable: boolean;
+  idleUpdateFailuresRemaining: number;
 }
 
 let scenario: Scenario;
@@ -75,8 +76,14 @@ function createBuilder(table: string) {
     });
   builder.then.mockImplementation((onfulfilled, onrejected) => {
       const latestUpdate = scenario.updates.at(-1);
+      const idleUpdateFailed = operation === 'update'
+        && latestUpdate?.values.ai_state === 'idle'
+        && scenario.idleUpdateFailuresRemaining > 0;
+      if (idleUpdateFailed) scenario.idleUpdateFailuresRemaining -= 1;
       const result = operation === 'select'
         ? { data: scenario.tableData[table] ?? null, error: null }
+        : idleUpdateFailed
+          ? { data: null, error: { message: 'transient conversation update failure' } }
         : operation === 'update' && latestUpdate?.values.ai_state === 'thinking'
           ? { data: scenario.claimAvailable ? [{ id: 'conversation-1' }] : [], error: null }
           : { data: null, error: null };
@@ -108,6 +115,7 @@ function configureScenario(channel: Scenario['channel']): void {
     updates: [],
     inserts: [],
     claimAvailable: true,
+    idleUpdateFailuresRemaining: 0,
   };
 
   if (channel === 'sms') {
@@ -217,6 +225,20 @@ describe('approve-ai-draft route', () => {
     expect(scenario.inserts).not.toContainEqual(
       expect.objectContaining({ table: 'audit_logs' }),
     );
+  });
+
+  it('retries the final state transition after delivery instead of stranding the claim', async () => {
+    scenario.idleUpdateFailuresRemaining = 1;
+
+    const response = await POST(makeRequest({
+      conversationId: 'conversation-1',
+      aiDecisionId: 'decision-1',
+    }));
+
+    expect(response.status).toBe(200);
+    expect(scenario.updates.filter(
+      ({ values }) => values.ai_state === 'idle',
+    )).toHaveLength(2);
   });
 
   it('preserves webchat realtime delivery without loading provider secrets', async () => {

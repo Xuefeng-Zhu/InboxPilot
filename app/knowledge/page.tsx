@@ -146,7 +146,7 @@ export default function KnowledgePage() {
           organization_id: membership.organizationId,
           title: data.title,
           source_type: data.sourceType,
-          body: data.body || (fileName ?? ''),
+          body: data.body,
           status: 'pending',
           file_url: fileUrl,
           file_name: fileName,

@@ -26,6 +26,27 @@ interface EmailAccountRow {
   is_active: boolean;
 }
 
+async function transitionClaimedDraft(
+  conversationId: string,
+  aiState: 'drafted' | 'idle',
+  context: string,
+): Promise<void> {
+  // A provider send may already have succeeded when the state transition is
+  // attempted. Retry one transient database failure so the conversation does
+  // not remain stranded in the internal `thinking` claim state.
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const result = await insforge.database
+      .from('conversations')
+      .update({ ai_state: aiState })
+      .eq('id', conversationId)
+      .eq('ai_state', 'thinking');
+    if (!result.error) return;
+    if (attempt === 1) {
+      assertInsforgeSuccess(result, context);
+    }
+  }
+}
+
 async function loadProviderConfig(
   organizationId: string,
   channel: string,
@@ -185,27 +206,25 @@ export async function POST(req: NextRequest) {
         { writeAuditLog: false },
       );
     } catch (sendError) {
-      const restoreResult = await insforge.database
-        .from('conversations')
-        .update({ ai_state: 'drafted' })
-        .eq('id', conversationId)
-        .eq('ai_state', 'thinking');
-      if (restoreResult.error) {
+      try {
+        await transitionClaimedDraft(
+          conversationId,
+          'drafted',
+          'approve-ai-draft failed to restore draft after send failure',
+        );
+      } catch (restoreError) {
         console.error(
           'approve-ai-draft: failed to restore draft after send failure',
-          restoreResult.error.message,
+          restoreError instanceof Error ? restoreError.message : String(restoreError),
         );
       }
       throw sendError;
     }
 
     // Clear the draft only after provider delivery and message persistence.
-    const conversationUpdateResult = await insforge.database
-      .from('conversations')
-      .update({ ai_state: 'idle' })
-      .eq('id', conversationId);
-    assertInsforgeSuccess(
-      conversationUpdateResult,
+    await transitionClaimedDraft(
+      conversationId,
+      'idle',
       'approve-ai-draft failed to update conversation',
     );
 

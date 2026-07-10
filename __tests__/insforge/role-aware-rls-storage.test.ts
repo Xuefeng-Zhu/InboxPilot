@@ -75,6 +75,29 @@ describe('role-aware RLS and knowledge storage migration', () => {
     expect(documentPolicies).toContain('(file_url IS NULL AND file_key IS NULL)');
   });
 
+  it('keeps legacy file documents editable without permitting new keyless files', () => {
+    const insertPolicy = migration.slice(
+      migration.indexOf('CREATE POLICY knowledge_documents_insert'),
+      migration.indexOf('CREATE POLICY knowledge_documents_update'),
+    );
+    const updatePolicy = migration.slice(
+      migration.indexOf('CREATE POLICY knowledge_documents_update'),
+      migration.indexOf('CREATE POLICY knowledge_documents_delete'),
+    );
+
+    expect(migration).toContain('FUNCTION public.preserves_legacy_knowledge_file');
+    expect(insertPolicy).not.toContain('preserves_legacy_knowledge_file');
+    expect(updatePolicy).toContain(
+      'public.preserves_legacy_knowledge_file(id, organization_id, file_url, file_key)',
+    );
+    expect(migration).toContain('AND kd.file_url = p_file_url');
+  });
+
+  it('stores file-only documents with an empty body so extraction failures stay failed', () => {
+    expect(knowledgeListPage).toContain('body: data.body,');
+    expect(knowledgeListPage).not.toContain("body: data.body || (fileName ?? ''),");
+  });
+
   it('prevents browser audit inserts from impersonating system or AI actors', () => {
     const auditPolicy = migration.slice(
       migration.indexOf('CREATE POLICY audit_logs_insert'),

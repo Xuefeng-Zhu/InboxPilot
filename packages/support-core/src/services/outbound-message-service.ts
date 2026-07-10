@@ -107,7 +107,7 @@ export class OutboundMessageService {
     const { channel, organizationId } = conversation;
 
     let provider: string;
-    let providerAccountId: string;
+    let providerAccountId: string | null;
     let externalMessageId: string;
     let deliveryStatus: 'queued' | 'sent';
 
@@ -185,7 +185,7 @@ export class OutboundMessageService {
       // (see `app/api/functions/send-reply` for the human path and
       // `insforge/functions/process-jobs#send_outbound_message` for AI).
       provider = 'webchat';
-      providerAccountId = '';
+      providerAccountId = null;
       externalMessageId = `wc_reply_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
       deliveryStatus = 'sent';
     }

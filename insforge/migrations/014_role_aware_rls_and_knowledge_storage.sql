@@ -79,13 +79,41 @@ AS $$
   );
 $$;
 
+-- Existing file-backed documents predate file_key. Permit owners/admins to
+-- update their non-file fields only while preserving the exact legacy URL;
+-- changing the file requires migrating to a valid organization-scoped key.
+CREATE OR REPLACE FUNCTION public.preserves_legacy_knowledge_file(
+  p_document_id uuid,
+  p_organization_id uuid,
+  p_file_url text,
+  p_file_key text
+)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+  SELECT p_file_key IS NULL AND EXISTS (
+    SELECT 1
+    FROM public.knowledge_documents AS kd
+    WHERE kd.id = p_document_id
+      AND kd.organization_id = p_organization_id
+      AND kd.file_url IS NOT NULL
+      AND kd.file_key IS NULL
+      AND kd.file_url = p_file_url
+  );
+$$;
+
 REVOKE ALL ON FUNCTION public.user_org_ids() FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.user_has_org_role(uuid, text[]) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.user_has_storage_org_role(text, text[]) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.preserves_legacy_knowledge_file(uuid, uuid, text, text) FROM PUBLIC;
 
 GRANT EXECUTE ON FUNCTION public.user_org_ids() TO authenticated;
 GRANT EXECUTE ON FUNCTION public.user_has_org_role(uuid, text[]) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.user_has_storage_org_role(text, text[]) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.preserves_legacy_knowledge_file(uuid, uuid, text, text) TO authenticated;
 
 -- =============================================================================
 -- C. Organization and settings RBAC
@@ -260,6 +288,7 @@ CREATE POLICY knowledge_documents_update ON public.knowledge_documents
         file_url IS NOT NULL
         AND file_key LIKE (organization_id::text || '/documents/%')
       )
+      OR public.preserves_legacy_knowledge_file(id, organization_id, file_url, file_key)
     )
   );
 CREATE POLICY knowledge_documents_delete ON public.knowledge_documents

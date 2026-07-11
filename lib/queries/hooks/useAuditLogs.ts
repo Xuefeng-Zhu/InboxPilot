@@ -2,6 +2,8 @@ import { useQuery } from '@tanstack/react-query';
 import { insforge } from '../../insforge';
 import { queryKeys } from '../keys';
 import { useAuthReady } from '../helpers';
+import { useAuth } from '@/lib/auth-context';
+import { useOrgMembership } from './useOrganization';
 
 export type AuditLogRow = {
   id: string;
@@ -52,12 +54,18 @@ export function useAuditLogs(
   options?: { enabled?: boolean },
 ) {
   const authReady = useAuthReady();
+  const { user } = useAuth();
+  const { data: orgId } = useOrgMembership(user?.id);
   return useQuery({
-    queryKey: queryKeys.auditLogs(filters as Record<string, unknown> | undefined),
+    queryKey: queryKeys.auditLogs(
+      orgId ?? '',
+      filters as Record<string, unknown> | undefined,
+    ),
     queryFn: async (): Promise<AuditLogRow[]> => {
       let query = insforge.database
         .from('audit_logs')
         .select('*')
+        .eq('organization_id', orgId!)
         .order('created_at', { ascending: false })
         .limit(100);
 
@@ -91,6 +99,6 @@ export function useAuditLogs(
       if (error) throw new Error(error.message);
       return Array.isArray(data) ? (data as AuditLogRow[]) : [];
     },
-    enabled: authReady && (options?.enabled ?? true),
+    enabled: authReady && !!orgId && (options?.enabled ?? true),
   });
 }

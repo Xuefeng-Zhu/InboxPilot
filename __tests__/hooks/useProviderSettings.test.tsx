@@ -11,6 +11,11 @@ import {
 const mocks = vi.hoisted(() => ({
   auditError: null as { message: string } | null,
   inserts: [] as Array<{ table: string; rows: unknown[] }>,
+  selects: [] as Array<{ table: string; columns?: string }>,
+  membershipResult: {
+    data: { organizationId: 'org-1', role: 'owner' as const },
+    isLoading: false,
+  },
 }));
 
 vi.mock('@/lib/auth-context', () => ({
@@ -20,20 +25,23 @@ vi.mock('@/lib/auth-context', () => ({
   })(),
 }));
 
+vi.mock('@/lib/queries', () => ({
+  useCurrentMembership: () => mocks.membershipResult,
+}));
+
 vi.mock('@/lib/insforge', () => ({
   getAccessToken: vi.fn(() => null),
   insforge: {
     database: {
       from: vi.fn((table: string) => ({
-        select: vi.fn(() => ({
-          eq: vi.fn(() => ({
-            maybeSingle: vi.fn().mockResolvedValue({
-              data: { organization_id: 'org-1' },
-              error: null,
-            }),
-          })),
-          order: vi.fn().mockResolvedValue({ data: [], error: null }),
-        })),
+        select: vi.fn((columns?: string) => {
+          mocks.selects.push({ table, columns });
+          const eq = vi.fn();
+          const order = vi.fn().mockResolvedValue({ data: [], error: null });
+          const query = { eq, order };
+          eq.mockReturnValue(query);
+          return query;
+        }),
         insert: vi.fn((rows: unknown[]) => {
           mocks.inserts.push({ table, rows });
           return Promise.resolve({
@@ -60,6 +68,8 @@ describe('useProviderSettings', () => {
   afterEach(() => {
     mocks.auditError = null;
     mocks.inserts.length = 0;
+    mocks.selects.length = 0;
+    vi.unstubAllGlobals();
     vi.clearAllMocks();
   });
 
@@ -99,5 +109,33 @@ describe('useProviderSettings', () => {
       'Account added, but audit logging failed: audit unavailable',
     );
     expect(result.current.success).toBeNull();
+  });
+
+  it('does not read credential secret ids into browser state', async () => {
+    const { result } = renderHook(() => useProviderSettings(SMS_CONFIG));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    const accountSelect = mocks.selects.find(({ table }) => table === 'sms_provider_accounts');
+    expect(accountSelect?.columns).not.toContain('credentials_secret_id');
+  });
+
+  it('shows a failed health result even when the route returns HTTP 200', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      status: 'ok',
+      data: { ok: false, reason: 'Provider rejected the credentials' },
+    }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    })));
+    const { result } = renderHook(() => useProviderSettings(SMS_CONFIG));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    await act(async () => result.current.testConnection('account-1'));
+
+    expect(result.current.testResult).toEqual({
+      id: 'account-1',
+      success: false,
+      message: 'Provider rejected the credentials',
+    });
   });
 });

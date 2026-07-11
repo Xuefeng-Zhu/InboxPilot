@@ -42,8 +42,9 @@ All business logic lives in `packages/support-core/` and never imports the InsFo
 
 ## Prerequisites
 
-- **Node.js** 18+ (LTS recommended)
+- **Node.js** 20.9+ (required by the installed Next.js 16 release)
 - **npm** 9+
+- **Deno** 2+ (required by `npm run lint` to type-check the 9 function entrypoints)
 - **InsForge account** with a project configured (PostgreSQL + Auth + Functions + Realtime)
 - **OpenRouter API key** (for AI features)
 - Provider accounts (optional): Twilio, Telnyx, Postmark
@@ -84,8 +85,14 @@ Apply the SQL migration files in order to your InsForge PostgreSQL database:
 | `insforge/migrations/008_claim_failed_jobs.sql` | Drops old `idx_support_jobs_pending`; new `idx_support_jobs_claimable` index; replaces `claim_support_jobs` with overload using `claim_limit` that also claims failed jobs |
 | `insforge/migrations/009_org_sla_thresholds.sql` | Adds `organizations.sla_thresholds jsonb`; `conversations.last_message_direction text`; backfill from `messages.direction` |
 | `insforge/migrations/010_drop_pending_status.sql` | Drops `'pending'` from `conversations.status` CHECK (was in 001 but never assigned by code) |
+| `insforge/migrations/011_ai_settings_embedding_model.sql` | Adds the independent knowledge embedding model setting and updates the default chat model |
+| `insforge/migrations/012_replace_knowledge_chunks.sql` | Adds transactional replacement of a document's knowledge chunks |
+| `insforge/migrations/013_webchat_realtime_widget_channel.sql` | Registers org/widget realtime channels and adds the server-only realtime publish RPC |
+| `insforge/migrations/20260615074718_trigger-process-jobs-on-insert.sql` | Adds an HTTP job trigger (superseded by the next migration after the extension proved unreliable) |
+| `insforge/migrations/20260615080500_drop-broken-trigger.sql` | Removes the unreliable HTTP job trigger; scheduled processing remains the active path |
+| `insforge/migrations/014_role_aware_rls_and_knowledge_storage.sql` | Enforces role-aware settings/knowledge RLS, hides provider and widget secrets, records knowledge object keys, and adds organization-scoped storage policies |
 
-Apply each file via the InsForge SQL editor or migrations API.
+Apply all 16 files via the InsForge SQL editor or migrations API in the order shown above. Migration `014` intentionally does not change bucket visibility: after applying it, mark the existing `knowledge-files` bucket **private** in the InsForge dashboard. Keep knowledge object keys under `<organization-id>/documents/...`; the migration's storage policies depend on that prefix.
 
 ### Seed Data
 
@@ -136,7 +143,7 @@ Deploy the InsForge Deno functions from the `insforge/functions/` directory usin
 | `webchat-session-info` | Widget API | Load widget session context |
 | `webchat-inbound` | Widget API | Process inbound web chat messages |
 
-The frontend calls 7 local Next.js API routes under `app/api/functions/` for authenticated agent actions: `send-reply`, `approve-ai-draft`, `regenerate-ai-draft`, `escalate-conversation`, `resolve-conversation`, `reopen-conversation`, and `test-channel-connection`.
+The frontend calls 12 local Next.js API routes under `app/api/functions/` for authenticated agent actions: `send-reply`, `approve-ai-draft`, `regenerate-ai-draft`, `escalate-conversation`, `resolve-conversation`, `reopen-conversation`, `test-channel-connection`, `invite-member`, `change-member-role`, `remove-member`, `team-member-info`, and `delete-widget`.
 
 ## Testing
 

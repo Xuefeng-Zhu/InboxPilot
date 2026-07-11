@@ -8,10 +8,10 @@
     "build:widget": "cd widget-src && npm run build",
     "start": "next start",
     "lint": "tsc --noEmit && npm run lint:deno",
-    "lint:deno": "node scripts/check-deno-safety.mjs",
+    "lint:deno": "node scripts/check-deno-safety.mjs && deno check insforge/functions/*/index.ts",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:core": "vitest run --project support-core"
+    "test:core": "vitest run packages/support-core/__tests__"
   },
   "dependencies": {
     "@inboxpilot/support-core": "file:packages/support-core",

@@ -2,8 +2,9 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useContacts, queryKeys } from '@/lib/queries';
+import { useContacts, queryKeys, useOrgMembership } from '@/lib/queries';
 import { useQueryClient } from '@tanstack/react-query';
+import { useAuth } from '@/lib/auth-context';
 import { AppShell } from '@/components/layout';
 import {
   CustomerTable,
@@ -16,6 +17,8 @@ import {
 export default function CustomersPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const { data: orgId } = useOrgMembership(user?.id);
 
   const [search, setSearch] = useState('');
   const [channelFilter, setChannelFilter] = useState<'all' | 'email' | 'phone'>('all');
@@ -50,7 +53,9 @@ export default function CustomersPage() {
   });
 
   const refetchCustomers = () => {
-    queryClient.invalidateQueries({ queryKey: queryKeys.contacts() });
+    if (orgId) {
+      queryClient.invalidateQueries({ queryKey: queryKeys.contacts(orgId) });
+    }
   };
 
   const subline = (() => {

@@ -22,6 +22,8 @@ import type { ConversationRow } from './ConversationItem';
 
 interface MessageThreadProps {
   conversationId: string;
+  /** Returns to the conversation list on narrow layouts. */
+  onBack?: () => void;
   /** Right-panel trigger — wires an external "Approve & send" to pre-fill composer. */
   onApproveAiDraft?: (text: string) => void;
   /** Toggles the right-panel drawer on <xl. */
@@ -46,6 +48,7 @@ function getRealtimeConversationId(payload: Record<string, unknown>): string | n
 
 export function MessageThread({
   conversationId,
+  onBack,
   onApproveAiDraft,
   onToggleRightPanel,
 }: MessageThreadProps) {
@@ -86,6 +89,7 @@ export function MessageThread({
   };
 
   useEffect(() => {
+    setPrefillBody(null);
     hasInitialScrollRef.current = false;
     isPrependingRef.current = false;
     nearBottomRef.current = true;
@@ -222,12 +226,23 @@ export function MessageThread({
   return (
     <div className="flex h-full min-w-0 flex-1 flex-col">
       {/* Thread header */}
-      <header className="flex items-center gap-3 border-b border-[var(--m03-line)] bg-white px-6 py-3">
-        <h2 className="truncate text-[14px] font-semibold leading-tight tracking-[-0.01em] text-[var(--m03-fg)]">
+      <header className="flex items-center gap-2 border-b border-[var(--m03-line)] bg-white px-3 py-3 sm:gap-3 sm:px-6">
+        {onBack && (
+          <button
+            type="button"
+            onClick={onBack}
+            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded border border-[var(--m03-line)] bg-white text-[var(--m03-fg-2)] hover:bg-[var(--m03-line-2)] lg:hidden"
+            aria-label="Back to conversations"
+          >
+            <span aria-hidden="true">←</span>
+          </button>
+        )}
+
+        <h2 className="min-w-0 truncate text-[14px] font-semibold leading-tight tracking-[-0.01em] text-[var(--m03-fg)]">
           {subject}
         </h2>
 
-        <div className="ml-auto flex items-center gap-3.5 font-mono text-[11px] text-[var(--m03-fg-3)]">
+        <div className="ml-auto hidden items-center gap-3.5 font-mono text-[11px] text-[var(--m03-fg-3)] md:flex">
           <span>
             {conversation.channel.toUpperCase()}
             {channelPhone ? ` · ${channelPhone}` : ''}
@@ -236,8 +251,10 @@ export function MessageThread({
           <AiStateIndicator aiState={conversation.ai_state} />
         </div>
 
-        <div className="flex items-center gap-1.5 pl-3">
-          <StatusBadge status={conversation.status} />
+        <div className="flex shrink-0 items-center gap-1.5 sm:pl-3">
+          <span className="hidden sm:inline-flex">
+            <StatusBadge status={conversation.status} />
+          </span>
           {onToggleRightPanel && (
             <button
               type="button"
@@ -249,7 +266,7 @@ export function MessageThread({
                 <circle cx="6" cy="4.5" r="2" />
                 <path d="M2 11c0-2.2 1.8-3.5 4-3.5s4 1.3 4 3.5" />
               </svg>
-              Contact
+              <span className="hidden sm:inline">Contact</span>
             </button>
           )}
         </div>
@@ -321,6 +338,7 @@ export function MessageThread({
 
       {/* Reply composer */}
       <ReplyComposer
+        key={conversationId}
         conversationId={conversationId}
         prefillBody={prefillBody}
         onPrefillConsumed={() => setPrefillBody(null)}

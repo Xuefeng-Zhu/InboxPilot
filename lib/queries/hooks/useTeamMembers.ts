@@ -19,7 +19,7 @@ export function useTeamMembers() {
   const { data: currentOrgId } = useOrgMembership(user?.id);
 
   return useQuery({
-    queryKey: queryKeys.teamMembers(),
+    queryKey: queryKeys.teamMembers(currentOrgId ?? ''),
     queryFn: async () => {
       if (!currentOrgId) return [];
       const { data, error } = await insforge.database

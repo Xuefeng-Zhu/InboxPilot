@@ -33,10 +33,10 @@ _bundled/                    – Build artifacts (do not edit)
 
 | Function | Auth | Trigger | Delegates To |
 |----------|------|---------|-------------|
-| `sms-inbound` | JWT (org) | HTTP POST (Twilio/Telnyx) — 11 adapters (3 real + 8 stubs) registered in `ProviderRegistry`; real provider webhooks via `x-provider: telnyx` accepted | InboundMessageService |
-| `sms-status` | JWT (org) | HTTP POST (provider callback) — 11 adapters (3 real + 8 stubs) registered in `ProviderRegistry`; real provider webhooks via `x-provider: telnyx` accepted | Delivery event update |
-| `email-inbound` | JWT (org) | HTTP POST (Postmark) — 11 adapters (3 real + 8 stubs) registered in `ProviderRegistry`; real provider webhooks via `x-provider: mock` accepted | InboundMessageService |
-| `email-status` | JWT (org) | HTTP POST (Postmark callback) — 11 adapters (3 real + 8 stubs) registered in `ProviderRegistry`; real provider webhooks via `x-provider: mock` accepted | Delivery event update |
+| `sms-inbound` | Provider signature | HTTP POST (Twilio/Telnyx); explicit `x-provider`, trusted receiving route, local-only mock | InboundMessageService |
+| `sms-status` | Provider signature | HTTP POST (provider callback); explicit `x-provider`, trusted outbound account, local-only mock | Delivery event update |
+| `email-inbound` | Provider signature | HTTP POST (Postmark); explicit `x-provider`, trusted receiving route, local-only mock | InboundMessageService |
+| `email-status` | Provider signature | HTTP POST (Postmark callback); explicit `x-provider`, trusted outbound account, local-only mock | Delivery event update |
 | `process-jobs` | Internal | HTTP GET (cron) | PostgresJobQueue |
 | `webchat-identify` | Visitor JWT | HTTP POST (widget) | WebchatThreadService |
 | `webchat-thread-init` | Visitor JWT | HTTP POST (widget) | WebchatThreadService |

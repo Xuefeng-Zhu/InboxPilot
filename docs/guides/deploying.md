@@ -77,17 +77,16 @@ Set these via the InsForge dashboard or CLI. The functions **must not** be reach
 
 ### Verifying a deployment
 
-After deploying:
+Do not use the unauthenticated mock adapter to probe a deployment: deployed endpoints reject it even if `INBOXPILOT_ALLOW_LOCAL_MOCK_WEBHOOKS` is set. Verify a real provider integration with a signed webhook sent to a receiving number or address configured for that same provider. A request without `x-provider` should fail closed:
 
 ```bash
-# Should return {"status":"ok",...}
+# Should return 400 because the provider is mandatory.
 curl -X POST https://<your-app>.functions.insforge.app/functions/v1/sms-inbound \
-  -H "x-provider: mock" \
   -H "Content-Type: application/json" \
   -d '{"From":"+15551234567","To":"+15559876543","Body":"test","MessageSid":"test-1"}'
 ```
 
-If it returns `400` (could not determine org) the function is working but the receiving phone number isn't registered. That's expected if you haven't run the seed script or added a phone number.
+For a positive smoke test, use the provider's test tooling so the request carries a valid signature. A receiving route that is missing, inactive, or configured for another provider must be rejected rather than accepting a caller-supplied organization.
 
 ## Deploying the web chat widget
 
@@ -136,7 +135,9 @@ Variables prefixed `NEXT_PUBLIC_` are exposed to the browser. Only the InsForge 
 
 ## Pre-deploy checklist
 
-- [ ] All migrations applied in order (`001` through `005`).
+- [ ] All 16 migration files applied in the documented order (through `014`, including both timestamped job-trigger migrations).
+- [ ] Existing `knowledge-files` bucket set to **private** in the InsForge dashboard after applying `014`.
+- [ ] Knowledge uploads use `<organization-id>/documents/...` object keys.
 - [ ] Seed data applied (optional for production).
 - [ ] At least one SMS or email provider account configured (if you want real inbound).
 - [ ] At least one web chat widget configured (if you want to embed the widget).

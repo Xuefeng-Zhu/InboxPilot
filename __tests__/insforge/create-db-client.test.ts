@@ -73,4 +73,32 @@ describe('createDbClient PostgREST binding', () => {
     expect(result.error).not.toBeNull();
     expect(result.error?.message).toContain('permission denied');
   });
+
+  it('JSON-serializes object operands for PostgREST contains filters', async () => {
+    fetchMock.mockResolvedValueOnce(mockResponse({ status: 200, body: '[]' }));
+
+    const db = createDbClient('https://example.insforge.app', 'service-role-key');
+    await db.from('support_jobs')
+      .select('*')
+      .contains('payload', {
+        conversationId: 'conv-123',
+        aiDecisionId: 'decision-456',
+      });
+
+    const requestUrl = new URL(fetchMock.mock.calls[0][0] as string);
+    expect(requestUrl.searchParams.get('payload')).toBe(
+      'cs.{"conversationId":"conv-123","aiDecisionId":"decision-456"}',
+    );
+    expect(requestUrl.searchParams.get('payload')).not.toContain('[object Object]');
+  });
+
+  it('uses PostgREST array syntax for array contains filters', async () => {
+    fetchMock.mockResolvedValueOnce(mockResponse({ status: 200, body: '[]' }));
+
+    const db = createDbClient('https://example.insforge.app', 'service-role-key');
+    await db.from('contacts').select('*').contains('tags', ['vip', 'trial']);
+
+    const requestUrl = new URL(fetchMock.mock.calls[0][0] as string);
+    expect(requestUrl.searchParams.get('tags')).toBe('cs.{vip,trial}');
+  });
 });

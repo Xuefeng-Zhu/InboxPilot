@@ -29,6 +29,21 @@ describe('webhook handler trust boundary', () => {
     expect(helperSource).toContain('credentials_secret_id');
     expect(helperSource).toContain('getWebhookSigningSecret');
   });
+
+  it('requires an explicit provider and never trusts caller tenant headers for inbound webhooks', () => {
+    const handlerUrls = [
+      new URL('../../insforge/functions/sms-inbound/index.ts', import.meta.url),
+      new URL('../../insforge/functions/email-inbound/index.ts', import.meta.url),
+    ];
+
+    for (const handlerUrl of handlerUrls) {
+      const source = readFileSync(handlerUrl, 'utf8');
+      expect(source).toContain('readWebhookProvider(req.headers)');
+      expect(source).toContain('isLocalMockWebhookAllowed');
+      expect(source).not.toContain("?? 'mock'");
+      expect(source).not.toContain('x-organization-id');
+    }
+  });
 });
 
 describe('Deno job processor trust boundary', () => {

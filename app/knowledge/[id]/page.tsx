@@ -5,19 +5,25 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth-context';
-import { useKnowledgeDoc, queryKeys } from '@/lib/queries';
+import { useCurrentMembership, useKnowledgeDoc, queryKeys } from '@/lib/queries';
 import { insforge } from '@/lib/insforge';
 import { AppShell } from '@/components/layout';
 import { Tag, Select } from '@/components/ui';
 import { MarkdownEditor } from '@/components/knowledge/MarkdownEditor';
 import { MarkdownRenderer } from '@/components/knowledge/MarkdownRenderer';
 import { SOURCE_TYPES } from '@/components/knowledge/types';
+import { removeKnowledgeFile } from '../storage';
 
 export default function KnowledgeDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const {
+    data: membership,
+    error: membershipError,
+  } = useCurrentMembership(user?.id);
+  const canManageKnowledge = membership?.role === 'owner' || membership?.role === 'admin';
 
   const { data: doc, isLoading, error } = useKnowledgeDoc(id);
 
@@ -42,10 +48,11 @@ export default function KnowledgeDetailPage({ params }: { params: Promise<{ id: 
         // Chunk count for the document. The ai_decision_chunks table joins
         // ai_decisions to knowledge_chunks, so we need chunk ids to look up
         // which decisions (and therefore which conversations) cited this doc.
-        const { data: chunkRows, count } = await insforge.database
+        const { data: chunkRows, count, error: chunkError } = await insforge.database
           .from('knowledge_chunks')
           .select('id', { count: 'exact' })
           .eq('document_id', doc.id);
+        if (chunkError) throw new Error(chunkError.message);
         if (cancelled) return;
         const chunkIds = (Array.isArray(chunkRows) ? chunkRows : []).map(
           (r) => (r as { id: string }).id,
@@ -64,12 +71,13 @@ export default function KnowledgeDetailPage({ params }: { params: Promise<{ id: 
         // Linked conversations: ai_decisions that referenced any of this
         // document's chunks, joined to the conversation it belongs to.
         // Ordered by most recent first, deduplicated, capped at 5.
-        const { data: links } = await insforge.database
+        const { data: links, error: linksError } = await insforge.database
           .from('ai_decision_chunks')
           .select('ai_decisions(id,conversation_id,created_at,conversations(id,customer_name,last_message_at))')
           .in('knowledge_chunk_id', chunkIds)
           .order('created_at', { ascending: false })
           .limit(100);
+        if (linksError) throw new Error(linksError.message);
         if (cancelled || !links) return;
 
         const seen = new Set<string>();
@@ -102,7 +110,7 @@ export default function KnowledgeDetailPage({ params }: { params: Promise<{ id: 
   }, [doc]);
 
   const startEditing = () => {
-    if (!doc) return;
+    if (!doc || !canManageKnowledge) return;
     setTitle(doc.title);
     setSourceType(doc.source_type);
     setBody(doc.body);
@@ -116,7 +124,10 @@ export default function KnowledgeDetailPage({ params }: { params: Promise<{ id: 
   };
 
   const handleSave = async () => {
-    if (!doc || !title.trim()) return;
+    if (!doc || !title.trim() || !user || !canManageKnowledge) {
+      setSaveError('Only organization owners and admins can edit knowledge documents.');
+      return;
+    }
     setSaving(true);
     setSaveError(null);
     try {
@@ -136,20 +147,21 @@ export default function KnowledgeDetailPage({ params }: { params: Promise<{ id: 
         return;
       }
 
-      await insforge.database
+      const warnings: string[] = [];
+      const { error: auditError } = await insforge.database
         .from('audit_logs')
         .insert([{
           organization_id: doc.organization_id,
-          actor_id: user?.id ?? null,
+          actor_id: user.id,
           actor_type: 'user',
           action: 'knowledge_document_updated',
           resource_type: 'knowledge_document',
           resource_id: doc.id,
           metadata: { title: title.trim() },
-        }])
-        .select();
+        }]);
+      if (auditError) warnings.push(`audit logging failed: ${auditError.message}`);
 
-      await insforge.database
+      const { error: jobError } = await insforge.database
         .from('support_jobs')
         .insert([{
           organization_id: doc.organization_id,
@@ -159,48 +171,87 @@ export default function KnowledgeDetailPage({ params }: { params: Promise<{ id: 
           attempts: 0,
           max_attempts: 3,
           run_after: new Date().toISOString(),
-        }])
-        .select();
+        }]);
+      if (jobError) warnings.push(`processing could not be queued: ${jobError.message}`);
 
       setEditing(false);
-      setSuccess('Document updated and queued for processing');
-      setTimeout(() => setSuccess(null), 3000);
-      queryClient.invalidateQueries({ queryKey: queryKeys.knowledgeDoc(id) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.knowledgeDocs() });
-    } catch {
-      setSaveError('Failed to save changes');
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.knowledgeDoc(doc.organization_id, id),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.knowledgeDocs(doc.organization_id),
+        }),
+      ]);
+      if (warnings.length > 0) {
+        setSaveError(`Document updated, but ${warnings.join('; ')}`);
+      } else {
+        setSuccess('Document updated and queued for processing');
+        setTimeout(() => setSuccess(null), 3000);
+      }
+    } catch (saveFailure) {
+      setSaveError(saveFailure instanceof Error ? saveFailure.message : 'Failed to save changes');
     } finally {
       setSaving(false);
     }
   };
 
   const handleDelete = async () => {
-    if (!doc) return;
+    if (!doc || !user || !canManageKnowledge) {
+      setSaveError('Only organization owners and admins can delete knowledge documents.');
+      return;
+    }
+    setSaveError(null);
     try {
-      await insforge.database.from('knowledge_chunks').delete().eq('document_id', doc.id);
-      await insforge.database.from('knowledge_documents').delete().eq('id', doc.id);
-      await insforge.database
+      const { error: deleteError } = await insforge.database
+        .from('knowledge_documents')
+        .delete()
+        .eq('id', doc.id);
+      if (deleteError) throw new Error(deleteError.message);
+
+      const warnings: string[] = [];
+      if (doc.file_key) {
+        try {
+          await removeKnowledgeFile(doc.file_key);
+        } catch (storageError) {
+          warnings.push(
+            `stored file cleanup failed: ${storageError instanceof Error ? storageError.message : 'unknown error'}`,
+          );
+        }
+      }
+
+      const { error: auditError } = await insforge.database
         .from('audit_logs')
         .insert([{
           organization_id: doc.organization_id,
-          actor_id: user?.id ?? null,
+          actor_id: user.id,
           actor_type: 'user',
           action: 'knowledge_document_deleted',
           resource_type: 'knowledge_document',
           resource_id: doc.id,
           metadata: { title: doc.title },
-        }])
-        .select();
+        }]);
+      if (auditError) warnings.push(`audit logging failed: ${auditError.message}`);
 
-      queryClient.invalidateQueries({ queryKey: queryKeys.knowledgeDocs() });
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.knowledgeDocs(doc.organization_id),
+      });
+      if (warnings.length > 0) {
+        setSaveError(`Document deleted, but ${warnings.join('; ')}`);
+        return;
+      }
       router.push('/knowledge');
-    } catch {
-      setSaveError('Failed to delete document');
+    } catch (deleteFailure) {
+      setSaveError(deleteFailure instanceof Error ? deleteFailure.message : 'Failed to delete document');
     }
   };
 
   const handleReprocess = async () => {
-    if (!doc) return;
+    if (!doc || !user || !canManageKnowledge) {
+      setSaveError('Only organization owners and admins can reprocess knowledge documents.');
+      return;
+    }
+    setSaveError(null);
     try {
       const { error: updateError } = await insforge.database
         .from('knowledge_documents')
@@ -216,20 +267,21 @@ export default function KnowledgeDetailPage({ params }: { params: Promise<{ id: 
         return;
       }
 
-      await insforge.database
+      const warnings: string[] = [];
+      const { error: auditError } = await insforge.database
         .from('audit_logs')
         .insert([{
           organization_id: doc.organization_id,
-          actor_id: user?.id ?? null,
+          actor_id: user.id,
           actor_type: 'user',
           action: 'knowledge_document_updated',
           resource_type: 'knowledge_document',
           resource_id: doc.id,
           metadata: { status: 'pending' },
-        }])
-        .select();
+        }]);
+      if (auditError) warnings.push(`audit logging failed: ${auditError.message}`);
 
-      await insforge.database
+      const { error: jobError } = await insforge.database
         .from('support_jobs')
         .insert([{
           organization_id: doc.organization_id,
@@ -239,14 +291,24 @@ export default function KnowledgeDetailPage({ params }: { params: Promise<{ id: 
           attempts: 0,
           max_attempts: 3,
           run_after: new Date().toISOString(),
-        }])
-        .select();
-      setSuccess('Queued for reprocessing');
-      setTimeout(() => setSuccess(null), 3000);
-      queryClient.invalidateQueries({ queryKey: queryKeys.knowledgeDoc(doc.id) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.knowledgeDocs() });
-    } catch {
-      setSaveError('Failed to queue reprocess');
+        }]);
+      if (jobError) warnings.push(`processing could not be queued: ${jobError.message}`);
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.knowledgeDoc(doc.organization_id, doc.id),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.knowledgeDocs(doc.organization_id),
+        }),
+      ]);
+      if (warnings.length > 0) {
+        setSaveError(`Document marked pending, but ${warnings.join('; ')}`);
+      } else {
+        setSuccess('Queued for reprocessing');
+        setTimeout(() => setSuccess(null), 3000);
+      }
+    } catch (reprocessFailure) {
+      setSaveError(reprocessFailure instanceof Error ? reprocessFailure.message : 'Failed to queue reprocess');
     }
   };
 
@@ -258,10 +320,12 @@ export default function KnowledgeDetailPage({ params }: { params: Promise<{ id: 
     );
   }
 
-  if (error || !doc) {
+  if (error || membershipError || !doc) {
     return (
       <AppShell>
-        <p className="text-[13px] text-[var(--m03-red)]">{error?.message ?? 'Document not found.'}</p>
+        <p className="text-[13px] text-[var(--m03-red)]">
+          {error?.message ?? membershipError?.message ?? 'Document not found.'}
+        </p>
         <button
           type="button"
           onClick={() => router.push('/knowledge')}
@@ -310,7 +374,7 @@ export default function KnowledgeDetailPage({ params }: { params: Promise<{ id: 
               {doc.status === 'failed' && <Tag status="failed">Failed</Tag>}
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          {canManageKnowledge && <div className="flex items-center gap-2">
             {editing ? (
               <>
                 <button
@@ -355,7 +419,7 @@ export default function KnowledgeDetailPage({ params }: { params: Promise<{ id: 
                 </button>
               </>
             )}
-          </div>
+          </div>}
         </div>
 
         {saveError && (

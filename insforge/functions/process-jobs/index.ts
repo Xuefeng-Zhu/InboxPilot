@@ -16,6 +16,7 @@ import { createRealtimePublisher } from '../_shared/create-realtime-publisher.ts
 import { publishRealtimeBestEffort } from '../_shared/publish-realtime-best-effort.ts';
 import { createProviderRegistry } from '../_shared/create-provider-registry.ts';
 import { getSecret } from '../_shared/insforge-secrets.ts';
+import { createKnowledgeFileFetch } from '../_shared/create-knowledge-file-fetch.ts';
 import { PostgresJobQueue } from '../../../packages/support-core/src/services/postgres-job-queue.ts';
 import { OutboundMessageService } from '../../../packages/support-core/src/services/outbound-message-service.ts';
 import { ConversationRepository } from '../../../packages/support-core/src/repositories/conversation-repository.ts';
@@ -201,20 +202,12 @@ function buildJobHandlers(
     }
 
     const message = await outboundService.sendReply(
-      conversationId, body, null, providerConfig, { writeAuditLog: false },
+      conversationId,
+      body,
+      { type: 'ai', id: null },
+      providerConfig,
+      { writeAuditLog: false },
     );
-
-    const { error: senderPatchError } = await db.from('messages')
-      .update({ sender_type: 'ai', sender_id: null })
-      .eq('id', message.id);
-    if (senderPatchError) {
-      console.error(
-        `sendAutoReply: failed to patch sender_type=ai on message ${message.id}: ` +
-          senderPatchError.message,
-      );
-    }
-
-    const correctedMessage = { ...message, senderType: 'ai' as const, senderId: null };
 
     try {
       await auditLogRepo.create({
@@ -244,7 +237,7 @@ function buildJobHandlers(
           realtime,
           `widget:${thread.widgetId}:${thread.visitorTokenJti}`,
           'new_message',
-          { message: correctedMessage, conversationId: correctedMessage.conversationId },
+          { message, conversationId: message.conversationId },
           `sendAutoReply message ${message.id}`,
         );
       }
@@ -255,8 +248,8 @@ function buildJobHandlers(
       `org:${conversation.organizationId}`,
       'new_message',
       {
-        message: correctedMessage,
-        conversationId: correctedMessage.conversationId,
+        message,
+        conversationId: message.conversationId,
       },
       `sendAutoReply message ${message.id}`,
     );
@@ -345,7 +338,9 @@ function buildJobHandlers(
       const knowledgeRepo = new KnowledgeRepository(db);
       const auditLogRepo = new AuditLogRepository(db);
       const aiSettingsRepo = new AiSettingsRepository(db);
-      const fileFetcher = createFileContentFetcher();
+      const fileFetcher = createFileContentFetcher(
+        createKnowledgeFileFetch(baseUrl, serviceRoleKey),
+      );
 
       const ingestionService = new KnowledgeIngestionService(
         knowledgeRepo, aiClient, auditLogRepo, fileFetcher, aiSettingsRepo,

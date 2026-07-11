@@ -209,7 +209,7 @@ export async function POST(req: NextRequest) {
     const message = await outboundService.sendReply(
       conversationId,
       body,
-      user.id,
+      { type: 'user', id: user.id },
       providerConfig,
     );
 

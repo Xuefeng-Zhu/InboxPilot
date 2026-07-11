@@ -2,9 +2,11 @@
 
 import { useState, type FormEvent } from 'react';
 
-export function PreChatForm({ color, onSubmit }: {
+export function PreChatForm({ color, error, submitting, onSubmit }: {
   color: string;
-  onSubmit: (data: { name: string; email: string }) => void;
+  error?: string | null;
+  submitting?: boolean;
+  onSubmit: (data: { name: string; email: string }) => void | Promise<void>;
 }) {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -12,7 +14,8 @@ export function PreChatForm({ color, onSubmit }: {
   const handleSubmit = (event: FormEvent) => {
     event.preventDefault();
     if (!email.trim()) return;
-    onSubmit({ name: name.trim(), email: email.trim() });
+    if (submitting) return;
+    void onSubmit({ name: name.trim(), email: email.trim() });
   };
 
   return (
@@ -25,6 +28,7 @@ export function PreChatForm({ color, onSubmit }: {
         placeholder="Your name"
         className="wchat-prechat-input"
         aria-label="Your name"
+        disabled={submitting}
       />
       <input
         type="email"
@@ -34,9 +38,21 @@ export function PreChatForm({ color, onSubmit }: {
         required
         className="wchat-prechat-input"
         aria-label="Your email"
+        disabled={submitting}
       />
-      <button type="submit" className="wchat-prechat-btn" style={{ background: color }}>
-        Start Chat
+      {error && (
+        <div className="wchat-error" role="alert">
+          {error}
+        </div>
+      )}
+      <button
+        type="submit"
+        className="wchat-prechat-btn"
+        style={{ background: color }}
+        disabled={submitting}
+        aria-busy={submitting || undefined}
+      >
+        {submitting ? 'Starting…' : 'Start Chat'}
       </button>
     </form>
   );

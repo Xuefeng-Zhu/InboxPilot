@@ -160,6 +160,9 @@ function KanbanContent() {
     (sum, lane) => sum + laneResults[lane.id].items.length,
     0,
   );
+  const laneError = KANBAN_LANES.map((lane) => laneResults[lane.id].error).find(
+    (error): error is Error => error instanceof Error,
+  );
 
   return (
     <AppShell noPadding>
@@ -193,10 +196,18 @@ function KanbanContent() {
           ) : null}
         </header>
 
-        {/* 5-column grid — className is verbatim from the spec.
-            `h-full overflow-hidden` + the parent's `min-h-0` lets
-            each lane's `overflow-y-auto` body scroll independently. */}
-        <div className="grid h-full min-h-0 grid-cols-5 gap-2 overflow-hidden p-2">
+        {laneError && (
+          <div
+            role="alert"
+            className="mx-2 mt-2 rounded border border-[var(--m03-red-line)] bg-[var(--m03-red-fill)] px-3 py-2 text-[12px] text-[var(--m03-red)]"
+          >
+            Could not load the board: {laneError.message}
+          </div>
+        )}
+
+        {/* Narrow screens scroll by full-width lanes; desktop retains the
+            dense five-column board with independently scrolling lane bodies. */}
+        <div className="grid h-full min-h-0 grid-flow-col auto-cols-[minmax(280px,85vw)] gap-2 overflow-x-auto p-2 lg:grid-flow-row lg:grid-cols-5 lg:auto-cols-auto lg:overflow-hidden">
           {KANBAN_LANES.map((lane) => {
             const result = laneResults[lane.id];
             return (

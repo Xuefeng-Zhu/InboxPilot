@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useCallback, useState } from 'react';
+import { Suspense, useCallback, useEffect, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { AppShell } from '@/components/layout';
@@ -41,7 +41,10 @@ function InboxContent() {
     customerId: searchParams.get('contact') ?? null,
   });
 
-  const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
+  const selectedConversationFromUrl = searchParams.get('conversation');
+  const [selectedConversationId, setSelectedConversationId] = useState<string | null>(
+    selectedConversationFromUrl,
+  );
   const [rightDrawerOpen, setRightDrawerOpen] = useState(false);
 
   const { data: orgId } = useOrgMembership(user?.id);
@@ -85,13 +88,19 @@ function InboxContent() {
     staleTime: 30_000,
   });
 
+  useEffect(() => {
+    setSelectedConversationId(selectedConversationFromUrl);
+    setRightDrawerOpen(false);
+  }, [selectedConversationFromUrl]);
+
   const syncToUrl = useCallback(
-    (state: InboxFilterState) => {
+    (state: InboxFilterState, conversationId: string | null) => {
       const params = new URLSearchParams();
       if (state.status !== 'all') params.set('status', state.status);
       if (state.channel !== 'all') params.set('channel', state.channel);
       if (state.search.trim()) params.set('q', state.search.trim());
       if (state.customerId) params.set('contact', state.customerId);
+      if (conversationId) params.set('conversation', conversationId);
       const qs = params.toString();
       router.replace(`/inbox${qs ? `?${qs}` : ''}`, { scroll: false });
     },
@@ -101,12 +110,12 @@ function InboxContent() {
   const handleFilterChange = (newFilters: InboxFilterState) => {
     setFilters(newFilters);
     if (newFilters.search === filters.search) {
-      syncToUrl(newFilters);
+      syncToUrl(newFilters, selectedConversationId);
     }
   };
 
   const handleSearchCommit = () => {
-    syncToUrl(filters);
+    syncToUrl(filters, selectedConversationId);
   };
 
   const handleClearAll = () => {
@@ -117,14 +126,24 @@ function InboxContent() {
       customerId: null,
     };
     setFilters(cleared);
-    router.replace('/inbox', { scroll: false });
+    syncToUrl(cleared, selectedConversationId);
+  };
+
+  const handleConversationSelect = (conversationId: string | null) => {
+    setSelectedConversationId(conversationId);
+    setRightDrawerOpen(false);
+    syncToUrl(filters, conversationId);
   };
 
   return (
     <AppShell noPadding>
       <div className="flex h-full min-h-0 flex-1">
         {/* Conversation List panel — 340px per mock */}
-        <div className="hidden w-inbox-list-w shrink-0 flex-col overflow-hidden border-r border-[var(--m03-line)] lg:flex">
+        <div
+          className={`${
+            selectedConversationId ? 'hidden lg:flex' : 'flex'
+          } w-full shrink-0 flex-col overflow-hidden border-r border-[var(--m03-line)] lg:w-inbox-list-w`}
+        >
           <InboxFilters
             filters={filters}
             counts={counts}
@@ -136,7 +155,7 @@ function InboxContent() {
           <div className="min-h-0 flex-1 overflow-hidden">
             <ConversationList
               selectedId={selectedConversationId}
-              onSelect={setSelectedConversationId}
+              onSelect={handleConversationSelect}
               statusFilter={filters.status}
               channelFilter={filters.channel}
               contactFilter={filters.customerId ?? undefined}
@@ -146,10 +165,16 @@ function InboxContent() {
         </div>
 
         {/* Detail View */}
-        <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        <div
+          className={`${
+            selectedConversationId ? 'flex' : 'hidden lg:flex'
+          } min-w-0 flex-1 flex-col overflow-hidden`}
+        >
           {selectedConversationId ? (
             <MessageThread
+              key={selectedConversationId}
               conversationId={selectedConversationId}
+              onBack={() => handleConversationSelect(null)}
               onToggleRightPanel={() => setRightDrawerOpen((v) => !v)}
             />
           ) : (

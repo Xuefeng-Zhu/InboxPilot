@@ -1,6 +1,7 @@
 // Service layer — orchestrates business logic
 export { InboundMessageService } from './inbound-message-service.js';
 export { OutboundMessageService } from './outbound-message-service.js';
+export type { OutboundMessageActor } from './outbound-message-service.js';
 export { PostgresJobQueue } from './postgres-job-queue.js';
 export { KnowledgeIngestionService } from './knowledge-ingestion-service.js';
 export { AiAgentService } from './ai-agent-service.js';

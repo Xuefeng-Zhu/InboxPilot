@@ -1,7 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   getWebhookSigningSecret,
+  isLocalMockWebhookAllowed,
   parseSmsWebhookBody,
+  readWebhookProvider,
+  resolveEmailInboundWebhookContext,
   resolveSmsInboundWebhookContext,
 } from '../../insforge/functions/_shared/webhook-credentials.ts';
 
@@ -79,8 +82,129 @@ describe('webhook credential resolution', () => {
     ).resolves.toEqual({
       organizationId: 'org-1',
       providerAccountId: 'account-1',
+      provider: 'telnyx',
       signingSecret: 'public-key',
     });
+  });
+
+  it('rejects provider downgrade and route/account tenant mismatches', async () => {
+    const providerMismatchDb = database({
+      sms_phone_numbers: {
+        data: { provider_account_id: 'account-1', organization_id: 'org-1' },
+        error: null,
+      },
+      sms_provider_accounts: {
+        data: {
+          id: 'account-1',
+          organization_id: 'org-1',
+          provider: 'telnyx',
+          credentials_secret_id: 'secret-1',
+          is_active: true,
+        },
+        error: null,
+      },
+    });
+
+    await expect(
+      resolveSmsInboundWebhookContext(
+        providerMismatchDb,
+        'mock',
+        '+15551234567',
+        'http://localhost:54321',
+        'service-role-key',
+      ),
+    ).resolves.toBeNull();
+
+    const tenantMismatchDb = database({
+      email_addresses: {
+        data: { provider_account_id: 'account-2', organization_id: 'org-route' },
+        error: null,
+      },
+      email_provider_accounts: {
+        data: {
+          id: 'account-2',
+          organization_id: 'org-account',
+          provider: 'mock',
+          credentials_secret_id: 'secret-2',
+          is_active: true,
+        },
+        error: null,
+      },
+    });
+
+    await expect(
+      resolveEmailInboundWebhookContext(
+        tenantMismatchDb,
+        'mock',
+        'support@example.com',
+        'http://localhost:54321',
+        'service-role-key',
+      ),
+    ).resolves.toBeNull();
+  });
+
+  it('allows mock resolution only through a matching active configured account', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const db = database({
+      sms_phone_numbers: {
+        data: { provider_account_id: 'mock-account', organization_id: 'org-1' },
+        error: null,
+      },
+      sms_provider_accounts: {
+        data: {
+          id: 'mock-account',
+          organization_id: 'org-1',
+          provider: 'mock',
+          credentials_secret_id: 'unused-for-local-mock',
+          is_active: true,
+        },
+        error: null,
+      },
+    });
+
+    await expect(
+      resolveSmsInboundWebhookContext(
+        db,
+        'mock',
+        '+15551234567',
+        'http://localhost:54321',
+        'service-role-key',
+      ),
+    ).resolves.toEqual({
+      organizationId: 'org-1',
+      providerAccountId: 'mock-account',
+      provider: 'mock',
+      signingSecret: '',
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    const inactiveDb = database({
+      sms_phone_numbers: {
+        data: { provider_account_id: 'mock-account', organization_id: 'org-1' },
+        error: null,
+      },
+      sms_provider_accounts: {
+        data: {
+          id: 'mock-account',
+          organization_id: 'org-1',
+          provider: 'mock',
+          credentials_secret_id: 'unused-for-local-mock',
+          is_active: false,
+        },
+        error: null,
+      },
+    });
+
+    await expect(
+      resolveSmsInboundWebhookContext(
+        inactiveDb,
+        'mock',
+        '+15551234567',
+        'http://localhost:54321',
+        'service-role-key',
+      ),
+    ).resolves.toBeNull();
   });
 
   it('returns null when no active provider account matches the route', async () => {
@@ -131,5 +255,34 @@ describe('webhook credential resolution', () => {
     expect(getWebhookSigningSecret('email', 'postmark', {
       serverToken: 'postmark-token',
     })).toBe('postmark-token');
+  });
+
+  it('requires an explicit provider header and normalizes its value', () => {
+    expect(readWebhookProvider(new Headers())).toBeNull();
+    expect(readWebhookProvider(new Headers({ 'x-provider': '   ' }))).toBeNull();
+    expect(readWebhookProvider(new Headers({ 'x-provider': ' Telnyx ' }))).toBe('telnyx');
+  });
+
+  it('allows mock webhooks only with an explicit opt-in on loopback URLs', () => {
+    expect(isLocalMockWebhookAllowed(
+      'http://localhost:8000/functions/sms-inbound',
+      'http://127.0.0.1:54321',
+      'true',
+    )).toBe(true);
+    expect(isLocalMockWebhookAllowed(
+      'https://project.insforge.app/functions/sms-inbound',
+      'http://127.0.0.1:54321',
+      'true',
+    )).toBe(false);
+    expect(isLocalMockWebhookAllowed(
+      'http://localhost:8000/functions/sms-inbound',
+      'https://project.insforge.app',
+      'true',
+    )).toBe(false);
+    expect(isLocalMockWebhookAllowed(
+      'http://localhost:8000/functions/sms-inbound',
+      'http://127.0.0.1:54321',
+      undefined,
+    )).toBe(false);
   });
 });

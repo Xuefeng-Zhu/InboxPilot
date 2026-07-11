@@ -7,6 +7,11 @@ const source = readFileSync(
 );
 
 describe('process-jobs placeholder handlers', () => {
+  it('persists AI sender identity through OutboundMessageService in one write', () => {
+    expect(source).toContain("{ type: 'ai', id: null }");
+    expect(source).not.toContain("update({ sender_type: 'ai', sender_id: null })");
+  });
+
   it('fails unsupported delivery-status retry jobs instead of completing them as no-ops', () => {
     expect(source).toContain("throw new Error('process_delivery_status retry handler is not implemented')");
   });

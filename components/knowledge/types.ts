@@ -8,6 +8,7 @@ export interface KnowledgeDocument {
   error_message: string | null;
   file_url: string | null;
   file_name: string | null;
+  file_key: string | null;
   created_at: string;
   updated_at: string;
 }

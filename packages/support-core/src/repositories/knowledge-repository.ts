@@ -25,6 +25,7 @@ interface DocumentRow {
   error_message: string | null;
   file_url: string | null;
   file_name: string | null;
+  file_key: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -120,6 +121,7 @@ function toDocument(row: DocumentRow): KnowledgeDocument {
     errorMessage: row.error_message,
     fileUrl: row.file_url,
     fileName: row.file_name,
+    fileKey: row.file_key,
     createdAt: new Date(row.created_at),
     updatedAt: new Date(row.updated_at),
   };
@@ -165,6 +167,9 @@ export class KnowledgeRepository {
       title: input.title,
       source_type: input.sourceType,
       body: input.body,
+      file_url: input.fileUrl ?? null,
+      file_name: input.fileName ?? null,
+      file_key: input.fileKey ?? null,
     };
 
     const { data, error } = await this.db

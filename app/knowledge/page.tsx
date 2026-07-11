@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth-context';
-import { useKnowledgeDocs, queryKeys } from '@/lib/queries';
+import { useCurrentMembership, useKnowledgeDocs, queryKeys } from '@/lib/queries';
 import { insforge } from '@/lib/insforge';
 import { AppShell } from '@/components/layout';
 import { Pill, Tag } from '@/components/ui';
@@ -14,6 +14,11 @@ import {
   type KnowledgeDocument,
   SOURCE_TYPES,
 } from '@/components/knowledge';
+import {
+  removeKnowledgeFile,
+  rollbackKnowledgeUpload,
+  uploadKnowledgeFile,
+} from './storage';
 
 type TypeFilter = 'all' | (typeof SOURCE_TYPES)[number];
 
@@ -42,6 +47,11 @@ function sourceTypeLabel(t: string): string {
 export default function KnowledgePage() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const {
+    data: membership,
+    error: membershipError,
+  } = useCurrentMembership(user?.id);
+  const canManageKnowledge = membership?.role === 'owner' || membership?.role === 'admin';
 
   const { data: documents = [], isLoading: loading, error: queryError } = useKnowledgeDocs();
   const [error, setError] = useState<string | null>(null);
@@ -55,20 +65,23 @@ export default function KnowledgePage() {
 
   const [chunkCounts, setChunkCounts] = useState<Record<string, number>>({});
 
-  const refetchDocs = () => queryClient.invalidateQueries({ queryKey: queryKeys.knowledgeDocs() });
+  const refetchDocs = () => queryClient.invalidateQueries({
+    queryKey: queryKeys.knowledgeDocs(membership?.organizationId ?? ''),
+  });
 
   useEffect(() => {
     if (documents.length === 0) return;
     let cancelled = false;
     (async () => {
       try {
-        const { data } = await insforge.database
+        const { data, error: chunkError } = await insforge.database
           .from('knowledge_chunks')
           .select('document_id')
           .in(
             'document_id',
             documents.map((d) => d.id),
           );
+        if (chunkError) throw new Error(chunkError.message);
         if (cancelled || !data) return;
         const counts: Record<string, number> = {};
         for (const row of data as Array<{ document_id: string }>) {
@@ -99,8 +112,14 @@ export default function KnowledgePage() {
     body: string;
     file: File | null;
   }) => {
+    if (!user || !membership || !canManageKnowledge) {
+      setError('Only organization owners and admins can add knowledge documents.');
+      return;
+    }
     setAdding(true);
     setError(null);
+    let fileKey: string | null = null;
+    let documentPersisted = false;
     try {
       let fileUrl: string | null = null;
       let fileName: string | null = null;
@@ -112,88 +131,110 @@ export default function KnowledgePage() {
           return;
         }
 
-        const { data: uploadData, error: uploadError } = await insforge.storage
-          .from('knowledge-files')
-          .upload(`documents/${Date.now()}-${data.file.name}`, data.file);
-
-        if (uploadError || !uploadData) {
-          setError(uploadError?.message ?? 'File upload failed');
-          setAdding(false);
-          return;
-        }
-
-        fileUrl = uploadData.url;
+        const uploadedFile = await uploadKnowledgeFile(
+          membership.organizationId,
+          data.file,
+        );
+        fileUrl = uploadedFile.url;
         fileName = data.file.name;
+        fileKey = uploadedFile.key;
       }
 
       const { data: insertedData, error: insertError } = await insforge.database
         .from('knowledge_documents')
         .insert([{
+          organization_id: membership.organizationId,
           title: data.title,
           source_type: data.sourceType,
-          body: data.body || (fileName ?? ''),
+          body: data.body,
           status: 'pending',
           file_url: fileUrl,
           file_name: fileName,
+          file_key: fileKey,
         }])
         .select();
 
       if (insertError) {
-        setError(insertError.message);
+        setError(
+          fileKey
+            ? await rollbackKnowledgeUpload(fileKey, insertError.message)
+            : insertError.message,
+        );
         return;
       }
 
       const inserted = Array.isArray(insertedData) ? insertedData[0] : insertedData;
-      if (inserted) {
-        const doc = inserted as Record<string, unknown>;
-
-        await insforge.database
-          .from('audit_logs')
-          .insert([{
-            organization_id: doc.organization_id ?? null,
-            actor_id: user?.id ?? null,
-            actor_type: 'user',
-            action: 'knowledge_document_created',
-            resource_type: 'knowledge_document',
-            resource_id: doc.id ?? null,
-            metadata: { title: data.title },
-          }])
-          .select();
-
-        await insforge.database
-          .from('support_jobs')
-          .insert([{
-            organization_id: doc.organization_id ?? null,
-            job_type: 'process_knowledge_document',
-            payload: { documentId: doc.id },
-            status: 'pending',
-            attempts: 0,
-            max_attempts: 3,
-            run_after: new Date().toISOString(),
-          }])
-          .select();
+      if (!inserted) {
+        const missingRowError = 'Document insert did not return the created row.';
+        setError(
+          fileKey
+            ? await rollbackKnowledgeUpload(fileKey, missingRowError)
+            : missingRowError,
+        );
+        return;
       }
+      const doc = inserted as Record<string, unknown>;
+      documentPersisted = true;
 
-      setSuccess('Document added successfully');
-      setTimeout(() => setSuccess(null), 3000);
+      const warnings: string[] = [];
+      const { error: auditError } = await insforge.database
+        .from('audit_logs')
+        .insert([{
+          organization_id: membership.organizationId,
+          actor_id: user.id,
+          actor_type: 'user',
+          action: 'knowledge_document_created',
+          resource_type: 'knowledge_document',
+          resource_id: doc.id ?? null,
+          metadata: { title: data.title },
+        }]);
+      if (auditError) warnings.push(`audit logging failed: ${auditError.message}`);
+
+      const { error: jobError } = await insforge.database
+        .from('support_jobs')
+        .insert([{
+          organization_id: membership.organizationId,
+          job_type: 'process_knowledge_document',
+          payload: { documentId: doc.id },
+          status: 'pending',
+          attempts: 0,
+          max_attempts: 3,
+          run_after: new Date().toISOString(),
+        }]);
+      if (jobError) warnings.push(`processing could not be queued: ${jobError.message}`);
+
       setShowAddForm(false);
-      refetchDocs();
-    } catch {
-      setError('Failed to add document');
+      await refetchDocs();
+      if (warnings.length > 0) {
+        setError(`Document added, but ${warnings.join('; ')}`);
+      } else {
+        setSuccess('Document added successfully');
+        setTimeout(() => setSuccess(null), 3000);
+      }
+    } catch (addError) {
+      const message = addError instanceof Error ? addError.message : 'Failed to add document';
+      setError(
+        fileKey && !documentPersisted
+          ? await rollbackKnowledgeUpload(fileKey, message)
+          : message,
+      );
     } finally {
       setAdding(false);
     }
   };
 
   const handleDeleteDocument = async (docId: string) => {
+    if (!user || !canManageKnowledge) {
+      setError('Only organization owners and admins can delete knowledge documents.');
+      return;
+    }
     setError(null);
     try {
       const doc = documents.find((d) => d.id === docId);
-
-      await insforge.database
-        .from('knowledge_chunks')
-        .delete()
-        .eq('document_id', docId);
+      if (!doc) {
+        setError('Document not found.');
+        return;
+      }
 
       const { error: deleteError } = await insforge.database
         .from('knowledge_documents')
@@ -205,26 +246,39 @@ export default function KnowledgePage() {
         return;
       }
 
-      if (doc) {
-        await insforge.database
-          .from('audit_logs')
-          .insert([{
-            organization_id: doc.organization_id,
-            actor_id: user?.id ?? null,
-            actor_type: 'user',
-            action: 'knowledge_document_deleted',
-            resource_type: 'knowledge_document',
-            resource_id: docId,
-            metadata: { title: doc.title },
-          }])
-          .select();
+      const warnings: string[] = [];
+      if (doc.file_key) {
+        try {
+          await removeKnowledgeFile(doc.file_key);
+        } catch (storageError) {
+          warnings.push(
+            `stored file cleanup failed: ${storageError instanceof Error ? storageError.message : 'unknown error'}`,
+          );
+        }
       }
 
-      setSuccess('Document deleted');
-      setTimeout(() => setSuccess(null), 3000);
-      refetchDocs();
-    } catch {
-      setError('Failed to delete document');
+      const { error: auditError } = await insforge.database
+        .from('audit_logs')
+        .insert([{
+          organization_id: doc.organization_id,
+          actor_id: user.id,
+          actor_type: 'user',
+          action: 'knowledge_document_deleted',
+          resource_type: 'knowledge_document',
+          resource_id: docId,
+          metadata: { title: doc.title },
+        }]);
+      if (auditError) warnings.push(`audit logging failed: ${auditError.message}`);
+
+      await refetchDocs();
+      if (warnings.length > 0) {
+        setError(`Document deleted, but ${warnings.join('; ')}`);
+      } else {
+        setSuccess('Document deleted');
+        setTimeout(() => setSuccess(null), 3000);
+      }
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : 'Failed to delete document');
     }
   };
 
@@ -241,18 +295,20 @@ export default function KnowledgePage() {
               {documents.length} article{documents.length === 1 ? '' : 's'} · {processingCount} processing · {readyCount} ready
             </p>
           </div>
-          <button
-            type="button"
-            onClick={() => setShowAddForm(true)}
-            className="cursor-pointer rounded-md border border-[var(--m03-fg)] bg-[var(--m03-fg)] px-3 py-1.5 text-[13px] font-medium text-[var(--m03-bg)] hover:bg-[var(--m03-fg-2)]"
-          >
-            + New article
-          </button>
+          {canManageKnowledge && (
+            <button
+              type="button"
+              onClick={() => setShowAddForm(true)}
+              className="cursor-pointer rounded-md border border-[var(--m03-fg)] bg-[var(--m03-fg)] px-3 py-1.5 text-[13px] font-medium text-[var(--m03-bg)] hover:bg-[var(--m03-fg-2)]"
+            >
+              + New article
+            </button>
+          )}
         </div>
 
-        {(error || queryError) && (
+        {(error || queryError || membershipError) && (
           <div className="mb-4 rounded border border-[var(--m03-red-line)] bg-[var(--m03-red-fill)] p-3 text-[13px] text-[var(--m03-red)]">
-            {error || queryError?.message}
+            {error || queryError?.message || membershipError?.message}
           </div>
         )}
         {success && (
@@ -261,7 +317,7 @@ export default function KnowledgePage() {
           </div>
         )}
 
-        {showAddForm && (
+        {showAddForm && canManageKnowledge && (
           <AddDocumentForm
             onSubmit={handleAddDocument}
             onClose={() => setShowAddForm(false)}
@@ -342,6 +398,7 @@ export default function KnowledgePage() {
                     doc={doc}
                     chunks={chunkCounts[doc.id]}
                     onDelete={handleDeleteDocument}
+                    canManage={canManageKnowledge}
                   />
                 ))}
               </tbody>
@@ -357,10 +414,12 @@ function DocumentRow({
   doc,
   chunks,
   onDelete,
+  canManage,
 }: {
   doc: KnowledgeDocument;
   chunks: number | undefined;
   onDelete: (id: string) => void;
+  canManage: boolean;
 }) {
   return (
     <tr className="hover:bg-[var(--m03-line-2)]">
@@ -399,19 +458,21 @@ function DocumentRow({
               <path d="M9.5 2.5l3 3M2 9l6.5-6.5 3 3L5 12H2V9z" />
             </svg>
           </Link>
-          <button
-            type="button"
-            onClick={() => onDelete(doc.id)}
-            title={`Delete ${doc.title}`}
-            aria-label={`Delete ${doc.title}`}
-            className="flex h-7 w-7 cursor-pointer items-center justify-center rounded text-[var(--m03-fg-2)] hover:bg-[var(--m03-line-2)] hover:text-[var(--m03-red)]"
-          >
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M2.5 4h9M5 4V2.5h4V4M3.5 4v8a1 1 0 0 0 1 1h5a1 1 0 0 0 1-1V4" />
-              <line x1="6" y1="6.5" x2="6" y2="10.5" />
-              <line x1="8" y1="6.5" x2="8" y2="10.5" />
-            </svg>
-          </button>
+          {canManage && (
+            <button
+              type="button"
+              onClick={() => onDelete(doc.id)}
+              title={`Delete ${doc.title}`}
+              aria-label={`Delete ${doc.title}`}
+              className="flex h-7 w-7 cursor-pointer items-center justify-center rounded text-[var(--m03-fg-2)] hover:bg-[var(--m03-line-2)] hover:text-[var(--m03-red)]"
+            >
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M2.5 4h9M5 4V2.5h4V4M3.5 4v8a1 1 0 0 0 1 1h5a1 1 0 0 0 1-1V4" />
+                <line x1="6" y1="6.5" x2="6" y2="10.5" />
+                <line x1="8" y1="6.5" x2="8" y2="10.5" />
+              </svg>
+            </button>
+          )}
         </div>
       </td>
     </tr>

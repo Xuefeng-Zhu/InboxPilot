@@ -4,8 +4,9 @@
 
 ## Prerequisites
 
-- **Node.js** 18+ (LTS recommended; project tested on Node 20).
+- **Node.js** 20.9+ (required by the installed Next.js 16 release).
 - **npm** 9+.
+- **Deno** 2+ (required by `npm run lint` to type-check the function entrypoints).
 - An **InsForge project** (PostgreSQL + Auth + Functions + Realtime + AI Gateway). Sign up at [insforge.dev](https://insforge.dev).
 - An **OpenRouter API key** for AI features. Add it in your InsForge project's AI settings.
 - (Optional) Provider accounts: Twilio and/or Telnyx for SMS; Postmark for email.
@@ -60,8 +61,16 @@ Apply the SQL files in order to your InsForge project (via the InsForge SQL edit
 | `insforge/migrations/008_claim_failed_jobs.sql` | Drops old `idx_support_jobs_pending`; new `idx_support_jobs_claimable` index; replaces `claim_support_jobs` with overload using `claim_limit` that also claims failed jobs |
 | `insforge/migrations/009_org_sla_thresholds.sql` | Adds `organizations.sla_thresholds jsonb`; `conversations.last_message_direction text`; backfill from `messages.direction` |
 | `insforge/migrations/010_drop_pending_status.sql` | Drops `'pending'` from `conversations.status` CHECK (was in 001 but never assigned by code) |
+| `insforge/migrations/011_ai_settings_embedding_model.sql` | Adds the independent knowledge embedding model setting and updates the default chat model |
+| `insforge/migrations/012_replace_knowledge_chunks.sql` | Adds transactional replacement of a document's knowledge chunks |
+| `insforge/migrations/013_webchat_realtime_widget_channel.sql` | Registers org/widget realtime channels and adds the server-only realtime publish RPC |
+| `insforge/migrations/20260615074718_trigger-process-jobs-on-insert.sql` | Adds an HTTP job trigger (superseded by the next migration after the extension proved unreliable) |
+| `insforge/migrations/20260615080500_drop-broken-trigger.sql` | Removes the unreliable HTTP job trigger; scheduled processing remains the active path |
+| `insforge/migrations/014_role_aware_rls_and_knowledge_storage.sql` | Enforces role-aware settings/knowledge RLS, hides provider and widget secrets, records knowledge object keys, and adds organization-scoped storage policies |
 
-All files are idempotent — `CREATE OR REPLACE`, `IF NOT EXISTS` — so re-running is safe.
+Apply all 16 files in the order shown. Do not assume the full migration set is safe to replay against an initialized schema; use your environment's migration history to apply only pending files.
+
+After applying migration `014`, mark the existing `knowledge-files` storage bucket **private** in the InsForge dashboard. The SQL intentionally does not modify bucket configuration. Uploaded object keys must begin with `<organization-id>/documents/` so the organization-scoped storage policies can authorize them.
 
 ## 4. (Optional) Seed dev data
 
@@ -98,7 +107,7 @@ In Settings → Channels, add an SMS provider account (Twilio or Telnyx) and an 
 - **SMS** — Account SID / Auth Token, a phone number (added to `sms_phone_numbers`).
 - **Email** — Server token, an email address (added to `email_addresses`).
 
-For local development, the `mock` provider requires no credentials. The `sms-inbound` and `email-inbound` functions default to `x-provider: mock` if no header is sent.
+For local development, the `mock` provider requires no provider credentials, but inbound mock webhooks are disabled by default. They require `x-provider: mock`, `INBOXPILOT_ALLOW_LOCAL_MOCK_WEBHOOKS=true`, and loopback request and InsForge base URLs. Deployed endpoints always reject the mock adapter; real inbound webhooks must send an explicit provider header and match a configured receiving number/address and provider account.
 
 ## 8. (Optional) Build the web chat widget
 

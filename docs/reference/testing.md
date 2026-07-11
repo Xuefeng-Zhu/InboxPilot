@@ -27,7 +27,7 @@ InboxPilot uses **property-based testing** as the primary correctness strategy. 
 
 ```
 __tests__/                                  # Top-level UI tests (vitest, jsdom env)
-  ├── middleware.test.ts
+  ├── middleware.test.ts                    # Legacy filename; exercises root proxy.ts
   ├── properties/                           # UI property-based tests (fast-check)
   │   ├── button.property.test.tsx
   │   ├── conversation-item.property.test.tsx
@@ -109,7 +109,15 @@ Useful while writing a new test.
 npm run test:core
 ```
 
-Uses Vitest's `--project support-core` (if configured) or a path filter. Run this when you only want to iterate on business logic.
+Runs the `packages/support-core/__tests__` path directly. Run this when you only want to iterate on portable business logic.
+
+### Static checks
+
+```bash
+npm run lint
+```
+
+Runs TypeScript with `tsc --noEmit`, the Deno safety scan, and `deno check` over all 9 InsForge function entrypoints.
 
 ### By directory
 
@@ -125,7 +133,7 @@ npx vitest run __tests__/ui/
 # Integration tests
 npx vitest run packages/support-core/__tests__/integration/
 
-# Middleware test
+# Next.js proxy test (legacy test filename)
 npx vitest run __tests__/middleware.test.ts
 ```
 

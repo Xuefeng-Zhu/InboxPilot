@@ -11,6 +11,7 @@ import {
   DEFAULT_EMBEDDING_MODEL,
 } from '@support-core/types';
 import type { ModelId, EmbeddingModelId } from '@support-core/types';
+import { useCurrentMembership } from '@/lib/queries';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -67,6 +68,8 @@ function applySettingsToForm(
 
 export default function AiSettingsPanel() {
   const { user, loading: authLoading } = useAuth();
+  const { data: membership, isLoading: membershipLoading } = useCurrentMembership(user?.id);
+  const canManage = membership?.role === 'owner' || membership?.role === 'admin';
 
   const [settings, setSettings] = useState<AiSettings | null>(null);
   const [loading, setLoading] = useState(true);
@@ -84,7 +87,7 @@ export default function AiSettingsPanel() {
   const [embeddingModel, setEmbeddingModel] = useState<EmbeddingModelId>(DEFAULT_EMBEDDING_MODEL);
 
   const fetchSettings = useCallback(async () => {
-    if (!user) return;
+    if (!user || !membership) return;
 
     setLoading(true);
     setError(null);
@@ -92,6 +95,7 @@ export default function AiSettingsPanel() {
       const { data, error: fetchError } = await insforge.database
         .from('ai_settings')
         .select()
+        .eq('organization_id', membership.organizationId)
         .limit(1)
         .maybeSingle();
 
@@ -114,19 +118,12 @@ export default function AiSettingsPanel() {
         return;
       }
 
-      const { data: member, error: memberError } = await insforge.database
-        .from('organization_members')
-        .select('organization_id')
-        .eq('user_id', user.id)
-        .limit(1)
-        .maybeSingle();
-
-      if (memberError || !member || Array.isArray(member)) {
-        setError(memberError?.message ?? 'No organization found for this account.');
+      if (!canManage) {
+        setError('No AI settings are configured. An owner or admin can create them.');
         return;
       }
 
-      const organizationId = (member as { organization_id: string }).organization_id;
+      const organizationId = membership.organizationId;
       const { data: createdSettings, error: createError } = await insforge.database
         .from('ai_settings')
         .insert([{ organization_id: organizationId }])
@@ -169,18 +166,18 @@ export default function AiSettingsPanel() {
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [canManage, membership, user]);
 
   useEffect(() => {
-    if (!authLoading && user) {
-      fetchSettings();
-    } else if (!authLoading && !user) {
+    if (!authLoading && !membershipLoading && user && membership) {
+      void fetchSettings();
+    } else if (!authLoading && !membershipLoading) {
       setLoading(false);
     }
-  }, [authLoading, user, fetchSettings]);
+  }, [authLoading, membership, membershipLoading, user, fetchSettings]);
 
   const handleSave = async () => {
-    if (!settings) return;
+    if (!settings || !canManage) return;
     setSaving(true);
     setError(null);
     setSuccess(null);
@@ -246,7 +243,7 @@ export default function AiSettingsPanel() {
     }
   };
 
-  if (authLoading || loading) {
+  if (authLoading || membershipLoading || loading) {
     return <p className="text-[14px] text-[var(--m03-fg-2)]">Loading settings…</p>;
   }
 
@@ -258,7 +255,7 @@ export default function AiSettingsPanel() {
     return (
       <div>
         <p className="text-[14px] text-[var(--m03-fg-2)]">
-          No AI settings found for your organization. Please create an organization first.
+          No AI settings found for your organization.
         </p>
         {error && <p className="mt-2 text-[14px] text-[var(--m03-red)]">{error}</p>}
       </div>
@@ -278,6 +275,12 @@ export default function AiSettingsPanel() {
         </div>
       )}
 
+      {!canManage && (
+        <div className="mb-4 rounded border border-[var(--m03-line)] bg-[var(--m03-line-2)] p-3 text-[13px] text-[var(--m03-fg-2)]">
+          These settings are read-only. An owner or admin can change AI behavior.
+        </div>
+      )}
+
       <form
         className="flex flex-col gap-3"
         onSubmit={(e) => {
@@ -285,6 +288,7 @@ export default function AiSettingsPanel() {
           handleSave();
         }}
       >
+        <fieldset disabled={!canManage} className="contents">
         {/* AI Mode Card */}
         <Card
           header={
@@ -500,6 +504,7 @@ export default function AiSettingsPanel() {
             {saving ? 'Saving…' : 'Save Changes'}
           </Button>
         </div>
+        </fieldset>
       </form>
     </div>
   );

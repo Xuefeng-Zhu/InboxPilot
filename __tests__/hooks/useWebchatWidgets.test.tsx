@@ -3,10 +3,15 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
-import { useWebchatWidgets, type WebchatWidgetRow } from '../../app/settings/_components/useWebchatWidgets';
+import {
+  useWebchatWidgets,
+  WEBCHAT_WIDGET_SAFE_COLUMNS,
+  type WebchatWidgetRow,
+} from '../../app/settings/_components/useWebchatWidgets';
 
 const mocks = vi.hoisted(() => ({
   order: vi.fn(),
+  select: vi.fn(),
 }));
 
 vi.mock('@/lib/insforge', () => ({
@@ -14,7 +19,7 @@ vi.mock('@/lib/insforge', () => ({
   insforge: {
     database: {
       from: vi.fn(() => ({
-        select: vi.fn().mockReturnThis(),
+        select: mocks.select.mockReturnThis(),
         eq: vi.fn().mockReturnThis(),
         order: mocks.order,
       })),
@@ -65,6 +70,8 @@ describe('useWebchatWidgets', () => {
 
     await waitFor(() => expect(result.current.widgets).toHaveLength(1));
     expect(result.current.widgets[0].organization_id).toBe('org-1');
+    expect(mocks.select).toHaveBeenCalledWith(WEBCHAT_WIDGET_SAFE_COLUMNS);
+    expect(WEBCHAT_WIDGET_SAFE_COLUMNS).not.toContain('hmac_secret');
   });
 
   it('ignores a stale response after the organization changes', async () => {

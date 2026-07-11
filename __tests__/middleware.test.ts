@@ -1,4 +1,5 @@
 import { beforeEach, describe, it, expect, vi } from 'vitest';
+import type { NextRequest } from 'next/server';
 
 /**
  * Tests for the auth middleware logic.
@@ -25,7 +26,7 @@ vi.mock('next/server', () => ({
 function createMockRequest(
   pathname: string,
   options: { cookieToken?: string } = {},
-) {
+): NextRequest {
   const url = `http://localhost:3000${pathname}`;
   return {
     nextUrl: { pathname },
@@ -38,7 +39,7 @@ function createMockRequest(
         return undefined;
       },
     },
-  };
+  } as unknown as NextRequest;
 }
 
 describe('Auth Middleware', () => {
@@ -49,7 +50,7 @@ describe('Auth Middleware', () => {
   it('should allow access to /login without authentication', async () => {
     const { default: proxy } = await import('../proxy');
     const req = createMockRequest('/login');
-    proxy(req as any);
+    proxy(req);
     expect(mockNext).toHaveBeenCalled();
     expect(mockRedirect).not.toHaveBeenCalled();
   });
@@ -57,15 +58,27 @@ describe('Auth Middleware', () => {
   it('should allow access to /register without authentication', async () => {
     const { default: proxy } = await import('../proxy');
     const req = createMockRequest('/register');
-    proxy(req as any);
+    proxy(req);
     expect(mockNext).toHaveBeenCalled();
     expect(mockRedirect).not.toHaveBeenCalled();
   });
 
+  it.each(['/forgot-password', '/reset-password?token=reset-token'])(
+    'should allow access to the public recovery route %s without authentication',
+    async (path) => {
+      const { default: proxy } = await import('../proxy');
+      const pathname = path.split('?')[0];
+      const req = createMockRequest(pathname);
+      proxy(req);
+      expect(mockNext).toHaveBeenCalled();
+      expect(mockRedirect).not.toHaveBeenCalled();
+    },
+  );
+
   it('should redirect unauthenticated users from /inbox to /login', async () => {
     const { default: proxy } = await import('../proxy');
     const req = createMockRequest('/inbox');
-    proxy(req as any);
+    proxy(req);
     expect(mockRedirect).toHaveBeenCalled();
     const redirectUrl = mockRedirect.mock.calls[0][0];
     expect(redirectUrl.pathname).toBe('/login');
@@ -74,7 +87,7 @@ describe('Auth Middleware', () => {
   it('should allow access to / without authentication', async () => {
     const { default: proxy } = await import('../proxy');
     const req = createMockRequest('/');
-    proxy(req as any);
+    proxy(req);
     expect(mockNext).toHaveBeenCalled();
     expect(mockRedirect).not.toHaveBeenCalled();
   });
@@ -82,14 +95,14 @@ describe('Auth Middleware', () => {
   it('should redirect unauthenticated users from /settings/ai to /login', async () => {
     const { default: proxy } = await import('../proxy');
     const req = createMockRequest('/settings/ai');
-    proxy(req as any);
+    proxy(req);
     expect(mockRedirect).toHaveBeenCalled();
   });
 
   it('should allow authenticated users to access /inbox', async () => {
     const { default: proxy } = await import('../proxy');
     const req = createMockRequest('/inbox', { cookieToken: 'valid-jwt-token' });
-    proxy(req as any);
+    proxy(req);
     expect(mockNext).toHaveBeenCalled();
     expect(mockRedirect).not.toHaveBeenCalled();
   });
@@ -99,7 +112,7 @@ describe('Auth Middleware', () => {
     const req = createMockRequest('/knowledge', {
       cookieToken: 'valid-jwt-token',
     });
-    proxy(req as any);
+    proxy(req);
     expect(mockNext).toHaveBeenCalled();
     expect(mockRedirect).not.toHaveBeenCalled();
   });
@@ -107,7 +120,7 @@ describe('Auth Middleware', () => {
   it('should allow access to static files without authentication', async () => {
     const { default: proxy } = await import('../proxy');
     const req = createMockRequest('/favicon.ico');
-    proxy(req as any);
+    proxy(req);
     expect(mockNext).toHaveBeenCalled();
     expect(mockRedirect).not.toHaveBeenCalled();
   });
@@ -115,7 +128,7 @@ describe('Auth Middleware', () => {
   it('should allow access to _next paths without authentication', async () => {
     const { default: proxy } = await import('../proxy');
     const req = createMockRequest('/_next/static/chunk.js');
-    proxy(req as any);
+    proxy(req);
     expect(mockNext).toHaveBeenCalled();
     expect(mockRedirect).not.toHaveBeenCalled();
   });

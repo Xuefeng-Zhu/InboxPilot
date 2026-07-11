@@ -83,7 +83,7 @@ export function Topbar({ nav }: TopbarProps) {
   }
 
   return (
-    <header className="flex h-14 shrink-0 items-center gap-6 border-b border-[var(--m03-line)] bg-white px-6">
+    <header className="flex h-14 shrink-0 items-center gap-3 border-b border-[var(--m03-line)] bg-white px-3 pl-14 sm:gap-6 sm:px-6 sm:pl-14 xl:pl-6">
       <Link
         href="/"
         className="flex items-center gap-2 text-[14px] font-medium tracking-[-0.02em] text-[var(--m03-fg)]"
@@ -93,7 +93,7 @@ export function Topbar({ nav }: TopbarProps) {
       </Link>
 
       {nav && nav.length > 0 && (
-        <nav className="flex items-center gap-4" aria-label="Section nav">
+        <nav className="hidden items-center gap-4 md:flex" aria-label="Section nav">
           {nav.map((item) => (
             <Link
               key={item.href}
@@ -111,7 +111,7 @@ export function Topbar({ nav }: TopbarProps) {
       <form
         role="search"
         onSubmit={handleSubmit}
-        className="relative"
+        className="relative hidden md:block"
         aria-label="Global search"
       >
         <input

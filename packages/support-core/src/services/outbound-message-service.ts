@@ -51,6 +51,24 @@ export type OutboundMessageActor =
   | { type: 'ai'; id: string | null }
   | { type: 'system'; id: string | null };
 
+/**
+ * The external SMS/email provider accepted the message, but a later local
+ * persistence step failed. Callers must not make the draft retryable because
+ * doing so can send the customer a duplicate reply.
+ */
+export class OutboundMessagePostDispatchError extends Error {
+  readonly originalError: unknown;
+
+  constructor(originalError: unknown) {
+    const detail = originalError instanceof Error
+      ? originalError.message
+      : String(originalError);
+    super(`Provider accepted the message before local persistence failed: ${detail}`);
+    this.name = 'OutboundMessagePostDispatchError';
+    this.originalError = originalError;
+  }
+}
+
 export class OutboundMessageService {
   constructor(
     private conversationRepo: ConversationRepository,
@@ -110,6 +128,7 @@ export class OutboundMessageService {
     let providerAccountId: string | null;
     let externalMessageId: string;
     let deliveryStatus: 'queued' | 'sent';
+    let externalProviderAccepted = false;
 
     if (channel === 'sms') {
       // 4a. Find default phone number for the org
@@ -137,6 +156,7 @@ export class OutboundMessageService {
         body,
         providerConfig,
       });
+      externalProviderAccepted = true;
 
       provider = sendResult.provider;
       providerAccountId = smsAccount.id;
@@ -169,6 +189,7 @@ export class OutboundMessageService {
         bodyText: body,
         providerConfig,
       });
+      externalProviderAccepted = true;
 
       provider = sendResult.provider;
       providerAccountId = emailAccount.id;
@@ -190,44 +211,51 @@ export class OutboundMessageService {
       deliveryStatus = 'sent';
     }
 
-    // 6. Create outbound message record
-    const message = await this.messageRepo.create({
-      conversationId: conversation.id,
-      senderType: actor.type,
-      senderId: actor.id,
-      direction: 'outbound',
-      channel,
-      body,
-      subject: channel === 'email' ? (conversation.subject ?? 'Re: Support') : undefined,
-      provider,
-      providerAccountId,
-      externalMessageId,
-      deliveryStatus,
-    });
-
-    // 7. Update conversation lastMessageAt
-    await this.conversationRepo.update(conversation.id, {
-      lastMessageAt: new Date(),
-    });
-
-    // 8. Record audit log entry
-    if (options.writeAuditLog !== false) {
-      await this.auditLog.create({
-        organizationId: conversation.organizationId,
-        actorId: actor.id,
-        actorType: actor.type,
-        action: 'message_sent',
-        resourceType: 'message',
-        resourceId: message.id,
-        metadata: {
-          conversationId: conversation.id,
-          channel,
-          provider,
-        },
+    try {
+      // 6. Create outbound message record
+      const message = await this.messageRepo.create({
+        conversationId: conversation.id,
+        senderType: actor.type,
+        senderId: actor.id,
+        direction: 'outbound',
+        channel,
+        body,
+        subject: channel === 'email' ? (conversation.subject ?? 'Re: Support') : undefined,
+        provider,
+        providerAccountId,
+        externalMessageId,
+        deliveryStatus,
       });
-    }
 
-    // 9. Return the created message
-    return message;
+      // 7. Update conversation lastMessageAt
+      await this.conversationRepo.update(conversation.id, {
+        lastMessageAt: new Date(),
+      });
+
+      // 8. Record audit log entry
+      if (options.writeAuditLog !== false) {
+        await this.auditLog.create({
+          organizationId: conversation.organizationId,
+          actorId: actor.id,
+          actorType: actor.type,
+          action: 'message_sent',
+          resourceType: 'message',
+          resourceId: message.id,
+          metadata: {
+            conversationId: conversation.id,
+            channel,
+            provider,
+          },
+        });
+      }
+
+      // 9. Return the created message
+      return message;
+    } catch (error) {
+      if (externalProviderAccepted) {
+        throw new OutboundMessagePostDispatchError(error);
+      }
+      throw error;
+    }
   }
 }

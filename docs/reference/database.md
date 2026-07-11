@@ -1,6 +1,6 @@
 # Database Reference
 
-> PostgreSQL schema reference. 20 application tables, 16 migration files, 6 application-callable RPCs, and role-aware RLS on tenant-scoped data.
+> PostgreSQL schema reference. 20 application tables, 17 migration files, 6 application-callable RPCs, and role-aware RLS on tenant-scoped data.
 
 ## Migration files
 
@@ -24,8 +24,9 @@ Apply pending files in the order shown. Do not replay the whole set against an i
 | `insforge/migrations/20260615074718_trigger-process-jobs-on-insert.sql` | Adds an HTTP job trigger (superseded by the next migration after the extension proved unreliable) |
 | `insforge/migrations/20260615080500_drop-broken-trigger.sql` | Drops the unreliable HTTP job trigger; scheduled processing remains the active path |
 | `insforge/migrations/014_role_aware_rls_and_knowledge_storage.sql` | Adds role-aware settings/knowledge/job policies, secret-safe client grants, file keys, and organization-scoped storage policies |
+| `insforge/migrations/015_bind_knowledge_jobs_to_documents.sql` | Binds browser-enqueued knowledge jobs to documents owned by the same organization |
 
-Apply via the InsForge SQL editor or migrations API. Migration `014` cannot change bucket configuration: after applying it, mark the existing `knowledge-files` bucket **private** in the InsForge dashboard. Storage object keys must use `<organization-id>/documents/...` so its policies can derive the tenant from the first path segment.
+Apply via the InsForge SQL editor or migrations API. Migration `014` cannot change bucket configuration: after applying it, mark the existing `knowledge-files` bucket **private** in the InsForge dashboard. Then apply `015` to bind knowledge-processing jobs to same-organization documents. Storage object keys must use `<organization-id>/documents/...` so its policies can derive the tenant from the first path segment.
 
 ---
 

@@ -6,6 +6,13 @@ const migrationPath = new URL(
   import.meta.url,
 );
 const migration = readFileSync(migrationPath, 'utf8');
+const knowledgeJobBindingMigration = readFileSync(
+  new URL(
+    '../../insforge/migrations/015_bind_knowledge_jobs_to_documents.sql',
+    import.meta.url,
+  ),
+  'utf8',
+);
 const knowledgeListPage = readFileSync(
   new URL('../../app/knowledge/page.tsx', import.meta.url),
   'utf8',
@@ -63,6 +70,25 @@ describe('role-aware RLS and knowledge storage migration', () => {
     );
     expect(migration).toContain("job_type = 'process_knowledge_document'");
     expect(migration).not.toContain('CREATE POLICY support_jobs_update');
+  });
+
+  it('binds browser-enqueued knowledge jobs to a document in the same organization', () => {
+    expect(knowledgeJobBindingMigration).toMatch(
+      /FUNCTION public\.knowledge_document_belongs_to_org[\s\S]*SECURITY DEFINER[\s\S]*SET search_path = pg_catalog, public/,
+    );
+    expect(knowledgeJobBindingMigration).toContain('kd.id::text = p_document_id');
+    expect(knowledgeJobBindingMigration).toContain(
+      'kd.organization_id = p_organization_id',
+    );
+    expect(knowledgeJobBindingMigration).toContain(
+      "p_organization_id,\n    ARRAY['owner', 'admin']",
+    );
+    expect(knowledgeJobBindingMigration).toContain(
+      "COALESCE(payload ->> 'documentId', payload ->> 'document_id')",
+    );
+    expect(knowledgeJobBindingMigration).toContain(
+      'public.user_has_org_role(organization_id',
+    );
   });
 
   it('binds client-written file keys to their document organization', () => {

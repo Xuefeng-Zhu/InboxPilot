@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { NextRequest } from 'next/server';
 
 const mocks = vi.hoisted(() => ({
+  PostDispatchError: class extends Error {},
   from: vi.fn(),
   getSecret: vi.fn(),
   getUserFromToken: vi.fn(),
@@ -30,6 +31,7 @@ vi.mock('@/app/api/functions/_insforge-db-adapter', () => ({
   createInsforgeDbAdapter: mocks.createInsforgeDbAdapter,
 }));
 vi.mock('@support-core/services/outbound-message-service', () => ({
+  OutboundMessagePostDispatchError: mocks.PostDispatchError,
   OutboundMessageService: class {
     sendReply = mocks.sendReply;
   },
@@ -225,6 +227,27 @@ describe('approve-ai-draft route', () => {
     expect(scenario.inserts).not.toContainEqual(
       expect.objectContaining({ table: 'audit_logs' }),
     );
+  });
+
+  it('clears the draft when persistence fails after the provider accepted the reply', async () => {
+    mocks.sendReply.mockRejectedValue(
+      new mocks.PostDispatchError('provider accepted before persistence failed'),
+    );
+
+    const response = await POST(makeRequest({
+      conversationId: 'conversation-1',
+      aiDecisionId: 'decision-1',
+    }));
+
+    expect(response.status).toBe(500);
+    expect(scenario.updates).toContainEqual({
+      table: 'conversations',
+      values: { ai_state: 'idle' },
+    });
+    expect(scenario.updates).not.toContainEqual({
+      table: 'conversations',
+      values: { ai_state: 'drafted' },
+    });
   });
 
   it('retries the final state transition after delivery instead of stranding the claim', async () => {

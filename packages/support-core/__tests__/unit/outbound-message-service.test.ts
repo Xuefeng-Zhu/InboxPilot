@@ -1,5 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { OutboundMessageService } from '../../src/services/outbound-message-service.js';
+import {
+  OutboundMessagePostDispatchError,
+  OutboundMessageService,
+} from '../../src/services/outbound-message-service.js';
 import type { ConversationRepository } from '../../src/repositories/conversation-repository.js';
 import type { ContactRepository } from '../../src/repositories/contact-repository.js';
 import type { MessageRepository } from '../../src/repositories/message-repository.js';
@@ -645,6 +648,30 @@ describe('OutboundMessageService', () => {
       await expect(
         service.sendReply('conv-email-001', 'body', USER_ACTOR),
       ).rejects.toThrow('has no email address for email reply');
+    });
+
+    it('marks persistence failures after an SMS provider accepts the message', async () => {
+      vi.mocked(messageRepo.create).mockRejectedValue(new Error('database unavailable'));
+
+      const result = service.sendReply('conv-sms-001', 'body', USER_ACTOR);
+
+      await expect(result).rejects.toBeInstanceOf(OutboundMessagePostDispatchError);
+      await expect(result).rejects.toThrow(
+        'Provider accepted the message before local persistence failed: database unavailable',
+      );
+      expect(smsAdapter.sendSms).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps webchat persistence failures retryable because no provider was called', async () => {
+      vi.mocked(conversationRepo.findById).mockResolvedValue(WEBCHAT_CONVERSATION);
+      vi.mocked(contactRepo.findById).mockResolvedValue(WEBCHAT_CONTACT);
+      const persistenceError = new Error('database unavailable');
+      vi.mocked(messageRepo.create).mockRejectedValue(persistenceError);
+
+      const result = service.sendReply('conv-webchat-001', 'body', USER_ACTOR);
+
+      await expect(result).rejects.toBe(persistenceError);
+      await expect(result).rejects.not.toBeInstanceOf(OutboundMessagePostDispatchError);
     });
   });
 

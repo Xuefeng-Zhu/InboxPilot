@@ -12,6 +12,11 @@ describe('process-jobs placeholder handlers', () => {
     expect(source).not.toContain("update({ sender_type: 'ai', sender_id: null })");
   });
 
+  it('does not retry an auto-reply after the provider accepted it', () => {
+    expect(source).toContain('error instanceof OutboundMessagePostDispatchError');
+    expect(source).toContain('suppressing automatic retry');
+  });
+
   it('fails unsupported delivery-status retry jobs instead of completing them as no-ops', () => {
     expect(source).toContain("throw new Error('process_delivery_status retry handler is not implemented')");
   });

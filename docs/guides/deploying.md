@@ -135,7 +135,7 @@ Variables prefixed `NEXT_PUBLIC_` are exposed to the browser. Only the InsForge 
 
 ## Pre-deploy checklist
 
-- [ ] All 16 migration files applied in the documented order (through `014`, including both timestamped job-trigger migrations).
+- [ ] All 17 migration files applied in the documented order (through `015`, including both timestamped job-trigger migrations).
 - [ ] Existing `knowledge-files` bucket set to **private** in the InsForge dashboard after applying `014`.
 - [ ] Knowledge uploads use `<organization-id>/documents/...` object keys.
 - [ ] Seed data applied (optional for production).

@@ -19,7 +19,7 @@ components/                   React components – inbox/, knowledge/, customers
 lib/                          Frontend utilities & React Query hooks (insforge.ts, auth-context.tsx, queries/)
 packages/support-core/        Portable business logic (see packages/support-core/AGENTS.md)
 insforge/functions/           9 Deno serverless entrypoints (see insforge/functions/AGENTS.md)
-insforge/migrations/          16 SQL migration files + seed.sql
+insforge/migrations/          17 SQL migration files + seed.sql
 widget-src/                   Vite + TS webchat widget bundle
 docs/                         Architecture, database, API, RBAC, audit, jobs, webchat, testing references + guides
 ```
@@ -129,7 +129,7 @@ Next.js Client (agent actions)
 
 - **Repository count: 15, not 16.** `PostgresJobQueue` lives in `services/` (not `repositories/`) — it implements the `JobQueue` interface and carries business logic (idempotency, backoff, dead-lettering), not table CRUD. Update the README if you touch this.
 - **Table count: 20 application tables.** The 20th is `ai_decision_chunks` (added in migration 007); storage/realtime platform tables are not included.
-- **Migration count: 16 files.** This includes numbered migrations `001` through `014` plus two timestamped job-trigger migrations; preserve the documented application order because the second timestamped file drops the first file's unreliable trigger.
+- **Migration count: 17 files.** This includes numbered migrations `001` through `015` plus two timestamped job-trigger migrations; preserve the documented application order because the second timestamped file drops the first file's unreliable trigger.
 - **`app/symphony/` is built but undocumented** in `README.md` and the original AGENTS.md. Has its own 7 components, 3 tests, and a data hook (`useSymphony.ts`), linked from Sidebar. Treat as in-progress.
 - **`TelnyxSmsAdapter.verifyWebhook` verifies ed25519 signatures** using the configured Telnyx public key in `signingSecret` (hex/base64/base64url) and a 5-minute timestamp replay window.
 - **6 of 6 integration test files are 100% `it.todo` placeholders** (45 placeholders total) — they need a real InsForge DB; pass as "todo" without exercising code.

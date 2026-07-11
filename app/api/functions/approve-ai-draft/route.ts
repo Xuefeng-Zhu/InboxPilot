@@ -6,7 +6,10 @@ import { assertInsforgeSuccess } from '@/lib/insforge-result';
 import { createProviderRegistry } from '@/lib/provider-registry';
 import { getUserFromToken, userHasOrgPermission } from '../_auth';
 import { createInsforgeDbAdapter } from '../_insforge-db-adapter';
-import { OutboundMessageService } from '@support-core/services/outbound-message-service';
+import {
+  OutboundMessagePostDispatchError,
+  OutboundMessageService,
+} from '@support-core/services/outbound-message-service';
 import { ConversationRepository } from '@support-core/repositories/conversation-repository';
 import { ContactRepository } from '@support-core/repositories/contact-repository';
 import { MessageRepository } from '@support-core/repositories/message-repository';
@@ -206,16 +209,23 @@ export async function POST(req: NextRequest) {
         { writeAuditLog: false },
       );
     } catch (sendError) {
+      const providerAccepted = sendError instanceof OutboundMessagePostDispatchError;
       try {
         await transitionClaimedDraft(
           conversationId,
-          'drafted',
-          'approve-ai-draft failed to restore draft after send failure',
+          providerAccepted ? 'idle' : 'drafted',
+          providerAccepted
+            ? 'approve-ai-draft failed to clear draft after post-dispatch failure'
+            : 'approve-ai-draft failed to restore draft after provider failure',
         );
-      } catch (restoreError) {
+      } catch (transitionError) {
         console.error(
-          'approve-ai-draft: failed to restore draft after send failure',
-          restoreError instanceof Error ? restoreError.message : String(restoreError),
+          providerAccepted
+            ? 'approve-ai-draft: failed to clear draft after post-dispatch failure'
+            : 'approve-ai-draft: failed to restore draft after provider failure',
+          transitionError instanceof Error
+            ? transitionError.message
+            : String(transitionError),
         );
       }
       throw sendError;

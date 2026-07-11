@@ -18,7 +18,10 @@ import { createProviderRegistry } from '../_shared/create-provider-registry.ts';
 import { getSecret } from '../_shared/insforge-secrets.ts';
 import { createKnowledgeFileFetch } from '../_shared/create-knowledge-file-fetch.ts';
 import { PostgresJobQueue } from '../../../packages/support-core/src/services/postgres-job-queue.ts';
-import { OutboundMessageService } from '../../../packages/support-core/src/services/outbound-message-service.ts';
+import {
+  OutboundMessagePostDispatchError,
+  OutboundMessageService,
+} from '../../../packages/support-core/src/services/outbound-message-service.ts';
 import { ConversationRepository } from '../../../packages/support-core/src/repositories/conversation-repository.ts';
 import { MessageRepository } from '../../../packages/support-core/src/repositories/message-repository.ts';
 import { KnowledgeRepository } from '../../../packages/support-core/src/repositories/knowledge-repository.ts';
@@ -201,13 +204,28 @@ function buildJobHandlers(
       }
     }
 
-    const message = await outboundService.sendReply(
-      conversationId,
-      body,
-      { type: 'ai', id: null },
-      providerConfig,
-      { writeAuditLog: false },
-    );
+    let message;
+    try {
+      message = await outboundService.sendReply(
+        conversationId,
+        body,
+        { type: 'ai', id: null },
+        providerConfig,
+        { writeAuditLog: false },
+      );
+    } catch (error) {
+      if (error instanceof OutboundMessagePostDispatchError) {
+        // The provider accepted the message, so retrying this job could send a
+        // duplicate even though local persistence failed. Complete this send
+        // attempt and leave reconciliation to operators instead.
+        console.error(
+          'sendAutoReply: provider accepted reply before persistence failed; ' +
+            'suppressing automatic retry — ' + error.message,
+        );
+        return;
+      }
+      throw error;
+    }
 
     try {
       await auditLogRepo.create({

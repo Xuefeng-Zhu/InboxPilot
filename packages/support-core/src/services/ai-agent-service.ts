@@ -24,11 +24,11 @@ import type { JobQueue } from '../interfaces/job-queue.js';
 import type {
   AiDecision,
   AiSettings,
-  Message,
-  ChatMessage,
 } from '../types/index.js';
 import { parseAiDecision } from './ai-decision-parser.js';
 import { LowConfidenceRule } from './escalation-rules.js';
+import { AiDecisionRecorder } from './ai-decision-recorder.js';
+import { buildAiPrompt } from './ai-prompt-builder.js';
 import { DEFAULT_CHAT_MODEL, DEFAULT_EMBEDDING_MODEL } from '../types/ai-models.js';
 
 /** Default AI settings used when no settings are configured for the org. */
@@ -57,20 +57,38 @@ export class AiAgentService {
     private auditLog: AuditLogRepository,
   ) {}
 
-  async processMessage(conversationId: string, orgId: string): Promise<AiDecision> {
+  async processMessage(
+    conversationId: string,
+    orgId: string,
+    options: { sourceJobId?: string } = {},
+  ): Promise<AiDecision> {
+    const decisionRecorder = new AiDecisionRecorder(
+      this.aiDecisionRepo,
+      this.jobQueue,
+      this.auditLog,
+      orgId,
+      options.sourceJobId,
+    );
+
+    // A worker retry after decision persistence must resume downstream work,
+    // not call the LLM and create another decision. The original grounding
+    // IDs are stored with the decision so a failed chunk-ref enqueue can be
+    // retried without recomputing the turn.
+    const existingDecision = await decisionRecorder.recover(conversationId);
+    if (existingDecision) return existingDecision;
+
     // 1. Load AI settings
     const settings = await this.aiSettingsRepo.findByOrg(orgId);
     const aiMode = settings?.aiMode ?? DEFAULT_AI_SETTINGS.aiMode;
     const confidenceThreshold = settings?.confidenceThreshold ?? DEFAULT_AI_SETTINGS.confidenceThreshold;
     const contextWindowSize = settings?.contextWindowSize ?? DEFAULT_AI_SETTINGS.contextWindowSize;
-    const maxConsecutiveFailures = settings?.maxConsecutiveFailures ?? DEFAULT_AI_SETTINGS.maxConsecutiveFailures;
     const knowledgeSimilarityThreshold = settings?.knowledgeSimilarityThreshold ?? DEFAULT_AI_SETTINGS.knowledgeSimilarityThreshold;
     const model = settings?.model ?? DEFAULT_AI_SETTINGS.model;
     const systemPrompt = settings?.systemPrompt ?? DEFAULT_AI_SETTINGS.systemPrompt;
 
     // If mode is "off", skip processing entirely
     if (aiMode === 'off') {
-      const skipDecision = await this.aiDecisionRepo.create({
+      return decisionRecorder.record({
         conversationId,
         organizationId: orgId,
         decisionType: 'respond',
@@ -80,18 +98,7 @@ export class AiAgentService {
         tags: [],
         requiresHuman: false,
         rawResponse: null,
-      });
-
-      await this.auditLog.create({
-        organizationId: orgId,
-        actorType: 'ai',
-        action: 'ai_decision_produced',
-        resourceType: 'ai_decision',
-        resourceId: skipDecision.id,
-        metadata: { reason: 'ai_mode_off' },
-      });
-
-      return skipDecision;
+      }, { reason: 'ai_mode_off' });
     }
 
     // 2. Load conversation and history
@@ -167,24 +174,10 @@ export class AiAgentService {
     // worker picks up the record_chunk_refs job and does the actual
     // insert. This survives serverless function freeze-on-return, which
     // an inline DB write from a detached promise would not.
-    const citedChunkIds: ReadonlyArray<string> = knowledgeChunks
+    const citedChunkIds = knowledgeChunks
       .map((c) => c.id)
       .filter((id): id is string => typeof id === 'string' && id.length > 0);
-
-    /** Enqueue a record_chunk_refs job for a freshly-created decision.
-     *  Empty arrays are a no-op. A failure here aborts the current job so the
-     *  queue can retry instead of silently losing the linked-conversation row. */
-    const enqueueChunkRefs = async (decisionId: string): Promise<void> => {
-      if (citedChunkIds.length === 0) return;
-      await this.jobQueue.enqueue(
-        'record_chunk_refs',
-        {
-          ai_decision_id: decisionId,
-          knowledge_chunk_ids: citedChunkIds as string[],
-        },
-        orgId,
-      );
-    };
+    decisionRecorder.setGroundingChunkIds(citedChunkIds);
 
     // Build effective settings for escalation context.
     // Explicit construction (no `as` cast) so missing fields are compile-time
@@ -206,7 +199,7 @@ export class AiAgentService {
     };
 
     // Count consecutive AI failures from recent decisions
-    const consecutiveAiFailures = this.countConsecutiveFailures(messages, conversation.aiState);
+    const consecutiveAiFailures = conversation.aiState === 'failed' ? 1 : 0;
 
     // 4. Evaluate escalation engine BEFORE LLM call
     const escalationResult = this.escalationEngine.evaluate({
@@ -233,7 +226,7 @@ export class AiAgentService {
         aiState: 'needs_human',
       });
 
-      const escalateDecision = await this.aiDecisionRepo.create({
+      return decisionRecorder.record({
         conversationId,
         organizationId: orgId,
         messageId: latestMessageRecord?.id ?? null,
@@ -244,28 +237,16 @@ export class AiAgentService {
         tags: ['escalated'],
         requiresHuman: true,
         rawResponse: { escalationRule: escalationResult.ruleName, reason: escalationResult.reason },
+      }, {
+        decisionType: 'escalate',
+        ruleName: escalationResult.ruleName,
+        reason: escalationResult.reason,
       });
-      await enqueueChunkRefs(escalateDecision.id);
-
-      await this.auditLog.create({
-        organizationId: orgId,
-        actorType: 'ai',
-        action: 'ai_decision_produced',
-        resourceType: 'ai_decision',
-        resourceId: escalateDecision.id,
-        metadata: {
-          decisionType: 'escalate',
-          ruleName: escalationResult.ruleName,
-          reason: escalationResult.reason,
-        },
-      });
-
-      return escalateDecision;
     }
 
     // 6. No escalation: call LLM. Keep the error boundary narrow so
     // persistence, queue, and audit failures are not mislabeled as LLM errors.
-    const chatMessages = this.buildPrompt(
+    const chatMessages = buildAiPrompt(
       messages,
       knowledgeChunks,
       systemPrompt,
@@ -283,7 +264,7 @@ export class AiAgentService {
       await this.conversationRepo.update(conversationId, { aiState: 'failed' });
 
       const errorMessage = err instanceof Error ? err.message : String(err);
-      const failedDecision = await this.aiDecisionRepo.create({
+      return decisionRecorder.record({
         conversationId,
         organizationId: orgId,
         messageId: latestMessageRecord?.id ?? null,
@@ -294,19 +275,7 @@ export class AiAgentService {
         tags: ['error'],
         requiresHuman: false,
         rawResponse: { error: errorMessage },
-      });
-      await enqueueChunkRefs(failedDecision.id);
-
-      await this.auditLog.create({
-        organizationId: orgId,
-        actorType: 'ai',
-        action: 'ai_decision_produced',
-        resourceType: 'ai_decision',
-        resourceId: failedDecision.id,
-        metadata: { decisionType: 'respond', error: errorMessage },
-      });
-
-      return failedDecision;
+      }, { decisionType: 'respond', error: errorMessage });
     }
 
     const parseResult = parseAiDecision(llmResponse.content);
@@ -315,7 +284,7 @@ export class AiAgentService {
       // LLM returned invalid JSON — set ai_state to "failed"
       await this.conversationRepo.update(conversationId, { aiState: 'failed' });
 
-      const failedDecision = await this.aiDecisionRepo.create({
+      return decisionRecorder.record({
         conversationId,
         organizationId: orgId,
         messageId: latestMessageRecord?.id ?? null,
@@ -326,19 +295,7 @@ export class AiAgentService {
         tags: ['parse_error'],
         requiresHuman: false,
         rawResponse: { raw: llmResponse.content, error: parseResult.error },
-      });
-      await enqueueChunkRefs(failedDecision.id);
-
-      await this.auditLog.create({
-        organizationId: orgId,
-        actorType: 'ai',
-        action: 'ai_decision_produced',
-        resourceType: 'ai_decision',
-        resourceId: failedDecision.id,
-        metadata: { decisionType: 'respond', error: parseResult.error },
-      });
-
-      return failedDecision;
+      }, { decisionType: 'respond', error: parseResult.error });
     }
 
     const parsed = parseResult.data;
@@ -361,7 +318,7 @@ export class AiAgentService {
         aiState: 'needs_human',
       });
 
-      const lowConfDecision = await this.aiDecisionRepo.create({
+      return decisionRecorder.record({
         conversationId,
         organizationId: orgId,
         messageId: latestMessageRecord?.id ?? null,
@@ -372,19 +329,7 @@ export class AiAgentService {
         tags: [...parsed.tags, 'low_confidence'],
         requiresHuman: true,
         rawResponse: parsed as unknown as Record<string, unknown>,
-      });
-      await enqueueChunkRefs(lowConfDecision.id);
-
-      await this.auditLog.create({
-        organizationId: orgId,
-        actorType: 'ai',
-        action: 'ai_decision_produced',
-        resourceType: 'ai_decision',
-        resourceId: lowConfDecision.id,
-        metadata: { decisionType: 'escalate', reason: 'low_confidence' },
-      });
-
-      return lowConfDecision;
+      }, { decisionType: 'escalate', reason: 'low_confidence' });
     }
 
     // 7. Handle mode gating
@@ -395,7 +340,7 @@ export class AiAgentService {
         aiState: 'needs_human',
       });
 
-      const humanDecision = await this.aiDecisionRepo.create({
+      return decisionRecorder.record({
         conversationId,
         organizationId: orgId,
         messageId: latestMessageRecord?.id ?? null,
@@ -406,26 +351,14 @@ export class AiAgentService {
         tags: parsed.tags,
         requiresHuman: true,
         rawResponse: parsed as unknown as Record<string, unknown>,
-      });
-      await enqueueChunkRefs(humanDecision.id);
-
-      await this.auditLog.create({
-        organizationId: orgId,
-        actorType: 'ai',
-        action: 'ai_decision_produced',
-        resourceType: 'ai_decision',
-        resourceId: humanDecision.id,
-        metadata: { decisionType: parsed.decision_type, requiresHuman: true },
-      });
-
-      return humanDecision;
+      }, { decisionType: parsed.decision_type, requiresHuman: true });
     }
 
     if (aiMode === 'draft_only') {
       // Store draft, don't send
       await this.conversationRepo.update(conversationId, { aiState: 'drafted' });
 
-      const draftDecision = await this.aiDecisionRepo.create({
+      return decisionRecorder.record({
         conversationId,
         organizationId: orgId,
         messageId: latestMessageRecord?.id ?? null,
@@ -436,19 +369,7 @@ export class AiAgentService {
         tags: parsed.tags,
         requiresHuman: false,
         rawResponse: parsed as unknown as Record<string, unknown>,
-      });
-      await enqueueChunkRefs(draftDecision.id);
-
-      await this.auditLog.create({
-        organizationId: orgId,
-        actorType: 'ai',
-        action: 'ai_decision_produced',
-        resourceType: 'ai_decision',
-        resourceId: draftDecision.id,
-        metadata: { decisionType: parsed.decision_type, mode: 'draft_only' },
-      });
-
-      return draftDecision;
+      }, { decisionType: parsed.decision_type, mode: 'draft_only' });
     }
 
     if (aiMode === 'auto_reply') {
@@ -457,7 +378,7 @@ export class AiAgentService {
         // Auto-reply: enqueue outbound message job
         await this.conversationRepo.update(conversationId, { aiState: 'auto_replied' });
 
-        const autoDecision = await this.aiDecisionRepo.create({
+        return decisionRecorder.record({
           conversationId,
           organizationId: orgId,
           messageId: latestMessageRecord?.id ?? null,
@@ -468,24 +389,12 @@ export class AiAgentService {
           tags: parsed.tags,
           requiresHuman: false,
           rawResponse: parsed as unknown as Record<string, unknown>,
-        });
-        await enqueueChunkRefs(autoDecision.id);
-
-        await this.auditLog.create({
-          organizationId: orgId,
-          actorType: 'ai',
-          action: 'ai_decision_produced',
-          resourceType: 'ai_decision',
-          resourceId: autoDecision.id,
-          metadata: { decisionType: parsed.decision_type, mode: 'auto_reply', autoSent: true },
-        });
-
-        return autoDecision;
+        }, { decisionType: parsed.decision_type, mode: 'auto_reply', autoSent: true });
       } else {
         // Confidence below threshold in auto_reply mode — store as draft
         await this.conversationRepo.update(conversationId, { aiState: 'drafted' });
 
-        const draftDecision = await this.aiDecisionRepo.create({
+        return decisionRecorder.record({
           conversationId,
           organizationId: orgId,
           messageId: latestMessageRecord?.id ?? null,
@@ -496,31 +405,19 @@ export class AiAgentService {
           tags: parsed.tags,
           requiresHuman: false,
           rawResponse: parsed as unknown as Record<string, unknown>,
+        }, {
+          decisionType: parsed.decision_type,
+          mode: 'auto_reply',
+          autoSent: false,
+          reason: 'confidence_below_threshold',
         });
-        await enqueueChunkRefs(draftDecision.id);
-
-        await this.auditLog.create({
-          organizationId: orgId,
-          actorType: 'ai',
-          action: 'ai_decision_produced',
-          resourceType: 'ai_decision',
-          resourceId: draftDecision.id,
-          metadata: {
-            decisionType: parsed.decision_type,
-            mode: 'auto_reply',
-            autoSent: false,
-            reason: 'confidence_below_threshold',
-          },
-        });
-
-        return draftDecision;
       }
     }
 
     // Fallback: store as draft
     await this.conversationRepo.update(conversationId, { aiState: 'drafted' });
 
-    const fallbackDecision = await this.aiDecisionRepo.create({
+    return decisionRecorder.record({
       conversationId,
       organizationId: orgId,
       messageId: latestMessageRecord?.id ?? null,
@@ -531,81 +428,7 @@ export class AiAgentService {
       tags: parsed.tags,
       requiresHuman: false,
       rawResponse: parsed as unknown as Record<string, unknown>,
-    });
-    await enqueueChunkRefs(fallbackDecision.id);
-
-    await this.auditLog.create({
-      organizationId: orgId,
-      actorType: 'ai',
-      action: 'ai_decision_produced',
-      resourceType: 'ai_decision',
-      resourceId: fallbackDecision.id,
-      metadata: { decisionType: parsed.decision_type },
-    });
-
-    return fallbackDecision;
+    }, { decisionType: parsed.decision_type });
   }
 
-  // ─── Private Helpers ────────────────────────────────────────────────
-
-  /**
-   * Count consecutive AI failures by looking at the conversation's current ai_state.
-   * A simple heuristic: if ai_state is "failed", count it as 1 failure.
-   * In a production system, this would query recent AI decisions.
-   */
-  private countConsecutiveFailures(messages: Message[], currentAiState: string): number {
-    if (currentAiState === 'failed') {
-      return 1;
-    }
-    return 0;
-  }
-
-  /**
-   * Build the LLM prompt from conversation history and knowledge chunks.
-   */
-  private buildPrompt(
-    messages: Message[],
-    knowledgeChunks: Array<{ content: string }>,
-    systemPrompt: string | null,
-  ): ChatMessage[] {
-    const chatMessages: ChatMessage[] = [];
-
-    // System prompt
-    const baseSystemPrompt = systemPrompt ??
-      'You are a helpful customer support AI assistant. Analyze the conversation and provide a structured response.';
-
-    let fullSystemPrompt = baseSystemPrompt;
-
-    // Add knowledge context if available
-    if (knowledgeChunks.length > 0) {
-      const knowledgeContext = knowledgeChunks
-        .map((chunk, i) => `[Knowledge ${i + 1}]: ${chunk.content}`)
-        .join('\n\n');
-
-      fullSystemPrompt += `\n\nRelevant knowledge base articles:\n${knowledgeContext}`;
-    } else {
-      fullSystemPrompt += `\n\nNo relevant knowledge base article was found for this message. Do not invent facts, policies, prices, timelines, or account-specific details. If you cannot answer safely from the conversation alone, return decision_type "clarify", requires_human false, and a concise response_text that asks the customer for the missing detail or explains that you need more information. Do not escalate solely because knowledge is missing.`;
-    }
-
-    fullSystemPrompt += `\n\nYou MUST respond with a JSON object in this exact format:
-{
-  "decision_type": "respond" | "escalate" | "clarify",
-  "confidence": 0.0 to 1.0,
-  "reasoning_summary": "brief explanation of your reasoning",
-  "response_text": "your response to the customer" or null,
-  "tags": ["relevant", "tags"],
-  "requires_human": true or false
-}`;
-
-    chatMessages.push({ role: 'system', content: fullSystemPrompt });
-
-    // Conversation history
-    for (const msg of messages) {
-      const role: 'user' | 'assistant' =
-        msg.senderType === 'contact' ? 'user' : 'assistant';
-      chatMessages.push({ role, content: msg.body });
-    }
-
-    return chatMessages;
-  }
 }

@@ -14,6 +14,10 @@ alwaysApply: true
 _shared/                     – Reusable Deno utilities
   create-db-client.ts         – DatabaseClient from Deno.env
   create-realtime-publisher.ts – RealtimePublisher from env
+  webhook-handler-pipelines.ts – Shared SMS/email inbound + status request flow
+  webhook-runtime.ts           – Shared webhook env and JSON responses
+  run-claimed-job.ts           – Retry-safe claimed-job finalization
+  openrouter-ai-client.ts      – Bounded OpenRouter client for the worker
   verify-jwt.ts               – Agent/organization JWT via Web Crypto
   verify-visitor-jwt.ts       – Anonymous webchat visitor JWT (lighter)
   cors.ts                     – CORS headers helper
@@ -33,11 +37,11 @@ _bundled/                    – Build artifacts (do not edit)
 
 | Function | Auth | Trigger | Delegates To |
 |----------|------|---------|-------------|
-| `sms-inbound` | Provider signature | HTTP POST (Twilio/Telnyx); explicit `x-provider`, trusted receiving route, local-only mock | InboundMessageService |
+| `sms-inbound` | Provider signature | HTTP POST (Telnyx today; Twilio after WebCrypto port); explicit `x-provider`, trusted receiving route, local-only mock | InboundMessageService |
 | `sms-status` | Provider signature | HTTP POST (provider callback); explicit `x-provider`, trusted outbound account, local-only mock | Delivery event update |
-| `email-inbound` | Provider signature | HTTP POST (Postmark); explicit `x-provider`, trusted receiving route, local-only mock | InboundMessageService |
-| `email-status` | Provider signature | HTTP POST (Postmark callback); explicit `x-provider`, trusted outbound account, local-only mock | Delivery event update |
-| `process-jobs` | Internal | HTTP GET (cron) | PostgresJobQueue |
+| `email-inbound` | Provider signature | HTTP POST (real Postmark adapter awaits WebCrypto port); explicit `x-provider`, trusted receiving route, local-only mock | InboundMessageService |
+| `email-status` | Provider signature | HTTP POST (real Postmark adapter awaits WebCrypto port); explicit `x-provider`, trusted outbound account, local-only mock | Delivery event update |
+| `process-jobs` | Internal | HTTP POST (cron/manual trigger) | PostgresJobQueue + registered handlers |
 | `webchat-identify` | Visitor JWT | HTTP POST (widget) | WebchatThreadService |
 | `webchat-thread-init` | Visitor JWT | HTTP POST (widget) | WebchatThreadService |
 | `webchat-session-info` | Visitor JWT | HTTP GET (widget) | WebchatThreadService |
@@ -45,26 +49,22 @@ _bundled/                    – Build artifacts (do not edit)
 
 ## ENTRYPOINT PATTERN
 ```typescript
-import { serve } from 'https://deno.land/std@0.208.0/http/server.ts';
 import { createDbClient } from '../_shared/create-db-client.ts';
-import { verifyJwt } from '../_shared/verify-jwt.ts';
-import { cors } from '../_shared/cors.ts';
 
-serve(async (req: Request) => {
-  if (req.method === 'OPTIONS') return cors(new Response(null, { status: 204 }));
-  const payload = await verifyJwt(req);
-  const db = createDbClient();
-  const repo = new XxxRepository(db);
-  const service = new XxxService(repo);
-  const body = await req.json();
-  const result = await service.doSomething(body, payload.orgId);
-  return cors(Response.json(result));
-});
+export default async function (req: Request): Promise<Response> {
+  const baseUrl = Deno.env.get('INSFORGE_BASE_URL');
+  const serviceRoleKey = Deno.env.get('INSFORGE_SERVICE_ROLE_KEY');
+  const db = createDbClient(baseUrl, serviceRoleKey);
+  // Parse/authenticate, construct support-core dependencies, delegate, respond.
+  return Response.json({ status: 'ok' });
+}
 ```
 
 ## SHARED UTILITIES
-- **create-db-client.ts**: Reads `DATABASE_URL` + `SERVICE_ROLE_KEY` from `Deno.env.get()`. Returns DatabaseClient wired to InsForge PostgREST.
-- **create-realtime-publisher.ts**: Reads realtime key from env, returns RealtimePublisher.
+- **create-db-client.ts**: Accepts the InsForge base URL + service-role key and returns the portable `DatabaseClient` adapter.
+- **create-realtime-publisher.ts**: Builds the REST-backed `RealtimePublisher` from the same runtime configuration.
+- **webhook-handler-pipelines.ts**: Owns common provider parsing, account resolution, signature verification, service wiring, and response behavior for SMS/email inbound/status handlers.
+- **run-claimed-job.ts**: Keeps handler failure separate from completion persistence and quarantines retry-unsafe outcomes.
 - **verify-jwt.ts**: Extracts Bearer token, validates against org's JWT secret (looked up from DB by anon key prefix), returns org context.
 - **verify-visitor-jwt.ts**: Validates anonymous webchat visitors against widget config secret (no org context).
 - **cors.ts**: Adds Access-Control-Allow-Origin / -Methods / -Headers. Required for widget endpoints.
@@ -73,12 +73,12 @@ serve(async (req: Request) => {
 1. **Composition roots only** – no business logic here. All logic in `packages/support-core/src/services/`.
 2. Use `_shared/` for shared utilities – never duplicate code between functions.
 3. Two JWT tiers: agent (`verify-jwt.ts`) vs visitor (`verify-visitor-jwt.ts`). Use correct one per endpoint.
-4. Always wrap responses with `cors()` – widgets and webhooks require CORS.
-5. OPTIONS preflight handled before any business logic.
+4. Widget/browser endpoints wrap responses with CORS; provider webhooks use the shared JSON response helper.
+5. Browser-facing OPTIONS preflight is handled before business logic.
 6. Error responses return `{ error: string }` JSON (never uncaught exceptions).
 7. `_bundled/` is auto-generated – never edit manually. Re-deploy to regenerate.
 8. No `@insforge/sdk` here – Deno functions use `fetch()` with service role key.
-9. Import support-core from barrel (`packages/support-core/src/index.ts`), never internal paths.
+9. Deno uses explicit relative `.ts` imports; keep support-core dependencies narrow and injected.
 10. **Deno-safety** – The Deno runtime does not expose Node globals (`crypto`, `Buffer`, `process.env`, etc.) by default. `insforge/functions/**` MUST NOT import adapters that depend on those globals. The shared `createProviderRegistry()` registers only Deno-safe adapters: Mock (SMS+email) + Telnyx (SMS) + 8 stubs (11 total). Twilio + Postmark are blocked on a WebCrypto port (see below). The `npm run lint:deno` script (runs `scripts/check-deno-safety.mjs`) catches forbidden patterns.
 
 ## ANTI-PATTERNS
@@ -86,7 +86,7 @@ serve(async (req: Request) => {
 - Skipping JWT verification on webhooks → security hole.
 - Hardcoding secrets → always `Deno.env.get()` or DB-stored org config.
 - Editing `_bundled/` → build artifacts, overwritten on re-deploy.
-- Importing support-core internals bypassing barrel → must use `src/index.ts`.
+- Importing broad dependency barrels when one explicit Deno-safe module is sufficient.
 - Missing `cors()` on widget endpoints → browser fetch fails without CORS.
 - Duplicating code across functions → add to `_shared/` instead.
 - `console.log` in production → use structured error responses.
@@ -120,14 +120,6 @@ The `npm run lint:deno` script (T3 in `deno-safety-fix` plan) catches any future
 
 ## _bundled/ regeneration
 
-After this plan lands, the following entrypoint sources are stale relative to `_bundled/*.ts` (mtime already behind entrypoint sources by 6 days pre-plan):
-
-- `insforge/functions/_shared/create-provider-registry.ts` (new)
-- `insforge/functions/_shared/insforge-secrets.ts` (new)
-- `insforge/functions/sms-inbound/index.ts` (modified — uses `createProviderRegistry()`)
-- `insforge/functions/email-inbound/index.ts` (modified — uses `createProviderRegistry()`)
-- `insforge/functions/sms-status/index.ts` (modified — uses `createProviderRegistry()`)
-- `insforge/functions/email-status/index.ts` (modified — uses `createProviderRegistry()`)
-- `insforge/functions/process-jobs/index.ts` (modified — `send_outbound_message` refactored to delegate to `OutboundMessageService`)
-
-Regenerate via: `cd insforge && deno bundle functions/<name>/index.ts _bundled/<name>.ts` for each, or use the `insforge-cli` skill's `deploy` command which handles bundling. The actual regeneration is not done in this plan (out of scope; deploy must follow).
+`_bundled/` is generated deployment output and intentionally is not hand-edited
+with source changes. Use the supported InsForge deploy workflow to regenerate
+the affected bundles immediately before deployment.

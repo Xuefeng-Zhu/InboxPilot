@@ -100,6 +100,7 @@ describe('useProviderSettings', () => {
     await waitFor(() => expect(result.current.loading).toBe(false));
 
     act(() => {
+      result.current.setShowAddForm(true);
       result.current.setNewLabel('Mock');
       result.current.setNewCredentialsId('secret-1');
     });
@@ -109,6 +110,10 @@ describe('useProviderSettings', () => {
       'Account added, but audit logging failed: audit unavailable',
     );
     expect(result.current.success).toBeNull();
+    expect(result.current.showAddForm).toBe(false);
+    expect(result.current.newProvider).toBe('mock');
+    expect(result.current.newLabel).toBe('');
+    expect(result.current.newCredentialsId).toBe('');
   });
 
   it('does not read credential secret ids into browser state', async () => {
@@ -137,5 +142,42 @@ describe('useProviderSettings', () => {
       success: false,
       message: 'Provider rejected the credentials',
     });
+  });
+
+  it('allows only one provider connection test at a time', async () => {
+    let resolveFirst: ((response: Response) => void) | undefined;
+    const firstResponse = new Promise<Response>((resolve) => {
+      resolveFirst = resolve;
+    });
+    const fetchMock = vi.fn().mockReturnValue(firstResponse);
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { result } = renderHook(() => useProviderSettings(SMS_CONFIG));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    let firstTest: Promise<void> | undefined;
+    act(() => {
+      firstTest = result.current.testConnection('account-1');
+      void result.current.testConnection('account-2');
+    });
+    expect(result.current.testingId).toBe('account-1');
+    expect(fetchMock).toHaveBeenCalledOnce();
+
+    await act(async () => {
+      resolveFirst?.(new Response(JSON.stringify({
+        status: 'ok',
+        data: { ok: true, message: 'First account is healthy' },
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }));
+      await firstTest;
+    });
+    expect(result.current.testResult).toEqual({
+      id: 'account-1',
+      success: true,
+      message: 'First account is healthy',
+    });
+    expect(result.current.testingId).toBeNull();
   });
 });

@@ -8,6 +8,10 @@
 
 import { createHmac, timingSafeEqual } from 'crypto';
 import type { SmsProviderAdapter } from '../interfaces/sms-provider-adapter.js';
+import {
+  PROVIDER_SEND_TIMEOUT_MS,
+  ProviderSendOutcomeUnknownError,
+} from './provider-send-outcome-unknown-error';
 import type {
   SendSmsParams,
   SendSmsResult,
@@ -114,14 +118,25 @@ export class TwilioSmsAdapter implements SmsProviderAdapter {
 
     const credentials = Buffer.from(`${accountSid}:${authToken}`).toString('base64');
 
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Basic ${credentials}`,
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: formBody.toString(),
-    });
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Basic ${credentials}`,
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: formBody.toString(),
+        signal: AbortSignal.timeout(PROVIDER_SEND_TIMEOUT_MS),
+      });
+    } catch (error) {
+      throw new ProviderSendOutcomeUnknownError({
+        providerId: this.providerId,
+        stage: 'request',
+        message: 'TwilioSmsAdapter.sendSms: request failed without a provider response',
+        originalError: error,
+      });
+    }
 
     if (!response.ok) {
       const errorBody = await response.text();
@@ -130,12 +145,34 @@ export class TwilioSmsAdapter implements SmsProviderAdapter {
       );
     }
 
-    const data = (await response.json()) as { sid: string; status: string };
+    let data: unknown;
+    try {
+      data = await response.json();
+    } catch (error) {
+      throw new ProviderSendOutcomeUnknownError({
+        providerId: this.providerId,
+        stage: 'response',
+        message: 'TwilioSmsAdapter.sendSms: accepted response was not valid JSON',
+        originalError: error,
+      });
+    }
+
+    const responseData = data && typeof data === 'object'
+      ? data as Record<string, unknown>
+      : {};
+    if (typeof responseData.sid !== 'string' || responseData.sid.trim().length === 0) {
+      throw new ProviderSendOutcomeUnknownError({
+        providerId: this.providerId,
+        stage: 'response',
+        message: 'TwilioSmsAdapter.sendSms: accepted response did not include a message SID',
+        originalError: new Error('missing sid'),
+      });
+    }
 
     return {
-      externalMessageId: data.sid,
+      externalMessageId: responseData.sid,
       provider: this.providerId,
-      status: data.status === 'queued' ? 'queued' : 'sent',
+      status: responseData.status === 'queued' ? 'queued' : 'sent',
     };
   }
 

@@ -2,9 +2,9 @@ import { beforeEach, describe, it, expect, vi } from 'vitest';
 import type { NextRequest } from 'next/server';
 
 /**
- * Tests for the auth middleware logic.
+ * Tests for the Next.js 16 auth proxy logic.
  *
- * Since the middleware depends on Next.js server types (NextRequest, NextResponse),
+ * Since the proxy depends on Next.js server types (NextRequest, NextResponse),
  * we test the core routing logic by mocking the Next.js primitives.
  *
  * Validates: Requirements 17.4 — Unauthenticated users on protected app routes SHALL redirect to /login.
@@ -42,7 +42,7 @@ function createMockRequest(
   } as unknown as NextRequest;
 }
 
-describe('Auth Middleware', () => {
+describe('Auth proxy', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });

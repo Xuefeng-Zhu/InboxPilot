@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createHmac } from 'crypto';
 import { TwilioSmsAdapter } from '@support-core/adapters/twilio-sms-adapter';
+import { ProviderSendOutcomeUnknownError } from '@support-core/adapters';
 import type { WebhookVerificationRequest } from '@support-core/types/index';
 
 /**
@@ -414,6 +415,69 @@ describe('TwilioSmsAdapter', () => {
       fetchSpy.mockRestore();
     });
 
+    it('marks a rejected fetch as an unknown provider outcome', async () => {
+      const networkError = new TypeError('socket closed before response');
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockRejectedValueOnce(networkError);
+
+      const result = adapter.sendSms({
+        to: '+12125551234',
+        from: '+19175559999',
+        body: 'Hello',
+        providerConfig: { accountSid: 'AC_test', authToken: 'test_token' },
+      });
+
+      await expect(result).rejects.toBeInstanceOf(ProviderSendOutcomeUnknownError);
+      await expect(result).rejects.toMatchObject({
+        providerId: 'twilio',
+        stage: 'request',
+        originalError: networkError,
+      });
+      fetchSpy.mockRestore();
+    });
+
+    it('marks an unreadable successful response as an unknown provider outcome', async () => {
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+        new Response('not-json', { status: 201 }),
+      );
+
+      const result = adapter.sendSms({
+        to: '+12125551234',
+        from: '+19175559999',
+        body: 'Hello',
+        providerConfig: { accountSid: 'AC_test', authToken: 'test_token' },
+      });
+
+      await expect(result).rejects.toMatchObject({
+        name: 'ProviderSendOutcomeUnknownError',
+        providerId: 'twilio',
+        stage: 'response',
+      });
+      fetchSpy.mockRestore();
+    });
+
+    it('marks a successful response without a message SID as an unknown outcome', async () => {
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+        new Response(JSON.stringify({ status: 'queued' }), {
+          status: 201,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
+
+      const result = adapter.sendSms({
+        to: '+12125551234',
+        from: '+19175559999',
+        body: 'Hello',
+        providerConfig: { accountSid: 'AC_test', authToken: 'test_token' },
+      });
+
+      await expect(result).rejects.toMatchObject({
+        name: 'ProviderSendOutcomeUnknownError',
+        providerId: 'twilio',
+        stage: 'response',
+      });
+      fetchSpy.mockRestore();
+    });
+
     it('throws on non-OK response from Twilio', async () => {
       const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
         new Response('{"message":"Invalid credentials"}', {
@@ -421,17 +485,17 @@ describe('TwilioSmsAdapter', () => {
         }),
       );
 
-      await expect(
-        adapter.sendSms({
-          to: '+12125551234',
-          from: '+19175559999',
-          body: 'Hello',
-          providerConfig: {
-            accountSid: 'AC_bad',
-            authToken: 'bad_token',
-          },
-        }),
-      ).rejects.toThrow('401');
+      const result = adapter.sendSms({
+        to: '+12125551234',
+        from: '+19175559999',
+        body: 'Hello',
+        providerConfig: {
+          accountSid: 'AC_bad',
+          authToken: 'bad_token',
+        },
+      });
+      await expect(result).rejects.toThrow('401');
+      await expect(result).rejects.not.toBeInstanceOf(ProviderSendOutcomeUnknownError);
 
       fetchSpy.mockRestore();
     });

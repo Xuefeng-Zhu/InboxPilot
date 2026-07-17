@@ -10,6 +10,10 @@
  */
 
 import type { SmsProviderAdapter } from '../interfaces/sms-provider-adapter.js';
+import {
+  PROVIDER_SEND_TIMEOUT_MS,
+  ProviderSendOutcomeUnknownError,
+} from './provider-send-outcome-unknown-error';
 import type {
   SendSmsParams,
   SendSmsResult,
@@ -183,14 +187,25 @@ export class TelnyxSmsAdapter implements SmsProviderAdapter {
       text: params.body,
     });
 
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: requestBody,
-    });
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: requestBody,
+        signal: AbortSignal.timeout(PROVIDER_SEND_TIMEOUT_MS),
+      });
+    } catch (error) {
+      throw new ProviderSendOutcomeUnknownError({
+        providerId: this.providerId,
+        stage: 'request',
+        message: 'TelnyxSmsAdapter.sendSms: request failed without a provider response',
+        originalError: error,
+      });
+    }
 
     if (!response.ok) {
       const errorBody = await response.text();
@@ -199,12 +214,38 @@ export class TelnyxSmsAdapter implements SmsProviderAdapter {
       );
     }
 
-    const responseData = (await response.json()) as {
-      data: { id: string; type: string };
-    };
+    let responseData: unknown;
+    try {
+      responseData = await response.json();
+    } catch (error) {
+      throw new ProviderSendOutcomeUnknownError({
+        providerId: this.providerId,
+        stage: 'response',
+        message: 'TelnyxSmsAdapter.sendSms: accepted response was not valid JSON',
+        originalError: error,
+      });
+    }
+
+    const root = responseData && typeof responseData === 'object'
+      ? responseData as Record<string, unknown>
+      : {};
+    const responseDataValue = root.data && typeof root.data === 'object'
+      ? root.data as Record<string, unknown>
+      : {};
+    if (
+      typeof responseDataValue.id !== 'string' ||
+      responseDataValue.id.trim().length === 0
+    ) {
+      throw new ProviderSendOutcomeUnknownError({
+        providerId: this.providerId,
+        stage: 'response',
+        message: 'TelnyxSmsAdapter.sendSms: accepted response did not include a message ID',
+        originalError: new Error('missing data.id'),
+      });
+    }
 
     return {
-      externalMessageId: responseData.data.id,
+      externalMessageId: responseDataValue.id,
       provider: this.providerId,
       status: 'queued',
     };

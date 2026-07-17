@@ -112,7 +112,7 @@ export class InboundMessageService {
     if (externalMessageId) {
       const existing = await this.messageRepo.findByExternalId('webchat', externalMessageId);
       if (existing) {
-        return existing;
+        return this.resumeDuplicateInbound(existing, orgId, { channel: 'webchat', contactId });
       }
     }
 
@@ -141,14 +141,11 @@ export class InboundMessageService {
     );
 
     // Record audit log
-    await this.auditLog.create({
-      organizationId: orgId,
-      actorType: 'system',
-      action: 'message_received',
-      resourceType: 'message',
-      resourceId: message.id,
-      metadata: { channel: 'webchat', contactId },
-    });
+    await this.auditLog.ensureMessageReceived(
+      orgId,
+      message.id,
+      { channel: 'webchat', contactId },
+    );
 
     return message;
   }
@@ -179,7 +176,7 @@ export class InboundMessageService {
     // 1. Check for duplicate message by (provider, externalMessageId)
     const existing = await this.messageRepo.findByExternalId(provider, externalMessageId);
     if (existing) {
-      return existing;
+      return this.resumeDuplicateInbound(existing, orgId);
     }
 
     // 2. Normalize contact identifier
@@ -221,15 +218,30 @@ export class InboundMessageService {
     );
 
     // 8. Record audit log
-    await this.auditLog.create({
-      organizationId: orgId,
-      actorType: 'system',
-      action: 'message_received',
-      resourceType: 'message',
-      resourceId: message.id,
-    });
+    await this.auditLog.ensureMessageReceived(orgId, message.id);
 
     // 9. Return the created message
+    return message;
+  }
+
+  /**
+   * Repair downstream work after a provider retries a message whose first
+   * request persisted the message but failed during queue/audit finalization.
+   * Job lookup is lifetime-idempotent for the immutable message ID, while the
+   * audit RPC serializes concurrent repair attempts.
+   */
+  private async resumeDuplicateInbound(
+    message: Message,
+    orgId: string,
+    metadata?: Record<string, unknown>,
+  ): Promise<Message> {
+    await this.jobQueue.enqueue(
+      'process_ai_message',
+      { conversationId: message.conversationId, messageId: message.id },
+      orgId,
+    );
+
+    await this.auditLog.ensureMessageReceived(orgId, message.id, metadata ?? {});
     return message;
   }
 

@@ -10,7 +10,7 @@ Provider-neutral contracts. Everything outside `support-core/` (Deno functions, 
 | `QueryBuilder`, `QueryResult`, `QueryError` | (none — pure types) | same PostgREST builder |
 | `SmsProviderAdapter` | `MockSmsAdapter`, `TwilioSmsAdapter`, `TelnyxSmsAdapter` + 4 stubs | `insforge/functions/*-inbound/index.ts` (via `ProviderRegistry`) |
 | `EmailProviderAdapter` | `MockEmailAdapter`, `PostmarkEmailAdapter` + 4 stubs | same |
-| `JobQueue` | `PostgresJobQueue` (in `services/`) | `insforge/functions/_shared/create-db-client.ts` provides a thin `PostgRestJobQueue` (only `enqueue` works; rest throw) |
+| `JobQueue` | `PostgresJobQueue` (in `services/`) | Used directly by inbound functions and `process-jobs` with the injected `DatabaseClient` |
 | `AiClient` | (none in support-core) | OpenRouter via OpenAI-compatible client (constructed at function entrypoints) |
 | `RealtimePublisher` | (none in support-core) | `insforge/functions/_shared/create-realtime-publisher.ts` (REST broadcast) |
 | `ProviderRegistry` | (concrete class — runtime DI for adapters) | populated at each function entrypoint that needs SMS/email |
@@ -36,5 +36,5 @@ Provider-neutral contracts. Everything outside `support-core/` (Deno functions, 
 ## UNIQUE
 - **The `ProviderRegistry` is the only mutable runtime registry in support-core.** It maps `providerId` → adapter. Populated once at function startup, then read-only.
 - **`EscalationEngine` short-circuits on first match** — rule order matters. `LowConfidenceRule` has a separate `evaluateConfidence()` called post-LLM by `AiAgentService`, not the engine chain.
-- **The `JobQueue` interface is implemented three times in this repo:** `PostgresJobQueue` (full impl, in `services/`), `PostgRestJobQueue` (enqueue-only shim in `_shared/create-db-client.ts` for the inbound functions), and various in-memory queues in test files.
+- **`PostgresJobQueue` is the single production `JobQueue` implementation.** Tests use small in-memory/mock implementations of the same interface.
 - **Real `AiClient` impl is NOT in support-core** — it's constructed at the function entrypoint using OpenRouter's OpenAI-compatible API. `AiAgentService` depends only on the `AiClient` interface.

@@ -69,6 +69,6 @@
 - **`app/wchat/[widgetId]/page.tsx` is the only public authed-content page** — it lives outside the agent shell and uses visitor JWT auth (in URL `?t=`).
 - **`/settings` `team`/`billing`/`audit` tabs are placeholders** with stale "old settings page" copy. The real team UI is at `/team`.
 - **`/team` Edit Role/Remove buttons are presentational only.**
-- **No `middleware.ts`** — auth gate is `proxy.ts` (Next.js 16 convention). The legacy test `__tests__/middleware.test.ts` still references the old name.
+- **No `middleware.ts`** — auth gate is `proxy.ts` (Next.js 16 convention), with coverage in `__tests__/proxy.test.ts`.
 - **`app/symphony/page.tsx` uses `useSearchParams`** (for the `?zoom=` param), which requires the `<Suspense>` boundary.
 - **All 8 API routes are POST-only** — a deliberate consequence of "agent action" model.

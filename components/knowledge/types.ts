@@ -4,6 +4,7 @@ export interface KnowledgeDocument {
   title: string;
   source_type: string;
   body: string;
+  content_revision?: string | null;
   status: 'pending' | 'processing' | 'ready' | 'failed';
   error_message: string | null;
   file_url: string | null;

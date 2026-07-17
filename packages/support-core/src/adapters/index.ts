@@ -1,4 +1,11 @@
 // Provider adapters (SMS, Email)
+export {
+  PROVIDER_SEND_TIMEOUT_MS,
+  ProviderSendOutcomeUnknownError,
+} from './provider-send-outcome-unknown-error';
+export type {
+  ProviderSendOutcomeUnknownStage,
+} from './provider-send-outcome-unknown-error';
 export { MockSmsAdapter } from './mock-sms-adapter';
 export type { MockSentSms } from './mock-sms-adapter';
 export { MockEmailAdapter } from './mock-email-adapter';

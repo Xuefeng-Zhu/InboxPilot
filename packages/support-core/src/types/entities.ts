@@ -181,6 +181,8 @@ export interface AiDecision {
   id: string;
   conversationId: string;
   organizationId: string;
+  /** Queue job that produced this decision, when processed asynchronously. */
+  sourceJobId?: string | null;
   messageId: string | null;
   decisionType: AiDecisionType;
   confidence: number;
@@ -200,6 +202,7 @@ export interface KnowledgeDocument {
   title: string;
   sourceType: string;
   body: string;
+  contentRevision?: string | null;
   status: KnowledgeDocumentStatus;
   errorMessage: string | null;
   fileUrl: string | null;

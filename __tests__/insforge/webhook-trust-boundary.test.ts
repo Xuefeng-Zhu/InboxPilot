@@ -30,6 +30,38 @@ describe('webhook handler trust boundary', () => {
     expect(helperSource).toContain('getWebhookSigningSecret');
   });
 
+  it('routes every provider webhook through a shared typed pipeline', () => {
+    const inboundHandlerUrls = [
+      new URL('../../insforge/functions/sms-inbound/index.ts', import.meta.url),
+      new URL('../../insforge/functions/email-inbound/index.ts', import.meta.url),
+    ];
+    const statusHandlerUrls = [
+      new URL('../../insforge/functions/sms-status/index.ts', import.meta.url),
+      new URL('../../insforge/functions/email-status/index.ts', import.meta.url),
+    ];
+
+    for (const handlerUrl of inboundHandlerUrls) {
+      const source = readFileSync(handlerUrl, 'utf8');
+      expect(source).toContain('createInboundWebhookHandler');
+      expect(source).not.toContain('Deno.env.get');
+      expect(source).not.toContain('process.env');
+    }
+
+    for (const handlerUrl of statusHandlerUrls) {
+      const source = readFileSync(handlerUrl, 'utf8');
+      expect(source).toContain('createStatusWebhookHandler');
+      expect(source).not.toContain('Deno.env.get');
+      expect(source).not.toContain('process.env');
+    }
+
+    const pipelineSource = readFileSync(
+      new URL('../../insforge/functions/_shared/webhook-handler-pipelines.ts', import.meta.url),
+      'utf8',
+    );
+    expect(pipelineSource).toContain('getWebhookRuntimeConfig');
+    expect(pipelineSource).toContain('jsonResponse');
+  });
+
   it('requires an explicit provider and never trusts caller tenant headers for inbound webhooks', () => {
     const handlerUrls = [
       new URL('../../insforge/functions/sms-inbound/index.ts', import.meta.url),
@@ -38,11 +70,19 @@ describe('webhook handler trust boundary', () => {
 
     for (const handlerUrl of handlerUrls) {
       const source = readFileSync(handlerUrl, 'utf8');
-      expect(source).toContain('readWebhookProvider(req.headers)');
-      expect(source).toContain('isLocalMockWebhookAllowed');
+      expect(source).toContain('createInboundWebhookHandler');
       expect(source).not.toContain("?? 'mock'");
       expect(source).not.toContain('x-organization-id');
     }
+
+    const pipelineSource = readFileSync(
+      new URL('../../insforge/functions/_shared/webhook-handler-pipelines.ts', import.meta.url),
+      'utf8',
+    );
+    expect(pipelineSource).toContain('readWebhookProvider(req.headers)');
+    expect(pipelineSource).toContain('isLocalMockWebhookAllowed');
+    expect(pipelineSource).not.toContain("?? 'mock'");
+    expect(pipelineSource).not.toContain('x-organization-id');
   });
 });
 

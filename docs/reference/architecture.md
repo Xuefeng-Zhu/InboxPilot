@@ -231,11 +231,13 @@ sequenceDiagram
   S-->>U: realtime conversation_updated
 
   alt auto-reply mode, high confidence
-    S->>J: enqueue send_outbound_message
-    J-->>F: process-jobs picks up
-    F->>S: OutboundMessageService.sendReply
+    S-->>F: return decision with immutable auto-send directive
+    F->>S: OutboundMessageService.sendReply inline
     S->>W: provider send
     S->>DB: insert outbound message + audit
+    opt inline provider failure before acceptance
+      F->>J: enqueue send_outbound_message fallback
+    end
   else draft-only mode
     U->>F: send-reply / approve-ai-draft (Next.js route)
     F->>DB: insert outbound message + audit
@@ -286,7 +288,7 @@ All three channels use the same `conversations` and `messages` tables (the `chan
 | `MessageRepository` | `messages` | create, findByExternalId, updateDeliveryStatus, listByConversation |
 | `AiSettingsRepository` | `ai_settings` | findByOrg, upsert |
 | `AiDecisionRepository` | `ai_decisions` | create, listByConversation, latestForConversation |
-| `KnowledgeRepository` | `knowledge_documents`, `knowledge_chunks` | createDocument, getDocument, updateDocument, deleteDocumentWithChunks, insertChunks, deleteChunksByDocument, **matchChunks** (RPC) |
+| `KnowledgeRepository` | `knowledge_documents`, `knowledge_chunks` | document CRUD, revision-guarded updates, atomic chunk replacement, **matchChunks** (RPC) |
 | `SmsProviderAccountRepository` | `sms_provider_accounts`, `sms_phone_numbers` | create, listByOrg, findDefaultPhoneNumber, findById |
 | `EmailProviderAccountRepository` | `email_provider_accounts`, `email_addresses` | create, listByOrg, findDefaultEmailAddress, findById |
 | `DeliveryEventRepository` | `sms_delivery_events`, `email_delivery_events` | create(channel, …), listByMessage |
@@ -339,7 +341,7 @@ Stubs throw `Error('not implemented')` from `sendSms` / `sendEmail` so missing p
 | Infrastructure | `support_jobs`, `audit_logs` |
 | Web chat (since 005) | `webchat_widgets`, `webchat_threads` |
 
-**20 application tables, 17 migration files, 6 application-callable RPCs.** See [`database.md`](database.md) for the full schema, RLS policies, indexes, and ER diagram.
+**20 application tables, 18 migration files, 8 application-callable RPCs.** See [`database.md`](database.md) for the full schema, RLS policies, indexes, and ER diagram.
 
 ---
 

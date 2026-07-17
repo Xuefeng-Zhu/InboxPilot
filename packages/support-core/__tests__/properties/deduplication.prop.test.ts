@@ -10,7 +10,6 @@ import type {
   Contact,
   Conversation,
   Message,
-  AuditLog,
   Job,
   NormalizedInboundSms,
 } from '@support-core/types/index';
@@ -27,7 +26,8 @@ describe('Message deduplication property tests', () => {
    *
    * For any inbound message with a given (provider, external_message_id) pair,
    * processing the message N times (N ≥ 1) SHALL result in exactly one stored
-   * Message record. Subsequent processing attempts SHALL be discarded without error.
+   * Message record. Subsequent processing attempts SHALL repair idempotent
+   * follow-up work without creating another message.
    *
    * **Validates: Requirements 6.2, 6.3, 29.3**
    *
@@ -132,18 +132,6 @@ describe('Message deduplication property tests', () => {
             updatedAt: new Date(),
           };
 
-          const auditEntry: AuditLog = {
-            id: 'audit-1',
-            organizationId: orgId,
-            actorId: null,
-            actorType: 'system',
-            action: 'message_received',
-            resourceType: 'message',
-            resourceId: messageId,
-            metadata: {},
-            createdAt: new Date(),
-          };
-
           const job: Job = {
             id: 'job-1',
             organizationId: orgId,
@@ -189,7 +177,7 @@ describe('Message deduplication property tests', () => {
           } as unknown as ConversationRepository;
 
           const auditLog = {
-            create: vi.fn().mockResolvedValue(auditEntry),
+            ensureMessageReceived: vi.fn().mockResolvedValue(undefined),
           } as unknown as AuditLogRepository;
 
           const jobQueue: JobQueue = {

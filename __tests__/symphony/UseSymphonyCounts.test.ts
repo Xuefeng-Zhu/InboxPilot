@@ -44,9 +44,22 @@ import { useSymphonyCounts } from '../../lib/queries/hooks/useSymphony';
 const mocks = vi.hoisted(() => {
   const captured: { url: URL }[] = [];
 
+  type MockChain = {
+    select(): MockChain;
+    eq(column: string, value: string): MockChain;
+    neq(column: string, value: string): MockChain;
+    gte(column: string, value: string): MockChain;
+    lte(column: string, value: string): MockChain;
+    in(): MockChain;
+    order(): MockChain;
+    limit(): MockChain;
+    range(): MockChain;
+    then(resolve: (value: { count: number; data: null; error: null }) => void): void;
+  };
+
   function makeChain() {
     const url = new URL('https://example.test/rest/v1/conversations');
-    const chain: any = {
+    const chain: MockChain = {
       select: vi.fn(() => chain),
       eq: vi.fn((col: string, val: string) => {
         url.searchParams.append(col, `eq.${val}`);

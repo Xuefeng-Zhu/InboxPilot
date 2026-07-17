@@ -1,8 +1,8 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import fc from 'fast-check';
 import { PostgresJobQueue } from '@support-core/services/postgres-job-queue';
 import type { DatabaseClient, QueryBuilder, QueryResult } from '@support-core/interfaces/database-client';
-import type { Job, JobType, JobStatus } from '@support-core/types/index';
+import type { JobType } from '@support-core/types/index';
 
 /**
  * Property-based tests for the PostgresJobQueue.
@@ -11,16 +11,6 @@ import type { Job, JobType, JobStatus } from '@support-core/types/index';
  */
 
 // ─── Helpers ──────────────────────────────────────────────────────────
-
-/** Arbitrary for valid job types. */
-const jobTypeArb = fc.constantFrom<JobType>(
-  'process_ai_message',
-  'process_knowledge_document',
-  'send_outbound_message',
-  'process_delivery_status',
-  'record_chunk_refs',
-  'retry_failed_jobs',
-);
 
 const idempotentJobTypeArb = fc.constantFrom<JobType>(
   'process_ai_message',
@@ -63,23 +53,28 @@ const pendingCountArb = fc.integer({ min: 0, max: 30 });
 function createMockDb(options: {
   rpcResult?: QueryResult;
   fromSelectResult?: QueryResult;
+  fromSelectResults?: QueryResult[];
   fromInsertResult?: QueryResult;
   fromUpdateResult?: QueryResult;
   onUpdate?: (values: Record<string, unknown>) => void;
   onInsert?: (values: Record<string, unknown>) => void;
   onEq?: (column: string, value: unknown) => void;
+  onIn?: (column: string, values: unknown[]) => void;
   onContains?: (column: string, value: Record<string, unknown>) => void;
 }): DatabaseClient {
   const {
     rpcResult = { data: [], error: null },
     fromSelectResult = { data: null, error: null },
+    fromSelectResults,
     fromInsertResult = { data: null, error: null },
     fromUpdateResult = { data: null, error: null },
     onUpdate,
     onInsert,
     onEq,
+    onIn,
     onContains,
   } = options;
+  const queuedSelectResults = [...(fromSelectResults ?? [])];
 
   // Build a chainable query builder mock
   function createQueryBuilder(resolveWith: QueryResult): QueryBuilder {
@@ -111,7 +106,14 @@ function createMockDb(options: {
       like: vi.fn().mockReturnThis(),
       ilike: vi.fn().mockReturnThis(),
       is: vi.fn().mockReturnThis(),
-      in: vi.fn().mockReturnThis(),
+      in: vi.fn().mockImplementation(function (
+        this: QueryBuilder,
+        column: string,
+        values: unknown[],
+      ) {
+        onIn?.(column, values);
+        return this;
+      }),
       contains: vi.fn().mockImplementation(function (
         this: QueryBuilder,
         column: string,
@@ -133,7 +135,9 @@ function createMockDb(options: {
   }
 
   return {
-    from: vi.fn().mockImplementation(() => createQueryBuilder(fromSelectResult)),
+    from: vi.fn().mockImplementation(() => createQueryBuilder(
+      queuedSelectResults.shift() ?? fromSelectResult,
+    )),
     rpc: vi.fn().mockImplementation(async () => rpcResult),
   };
 }
@@ -179,7 +183,7 @@ describe('Job queue property tests', () => {
 
           const db = createMockDb({
             fromSelectResult: { data: jobRow, error: null },
-            fromUpdateResult: { data: null, error: null },
+            fromUpdateResult: { data: { id: jobId }, error: null },
             onUpdate: (values) => {
               capturedUpdate = values;
             },
@@ -227,8 +231,8 @@ describe('Job queue property tests', () => {
    * Property 9: Job enqueue idempotency
    *
    * Enqueuing the same job twice results in exactly one job.
-   * If a pending/claimed job with the same type and key payload fields exists,
-   * the existing job is returned instead of creating a new one.
+   * Immutable source jobs remain idempotent across terminal states; mutable
+   * event jobs dedupe while pending, claimed, or failed.
    *
    * **Validates: Requirements 13.8**
    *
@@ -248,6 +252,7 @@ describe('Job queue property tests', () => {
             payload.messageId = 'msg-456';
           } else if (jobType === 'process_knowledge_document') {
             payload.documentId = 'doc-789';
+            payload.revision = '2026-07-11T00:00:00.000Z';
           } else if (jobType === 'send_outbound_message') {
             payload.conversationId = 'conv-123';
             payload.aiDecisionId = 'decision-456';
@@ -381,8 +386,9 @@ describe('Job queue property tests', () => {
     expect(db.from).not.toHaveBeenCalled();
   });
 
-  it('scopes idempotency lookup to the organization and canonical payload keys', async () => {
+  it('scopes lifetime idempotency lookup to the organization and canonical payload keys', async () => {
     const eqCalls: Array<[string, unknown]> = [];
+    const inCalls: Array<[string, unknown[]]> = [];
     const containsCalls: Array<[string, Record<string, unknown>]> = [];
     const existingJobRow = {
       id: 'job-existing',
@@ -401,6 +407,7 @@ describe('Job queue property tests', () => {
     const db = createMockDb({
       fromSelectResult: { data: existingJobRow, error: null },
       onEq: (column, value) => eqCalls.push([column, value]),
+      onIn: (column, values) => inCalls.push([column, values]),
       onContains: (column, value) => containsCalls.push([column, value]),
     });
     const queue = new PostgresJobQueue(db);
@@ -417,9 +424,205 @@ describe('Job queue property tests', () => {
 
     expect(job.id).toBe('job-existing');
     expect(eqCalls).toContainEqual(['organization_id', 'org-123']);
+    expect(inCalls).toEqual([]);
     expect(containsCalls).toEqual([
       ['payload', { conversationId: 'conv-123', aiDecisionId: 'decision-123' }],
     ]);
+  });
+
+  it('returns completed immutable-source work instead of enqueueing it again', async () => {
+    let insertCalled = false;
+    const existingJobRow = {
+      id: 'job-completed',
+      organization_id: 'org-123',
+      job_type: 'process_ai_message',
+      payload: { conversationId: 'conv-123', messageId: 'message-123' },
+      status: 'completed',
+      attempts: 0,
+      max_attempts: 5,
+      last_error: null,
+      run_after: new Date().toISOString(),
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      completed_at: new Date().toISOString(),
+    };
+    const db = createMockDb({
+      fromSelectResult: { data: existingJobRow, error: null },
+      onInsert: () => {
+        insertCalled = true;
+      },
+    });
+    const queue = new PostgresJobQueue(db);
+
+    await expect(queue.enqueue(
+      'process_ai_message',
+      { conversationId: 'conv-123', messageId: 'message-123' },
+      'org-123',
+    )).resolves.toMatchObject({ id: 'job-completed', status: 'completed' });
+    expect(insertCalled).toBe(false);
+  });
+
+  it('limits mutable delivery-event deduplication to active jobs', async () => {
+    const inCalls: Array<[string, unknown[]]> = [];
+    const existingJobRow = {
+      id: 'job-pending',
+      organization_id: 'org-123',
+      job_type: 'process_delivery_status',
+      payload: { externalMessageId: 'external-123' },
+      status: 'pending',
+      attempts: 0,
+      max_attempts: 5,
+      last_error: null,
+      run_after: new Date().toISOString(),
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      completed_at: null,
+    };
+    const db = createMockDb({
+      fromSelectResult: { data: existingJobRow, error: null },
+      onIn: (column, values) => inCalls.push([column, values]),
+    });
+    const queue = new PostgresJobQueue(db);
+
+    await queue.enqueue(
+      'process_delivery_status',
+      { externalMessageId: 'external-123' },
+      'org-123',
+    );
+
+    expect(inCalls).toContainEqual(['status', ['pending', 'claimed', 'failed']]);
+  });
+
+  it('persists a stable database idempotency key for new active jobs', async () => {
+    let inserted: Record<string, unknown> | null = null;
+    const row = {
+      id: 'job-new',
+      organization_id: 'org-123',
+      job_type: 'send_outbound_message',
+      payload: { conversationId: 'conv-123', aiDecisionId: 'decision-123' },
+      status: 'pending',
+      attempts: 0,
+      max_attempts: 5,
+      last_error: null,
+      run_after: new Date().toISOString(),
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      completed_at: null,
+    };
+    const db = createMockDb({
+      fromSelectResult: { data: null, error: null },
+      fromInsertResult: { data: row, error: null },
+      onInsert: (values) => {
+        inserted = values;
+      },
+    });
+    const queue = new PostgresJobQueue(db);
+
+    await queue.enqueue(
+      'send_outbound_message',
+      {
+        conversationId: 'conv-123',
+        aiDecisionId: 'decision-123',
+        body: 'Hello',
+      },
+      'org-123',
+    );
+
+    expect(inserted).toMatchObject({
+      idempotency_key: JSON.stringify([
+        ['conversationId', 'conv-123'],
+        ['aiDecisionId', 'decision-123'],
+      ]),
+    });
+  });
+
+  it('returns the concurrent winner after the unique index rejects an insert race', async () => {
+    const existingJobRow = {
+      id: 'job-winner',
+      organization_id: 'org-123',
+      job_type: 'send_outbound_message',
+      payload: { conversationId: 'conv-123', aiDecisionId: 'decision-123' },
+      status: 'pending',
+      attempts: 0,
+      max_attempts: 5,
+      last_error: null,
+      run_after: new Date().toISOString(),
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      completed_at: null,
+    };
+    const db = createMockDb({
+      fromSelectResults: [
+        { data: null, error: null },
+        { data: null, error: null },
+        { data: existingJobRow, error: null },
+      ],
+      fromInsertResult: {
+        data: null,
+        error: { code: '23505', message: 'duplicate key value violates unique constraint' },
+      },
+    });
+    const queue = new PostgresJobQueue(db);
+
+    await expect(queue.enqueue(
+      'send_outbound_message',
+      {
+        conversationId: 'conv-123',
+        aiDecisionId: 'decision-123',
+        body: 'Hello',
+      },
+      'org-123',
+    )).resolves.toMatchObject({ id: 'job-winner' });
+  });
+
+  it('quarantines a non-retryable job without making it claimable again', async () => {
+    let update: Record<string, unknown> | null = null;
+    const db = createMockDb({
+      fromUpdateResult: { data: { id: 'job-1' }, error: null },
+      onUpdate: (values) => {
+        update = values;
+      },
+    });
+    const queue = new PostgresJobQueue(db);
+
+    await queue.quarantine('job-1', 'provider accepted without reconciliation');
+
+    expect(update).toMatchObject({
+      status: 'dead',
+      last_error: 'provider accepted without reconciliation',
+    });
+  });
+
+  it('treats a completion whose commit response was lost as already completed', async () => {
+    const completedRow = {
+      id: 'job-1',
+      status: 'completed',
+    };
+    const db = createMockDb({
+      fromSelectResults: [
+        { data: null, error: null },
+        { data: completedRow, error: null },
+      ],
+      fromUpdateResult: { data: null, error: null },
+    });
+    const queue = new PostgresJobQueue(db);
+
+    await expect(queue.complete('job-1')).resolves.toBeUndefined();
+  });
+
+  it('does not overwrite a completed job while attempting quarantine', async () => {
+    const db = createMockDb({
+      fromSelectResults: [
+        { data: null, error: null },
+        { data: { id: 'job-1', status: 'completed' }, error: null },
+      ],
+      fromUpdateResult: { data: null, error: null },
+    });
+    const queue = new PostgresJobQueue(db);
+
+    await expect(queue.quarantine('job-1', 'completion response lost')).rejects.toThrow(
+      'expected claimed status, found completed',
+    );
   });
 
   it('propagates idempotency lookup errors instead of inserting a duplicate job', async () => {

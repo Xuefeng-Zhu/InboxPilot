@@ -51,21 +51,47 @@ export type OutboundMessageActor =
   | { type: 'ai'; id: string | null }
   | { type: 'system'; id: string | null };
 
+export type OutboundMessageFinalizationStage =
+  | 'message_persistence'
+  | 'conversation_update'
+  | 'audit_log';
+
+export interface OutboundDispatchReceipt {
+  channel: Message['channel'];
+  provider: string;
+  providerAccountId: string | null;
+  externalMessageId: string;
+  deliveryStatus: 'queued' | 'sent';
+}
+
 /**
- * The external SMS/email provider accepted the message, but a later local
- * persistence step failed. Callers must not make the draft retryable because
- * doing so can send the customer a duplicate reply.
+ * Delivery crossed its retry-safe boundary, but a local finalization step
+ * failed. For SMS/email that boundary is provider acceptance; for webchat it
+ * is creation of the outbound message row. Callers must not make the draft
+ * retryable because doing so can send the customer a duplicate reply.
  */
 export class OutboundMessagePostDispatchError extends Error {
   readonly originalError: unknown;
+  readonly stage: OutboundMessageFinalizationStage;
+  readonly dispatchedMessage: Message | null;
+  readonly receipt: OutboundDispatchReceipt;
 
-  constructor(originalError: unknown) {
+  constructor(details: {
+    originalError: unknown;
+    stage: OutboundMessageFinalizationStage;
+    dispatchedMessage: Message | null;
+    receipt: OutboundDispatchReceipt;
+  }) {
+    const { originalError, stage, dispatchedMessage, receipt } = details;
     const detail = originalError instanceof Error
       ? originalError.message
       : String(originalError);
-    super(`Provider accepted the message before local persistence failed: ${detail}`);
+    super(`Message delivery reached ${stage} before local finalization failed: ${detail}`);
     this.name = 'OutboundMessagePostDispatchError';
     this.originalError = originalError;
+    this.stage = stage;
+    this.dispatchedMessage = dispatchedMessage;
+    this.receipt = receipt;
   }
 }
 
@@ -211,9 +237,20 @@ export class OutboundMessageService {
       deliveryStatus = 'sent';
     }
 
+    const receipt: OutboundDispatchReceipt = {
+      channel,
+      provider,
+      providerAccountId,
+      externalMessageId,
+      deliveryStatus,
+    };
+
+    // 6. Create outbound message record. A provider-accepted SMS/email must
+    // never be surfaced as an ordinary retryable failure, or a worker/user can
+    // send the same customer-facing message again.
+    let message: Message;
     try {
-      // 6. Create outbound message record
-      const message = await this.messageRepo.create({
+      message = await this.messageRepo.create({
         conversationId: conversation.id,
         senderType: actor.type,
         senderId: actor.id,
@@ -226,13 +263,37 @@ export class OutboundMessageService {
         externalMessageId,
         deliveryStatus,
       });
+    } catch (error) {
+      if (externalProviderAccepted) {
+        throw new OutboundMessagePostDispatchError({
+          originalError: error,
+          stage: 'message_persistence',
+          dispatchedMessage: null,
+          receipt,
+        });
+      }
+      throw error;
+    }
 
-      // 7. Update conversation lastMessageAt
+    // Once the message row exists, every channel has crossed its retry-safe
+    // boundary. Surface later failures with the persisted message attached so
+    // callers can finish realtime delivery and report an accepted response.
+    try {
+      // 7. Update conversation lastMessageAt.
       await this.conversationRepo.update(conversation.id, {
         lastMessageAt: new Date(),
       });
+    } catch (error) {
+      throw new OutboundMessagePostDispatchError({
+        originalError: error,
+        stage: 'conversation_update',
+        dispatchedMessage: message,
+        receipt,
+      });
+    }
 
-      // 8. Record audit log entry
+    // 8. Record audit log entry.
+    try {
       if (options.writeAuditLog !== false) {
         await this.auditLog.create({
           organizationId: conversation.organizationId,
@@ -248,14 +309,16 @@ export class OutboundMessageService {
           },
         });
       }
-
-      // 9. Return the created message
-      return message;
     } catch (error) {
-      if (externalProviderAccepted) {
-        throw new OutboundMessagePostDispatchError(error);
-      }
-      throw error;
+      throw new OutboundMessagePostDispatchError({
+        originalError: error,
+        stage: 'audit_log',
+        dispatchedMessage: message,
+        receipt,
+      });
     }
+
+    // 9. Return the created message.
+    return message;
   }
 }

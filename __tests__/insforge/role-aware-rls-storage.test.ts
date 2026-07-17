@@ -21,6 +21,10 @@ const knowledgeDetailPage = readFileSync(
   new URL('../../app/knowledge/[id]/page.tsx', import.meta.url),
   'utf8',
 );
+const knowledgeMutations = readFileSync(
+  new URL('../../app/knowledge/mutations.ts', import.meta.url),
+  'utf8',
+);
 
 describe('role-aware RLS and knowledge storage migration', () => {
   it('uses pinned SECURITY DEFINER helpers to avoid recursive membership RLS', () => {
@@ -120,8 +124,8 @@ describe('role-aware RLS and knowledge storage migration', () => {
   });
 
   it('stores file-only documents with an empty body so extraction failures stay failed', () => {
-    expect(knowledgeListPage).toContain('body: data.body,');
-    expect(knowledgeListPage).not.toContain("body: data.body || (fileName ?? ''),");
+    expect(knowledgeMutations).toContain('body: input.document.body,');
+    expect(knowledgeMutations).not.toContain("body: input.document.body || (fileName ?? ''),");
   });
 
   it('prevents browser audit inserts from impersonating system or AI actors', () => {
@@ -164,9 +168,10 @@ describe('role-aware RLS and knowledge storage migration', () => {
   });
 
   it('wires upload rollback and file deletion into both knowledge screens', () => {
-    expect(knowledgeListPage).toContain('file_key: fileKey');
-    expect(knowledgeListPage).toContain('rollbackKnowledgeUpload(fileKey');
-    expect(knowledgeListPage).toContain('removeKnowledgeFile(doc.file_key)');
-    expect(knowledgeDetailPage).toContain('removeKnowledgeFile(doc.file_key)');
+    expect(knowledgeMutations).toContain('file_key: fileKey');
+    expect(knowledgeMutations).toContain('rollbackKnowledgeUpload(fileKey');
+    expect(knowledgeMutations).toContain('removeKnowledgeFile(fileKey)');
+    expect(knowledgeListPage).toContain('deleteKnowledgeDocument({');
+    expect(knowledgeDetailPage).toContain('deleteKnowledgeDocument({');
   });
 });

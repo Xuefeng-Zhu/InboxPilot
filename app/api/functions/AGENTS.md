@@ -10,7 +10,7 @@
 |---|---|---|---|
 | `POST /api/functions/send-reply` | `conversations` (read), `messages` (insert outbound), `webchat_threads` (read for broadcast) | — | Permission: `reply_conversations` |
 | `POST /api/functions/approve-ai-draft` | `ai_decisions` (read), `conversations` (update `ai_state=idle`), `messages` (insert ai-sender), `webchat_threads` (read), `audit_logs` (insert) | `ai_draft_approved` | Permission: `reply_conversations` |
-| `POST /api/functions/regenerate-ai-draft` | `conversations` (update `ai_state=thinking`), `support_jobs` (insert `process_ai_message`); fires `${FUNCTIONS_URL}/process-jobs` | — | Permission: `reply_conversations` |
+| `POST /api/functions/regenerate-ai-draft` | `conversations` (read, then best-effort `ai_state=thinking` after enqueue), `support_jobs` (idempotent insert of `process_ai_message`); triggers `${FUNCTIONS_URL}/process-jobs` with a 1.5s bound | — | Permission: `reply_conversations`; worker repeats the state transition |
 | `POST /api/functions/escalate-conversation` | `conversations` (update `status=escalated, ai_state=needs_human`) | — | Permission: `reply_conversations` |
 | `POST /api/functions/resolve-conversation` | `conversations` (update `status=resolved, ai_state=idle`) | — | Permission: `reply_conversations` |
 | `POST /api/functions/reopen-conversation` | `conversations` (update `status=open, ai_state=idle`) | — | Permission: `reply_conversations` |
@@ -62,5 +62,5 @@
 - **`test-channel-connection` is the only conversation-touching route with `manage_settings`** (others need `reply_conversations`).
 - **`team-member-info` is the only read route** — it doesn't mutate state, just enriches the team panel with email/name for display.
 - **`change-member-role`, `remove-member`, `invite-member`, `delete-widget` are the routes that write to `audit_logs`** (the `approve-ai-draft` route also writes, so update this list when that changes).
-- **`regenerate-ai-draft` awaits the `${FUNCTIONS_URL}/process-jobs` trigger** after enqueueing; trigger failures are logged and left for the scheduler because the job row is already durable.
+- **`regenerate-ai-draft` awaits the `${FUNCTIONS_URL}/process-jobs` trigger for at most 1.5 seconds** after enqueueing; trigger failures are logged and left for the scheduler because the job row is already durable.
 - **All routes resolve `orgId` from the request body** (not from the user session) — multi-org users work transparently.

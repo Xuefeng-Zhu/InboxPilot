@@ -9,7 +9,6 @@ import type {
   Contact,
   Conversation,
   Message,
-  AuditLog,
   Job,
   NormalizedInboundSms,
   NormalizedInboundEmail,
@@ -85,18 +84,6 @@ const SAMPLE_JOB: Job = {
   completedAt: null,
 };
 
-const SAMPLE_AUDIT_LOG: AuditLog = {
-  id: 'audit-001',
-  organizationId: ORG_ID,
-  actorId: null,
-  actorType: 'system',
-  action: 'message_received',
-  resourceType: 'message',
-  resourceId: 'msg-001',
-  metadata: {},
-  createdAt: new Date(),
-};
-
 // ─── Mock Factories ───────────────────────────────────────────────
 
 function createMockContactRepo(): ContactRepository {
@@ -136,7 +123,7 @@ function createMockJobQueue(): JobQueue {
 
 function createMockAuditLog(): AuditLogRepository {
   return {
-    create: vi.fn().mockResolvedValue(SAMPLE_AUDIT_LOG),
+    ensureMessageReceived: vi.fn().mockResolvedValue(undefined),
   } as unknown as AuditLogRepository;
 }
 
@@ -230,13 +217,7 @@ describe('InboundMessageService', () => {
       );
 
       // 8. Audit log
-      expect(auditLog.create).toHaveBeenCalledWith({
-        organizationId: ORG_ID,
-        actorType: 'system',
-        action: 'message_received',
-        resourceType: 'message',
-        resourceId: 'msg-001',
-      });
+      expect(auditLog.ensureMessageReceived).toHaveBeenCalledWith(ORG_ID, 'msg-001');
 
       // 9. Returns the created message
       expect(result.id).toBe('msg-001');
@@ -249,12 +230,46 @@ describe('InboundMessageService', () => {
       const result = await service.processInboundSms(smsPayload, ORG_ID, 'mock');
 
       expect(result.id).toBe('existing-msg');
-      // No further processing should happen
+      // No contact/message recreation should happen, but idempotent downstream
+      // work is repaired in case the first delivery stopped after persistence.
       expect(contactRepo.findByPhone).not.toHaveBeenCalled();
       expect(conversationRepo.findOpenByContactAndChannel).not.toHaveBeenCalled();
       expect(messageRepo.create).not.toHaveBeenCalled();
-      expect(jobQueue.enqueue).not.toHaveBeenCalled();
-      expect(auditLog.create).not.toHaveBeenCalled();
+      expect(jobQueue.enqueue).toHaveBeenCalledWith(
+        'process_ai_message',
+        { conversationId: existingMessage.conversationId, messageId: existingMessage.id },
+        ORG_ID,
+      );
+      expect(auditLog.ensureMessageReceived).toHaveBeenCalledWith(
+        ORG_ID,
+        existingMessage.id,
+        {},
+      );
+    });
+
+    it('repairs enqueue and audit work when a provider retries a persisted message', async () => {
+      vi.mocked(messageRepo.findByExternalId)
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(SAMPLE_MESSAGE);
+      vi.mocked(jobQueue.enqueue)
+        .mockRejectedValueOnce(new Error('queue unavailable'))
+        .mockResolvedValueOnce(SAMPLE_JOB);
+
+      await expect(
+        service.processInboundSms(smsPayload, ORG_ID, 'mock'),
+      ).rejects.toThrow('queue unavailable');
+      await expect(
+        service.processInboundSms(smsPayload, ORG_ID, 'mock'),
+      ).resolves.toBe(SAMPLE_MESSAGE);
+
+      expect(messageRepo.create).toHaveBeenCalledTimes(1);
+      expect(jobQueue.enqueue).toHaveBeenCalledTimes(2);
+      expect(auditLog.ensureMessageReceived).toHaveBeenCalledTimes(1);
+      expect(auditLog.ensureMessageReceived).toHaveBeenCalledWith(
+        ORG_ID,
+        SAMPLE_MESSAGE.id,
+        {},
+      );
     });
 
     it('uses existing contact when one is found by phone', async () => {
@@ -370,11 +385,9 @@ describe('InboundMessageService', () => {
       );
 
       // Audit log
-      expect(auditLog.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          action: 'message_received',
-          resourceType: 'message',
-        }),
+      expect(auditLog.ensureMessageReceived).toHaveBeenCalledWith(
+        ORG_ID,
+        emailMessage.id,
       );
 
       expect(result.channel).toBe('email');

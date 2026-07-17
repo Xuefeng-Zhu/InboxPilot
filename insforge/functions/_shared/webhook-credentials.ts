@@ -164,31 +164,35 @@ export async function resolveSmsStatusWebhookContext(
   baseUrl: string,
   serviceRoleKey: string,
 ): Promise<WebhookAccountContext | null> {
-  const providerAccountId = await findMessageProviderAccountId(db, provider, externalMessageId);
-  if (providerAccountId === null) {
-    return null;
-  }
-
-  if (provider === 'mock') {
-    return {
-      organizationId: '',
-      providerAccountId,
-      provider,
-      signingSecret: '',
-    };
-  }
-
-  return resolveSmsProviderAccount(
+  return resolveStatusWebhookContext(
+    'sms',
     db,
     provider,
-    providerAccountId,
-    undefined,
+    externalMessageId,
     baseUrl,
     serviceRoleKey,
   );
 }
 
 export async function resolveEmailStatusWebhookContext(
+  db: DatabaseClient,
+  provider: string,
+  externalMessageId: string,
+  baseUrl: string,
+  serviceRoleKey: string,
+): Promise<WebhookAccountContext | null> {
+  return resolveStatusWebhookContext(
+    'email',
+    db,
+    provider,
+    externalMessageId,
+    baseUrl,
+    serviceRoleKey,
+  );
+}
+
+async function resolveStatusWebhookContext(
+  channel: 'sms' | 'email',
   db: DatabaseClient,
   provider: string,
   externalMessageId: string,
@@ -209,7 +213,8 @@ export async function resolveEmailStatusWebhookContext(
     };
   }
 
-  return resolveEmailProviderAccount(
+  return resolveProviderAccount(
+    channel,
     db,
     provider,
     providerAccountId,
@@ -283,34 +288,15 @@ async function resolveSmsProviderAccount(
   baseUrl: string,
   serviceRoleKey: string,
 ): Promise<WebhookAccountContext | null> {
-  const account = await findProviderAccount(db, 'sms_provider_accounts', providerAccountId);
-  if (
-    !account ||
-    account.provider !== provider ||
-    (routeOrganizationId !== undefined && account.organization_id !== routeOrganizationId)
-  ) {
-    return null;
-  }
-
-  const signingSecret = provider === 'mock'
-    ? ''
-    : await loadSigningSecret(
-      'sms',
-      provider,
-      account.credentials_secret_id,
-      baseUrl,
-      serviceRoleKey,
-    );
-  if (signingSecret === null) {
-    return null;
-  }
-
-  return {
-    organizationId: account.organization_id,
-    providerAccountId: account.id,
-    provider: account.provider,
-    signingSecret,
-  };
+  return resolveProviderAccount(
+    'sms',
+    db,
+    provider,
+    providerAccountId,
+    routeOrganizationId,
+    baseUrl,
+    serviceRoleKey,
+  );
 }
 
 async function resolveEmailProviderAccount(
@@ -321,7 +307,30 @@ async function resolveEmailProviderAccount(
   baseUrl: string,
   serviceRoleKey: string,
 ): Promise<WebhookAccountContext | null> {
-  const account = await findProviderAccount(db, 'email_provider_accounts', providerAccountId);
+  return resolveProviderAccount(
+    'email',
+    db,
+    provider,
+    providerAccountId,
+    routeOrganizationId,
+    baseUrl,
+    serviceRoleKey,
+  );
+}
+
+async function resolveProviderAccount(
+  channel: 'sms' | 'email',
+  db: DatabaseClient,
+  provider: string,
+  providerAccountId: string,
+  routeOrganizationId: string | undefined,
+  baseUrl: string,
+  serviceRoleKey: string,
+): Promise<WebhookAccountContext | null> {
+  const accountTable = channel === 'sms'
+    ? 'sms_provider_accounts'
+    : 'email_provider_accounts';
+  const account = await findProviderAccount(db, accountTable, providerAccountId);
   if (
     !account ||
     account.provider !== provider ||
@@ -333,7 +342,7 @@ async function resolveEmailProviderAccount(
   const signingSecret = provider === 'mock'
     ? ''
     : await loadSigningSecret(
-      'email',
+      channel,
       provider,
       account.credentials_secret_id,
       baseUrl,

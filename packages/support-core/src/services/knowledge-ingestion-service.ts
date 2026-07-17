@@ -9,7 +9,7 @@
  * 5. Generate embedding for each chunk via AiClient.createEmbedding
  * 6. Store chunks with embeddings
  * 7. Set status to "ready" on success
- * 8. On error: clean up partial chunks, set status to "failed" with error message
+ * 8. On error: preserve the last good chunks and set status to "failed"
  * 9. Record audit log entry
  */
 
@@ -34,6 +34,8 @@ export interface FileContentFetcher {
   fetchTextContent(url: string, fileName: string, fileKey?: string | null): Promise<string>;
 }
 
+export type KnowledgeIngestionOutcome = 'processed' | 'superseded';
+
 export class KnowledgeIngestionService {
   constructor(
     private knowledgeRepo: KnowledgeRepository,
@@ -47,17 +49,40 @@ export class KnowledgeIngestionService {
    * Process a knowledge document: chunk, embed, and store.
    *
    * @param documentId - The ID of the document to process
+   * @param expectedRevision - Immutable content revision from the queue job.
+   *   Stale jobs exit without overwriting chunks/status for a newer edit.
    */
-  async processDocument(documentId: string): Promise<void> {
+  async processDocument(
+    documentId: string,
+    expectedRevision?: string,
+  ): Promise<KnowledgeIngestionOutcome> {
     // 1. Load the document
     const document = await this.knowledgeRepo.getDocument(documentId);
     if (!document) {
       throw new Error(`Document not found: ${documentId}`);
     }
+    if (expectedRevision && document.contentRevision !== expectedRevision) {
+      return 'superseded';
+    }
+    // Jobs created before migration 016 have no revision in their payload.
+    // Snapshot the row's current revision so they still cannot overwrite an
+    // edit that lands while embedding is in progress.
+    const contentRevision = expectedRevision ?? document.contentRevision ?? undefined;
+    let contentReady = false;
+    let fileExtractionWarning: string | null = null;
 
     try {
       // 2. Set status to "processing"
-      await this.knowledgeRepo.updateDocument(documentId, { status: 'processing' });
+      if (contentRevision) {
+        const markedProcessing = await this.knowledgeRepo.updateDocumentForRevision(
+          documentId,
+          contentRevision,
+          { status: 'processing' },
+        );
+        if (!markedProcessing) return 'superseded';
+      } else {
+        await this.knowledgeRepo.updateDocument(documentId, { status: 'processing' });
+      }
 
       // 3. Gather text content: body + file content
       let fullText = document.body ?? '';
@@ -83,7 +108,11 @@ export class KnowledgeIngestionService {
               `File extraction failed and no body text available: ${fileErr instanceof Error ? fileErr.message : 'Unknown error'}`,
             );
           }
-          // Otherwise continue with body text only — partial processing is better than none
+          // Otherwise continue with body text, but keep the degradation in the
+          // durable success audit instead of silently discarding it.
+          fileExtractionWarning = fileErr instanceof Error
+            ? fileErr.message
+            : 'Unknown file extraction error';
         }
       }
 
@@ -119,20 +148,40 @@ export class KnowledgeIngestionService {
       }
 
       // 6. Atomically replace existing chunks with the freshly embedded version.
-      await this.knowledgeRepo.replaceChunksByDocument(
-        documentId,
-        document.organizationId,
-        chunkInputs,
-      );
+      if (contentRevision) {
+        const replaced = await this.knowledgeRepo.replaceChunksForRevision(
+          documentId,
+          document.organizationId,
+          contentRevision,
+          chunkInputs,
+        );
+        if (!replaced) return 'superseded';
+      } else {
+        await this.knowledgeRepo.replaceChunksByDocument(
+          documentId,
+          document.organizationId,
+          chunkInputs,
+        );
+      }
 
       // 7. Set status to "ready". Also clear any stale `error_message`
       //    from a previous failed run — otherwise the row keeps the old
       //    error even after a successful reprocess, and the UI renders
       //    a red "Failed" badge on a doc that's actually ready.
-      await this.knowledgeRepo.updateDocument(documentId, {
-        status: 'ready',
-        errorMessage: null,
-      });
+      if (contentRevision) {
+        const markedReady = await this.knowledgeRepo.updateDocumentForRevision(
+          documentId,
+          contentRevision,
+          { status: 'ready', errorMessage: null },
+        );
+        if (!markedReady) return 'superseded';
+      } else {
+        await this.knowledgeRepo.updateDocument(documentId, {
+          status: 'ready',
+          errorMessage: null,
+        });
+      }
+      contentReady = true;
 
       // 9. Record audit log entry for success
       await this.auditLog.create({
@@ -141,20 +190,49 @@ export class KnowledgeIngestionService {
         action: 'knowledge_document_processed',
         resourceType: 'knowledge_document',
         resourceId: documentId,
-        metadata: { chunkCount: chunkInputs.length, status: 'ready' },
+        metadata: {
+          chunkCount: chunkInputs.length,
+          status: 'ready',
+          ...(fileExtractionWarning ? { fileExtractionWarning } : {}),
+        },
       });
+      return 'processed';
     } catch (err) {
+      // The content and ready state are already durable. Keep an audit outage
+      // retryable at the job layer without falsely marking a healthy document
+      // as failed or discarding its last-good chunks.
+      if (contentReady) throw err;
+
       // 8. On error: set status to "failed". Chunk replacement is atomic, so
       // old chunks remain intact if re-indexing fails before or during replace.
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
 
+      let markedFailed = true;
+      const finalizationErrors: string[] = [];
       try {
-        await this.knowledgeRepo.updateDocument(documentId, {
-          status: 'failed',
-          errorMessage,
-        });
-      } catch {
-        // Ignore status update errors
+        if (contentRevision) {
+          markedFailed = await this.knowledgeRepo.updateDocumentForRevision(
+            documentId,
+            contentRevision,
+            { status: 'failed', errorMessage },
+          );
+        } else {
+          await this.knowledgeRepo.updateDocument(documentId, {
+            status: 'failed',
+            errorMessage,
+          });
+        }
+      } catch (statusError) {
+        finalizationErrors.push(
+          `failed to persist document failure status: ${statusError instanceof Error ? statusError.message : String(statusError)}`,
+        );
+      }
+
+      // A newer edit superseded this job while it was processing. Its status
+      // and audit trail belong to the newer revision, so finish this stale job
+      // without retrying or recording a false failure.
+      if (contentRevision && !markedFailed) {
+        return 'superseded';
       }
 
       // Record audit log entry for failure
@@ -167,10 +245,18 @@ export class KnowledgeIngestionService {
           resourceId: documentId,
           metadata: { error: errorMessage, status: 'failed' },
         });
-      } catch {
-        // Ignore audit log errors
+      } catch (auditError) {
+        finalizationErrors.push(
+          `failed to persist failure audit: ${auditError instanceof Error ? auditError.message : String(auditError)}`,
+        );
       }
 
+      if (finalizationErrors.length > 0) {
+        throw new Error(
+          `${errorMessage}; ${finalizationErrors.join('; ')}`,
+          { cause: err },
+        );
+      }
       throw err;
     }
   }

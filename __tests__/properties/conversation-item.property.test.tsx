@@ -23,7 +23,11 @@ import { ConversationItem, ConversationRow } from '../../components/inbox/Conver
 
 // --- Mock next/link to avoid router dependency ---
 vi.mock('next/link', () => ({
-  default: ({ children, href, ...props }: any) =>
+  default: ({
+    children,
+    href,
+    ...props
+  }: React.AnchorHTMLAttributes<HTMLAnchorElement> & { href: string }) =>
     React.createElement('a', { href, ...props }, children),
 }));
 

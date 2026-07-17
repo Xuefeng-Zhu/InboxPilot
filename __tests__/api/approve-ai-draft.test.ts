@@ -2,8 +2,30 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { NextRequest } from 'next/server';
 
 const mocks = vi.hoisted(() => ({
+  PostDispatchError: class extends Error {
+    readonly dispatchedMessage;
+    readonly stage;
+    readonly receipt = {
+      channel: 'sms',
+      provider: 'twilio',
+      providerAccountId: 'sms-account-1',
+      externalMessageId: 'SM123',
+      deliveryStatus: 'queued',
+    };
+
+    constructor(
+      message = 'provider accepted before local finalization failed',
+      dispatchedMessage: Record<string, unknown> | null = null,
+      stage = 'message_persistence',
+    ) {
+      super(message);
+      this.dispatchedMessage = dispatchedMessage;
+      this.stage = stage;
+    }
+  },
   from: vi.fn(),
   getSecret: vi.fn(),
+  resolveProviderConfig: vi.fn(),
   getUserFromToken: vi.fn(),
   userHasOrgPermission: vi.fn(),
   publishRealtimeMessage: vi.fn(),
@@ -16,6 +38,9 @@ vi.mock('@/lib/insforge-admin', () => ({
   insforgeAdmin: { database: { from: mocks.from } },
 }));
 vi.mock('@/lib/insforge-secrets', () => ({ getSecret: mocks.getSecret }));
+vi.mock('@support-core/services/outbound-provider-config', () => ({
+  resolveOutboundProviderConfig: mocks.resolveProviderConfig,
+}));
 vi.mock('@/lib/realtime-publisher', () => ({
   publishRealtimeMessage: mocks.publishRealtimeMessage,
 }));
@@ -30,12 +55,14 @@ vi.mock('@/app/api/functions/_insforge-db-adapter', () => ({
   createInsforgeDbAdapter: mocks.createInsforgeDbAdapter,
 }));
 vi.mock('@support-core/services/outbound-message-service', () => ({
+  OutboundMessagePostDispatchError: mocks.PostDispatchError,
   OutboundMessageService: class {
     sendReply = mocks.sendReply;
   },
 }));
 
 import { POST } from '../../app/api/functions/approve-ai-draft/route';
+import { ProviderSendOutcomeUnknownError } from '../../packages/support-core/src/adapters/provider-send-outcome-unknown-error';
 
 interface Scenario {
   channel: 'sms' | 'email' | 'webchat';
@@ -44,6 +71,8 @@ interface Scenario {
   inserts: Array<{ table: string; values: unknown }>;
   claimAvailable: boolean;
   idleUpdateFailuresRemaining: number;
+  operationRejections: Record<string, string>;
+  operationRejectionsRemaining: Record<string, number>;
 }
 
 let scenario: Scenario;
@@ -76,6 +105,24 @@ function createBuilder(table: string) {
     });
   builder.then.mockImplementation((onfulfilled, onrejected) => {
       const latestUpdate = scenario.updates.at(-1);
+      const state = operation === 'update' && typeof latestUpdate?.values.ai_state === 'string'
+        ? latestUpdate.values.ai_state
+        : null;
+      const specificKey = state ? `${table}:${operation}:${state}` : '';
+      const baseKey = `${table}:${operation}`;
+      const rejectionKey = specificKey && scenario.operationRejections[specificKey]
+        ? specificKey
+        : baseKey;
+      const rejection = scenario.operationRejections[rejectionKey];
+      const rejectionsRemaining = scenario.operationRejectionsRemaining[rejectionKey];
+      if (rejection) {
+        if (rejectionsRemaining === undefined || rejectionsRemaining > 0) {
+          if (rejectionsRemaining !== undefined) {
+            scenario.operationRejectionsRemaining[rejectionKey] -= 1;
+          }
+          return Promise.reject(new Error(rejection)).then(onfulfilled, onrejected);
+        }
+      }
       const idleUpdateFailed = operation === 'update'
         && latestUpdate?.values.ai_state === 'idle'
         && scenario.idleUpdateFailuresRemaining > 0;
@@ -116,6 +163,8 @@ function configureScenario(channel: Scenario['channel']): void {
     inserts: [],
     claimAvailable: true,
     idleUpdateFailuresRemaining: 0,
+    operationRejections: {},
+    operationRejectionsRemaining: {},
   };
 
   if (channel === 'sms') {
@@ -157,6 +206,10 @@ describe('approve-ai-draft route', () => {
     mocks.getUserFromToken.mockResolvedValue({ id: 'user-1' });
     mocks.userHasOrgPermission.mockResolvedValue(true);
     mocks.getSecret.mockResolvedValue({ accountSid: 'AC123', authToken: 'secret' });
+    mocks.resolveProviderConfig.mockResolvedValue({
+      accountSid: 'AC123',
+      authToken: 'secret',
+    });
     mocks.createProviderRegistry.mockReturnValue({});
     mocks.createInsforgeDbAdapter.mockReturnValue({});
     mocks.sendReply.mockResolvedValue(SENT_MESSAGE);
@@ -170,7 +223,11 @@ describe('approve-ai-draft route', () => {
     }));
 
     expect(response.status).toBe(200);
-    expect(mocks.getSecret).toHaveBeenCalledWith('twilio-secret');
+    expect(mocks.resolveProviderConfig).toHaveBeenCalledWith(
+      'org-1',
+      'sms',
+      expect.objectContaining({ loadSecret: expect.any(Function) }),
+    );
     expect(mocks.sendReply).toHaveBeenCalledWith(
       'conversation-1',
       'Edited response',
@@ -190,7 +247,7 @@ describe('approve-ai-draft route', () => {
 
   it('loads the configured email provider credentials before dispatch', async () => {
     configureScenario('email');
-    mocks.getSecret.mockResolvedValue({ serverToken: 'postmark-token' });
+    mocks.resolveProviderConfig.mockResolvedValue({ serverToken: 'postmark-token' });
 
     const response = await POST(makeRequest({
       conversationId: 'conversation-1',
@@ -198,7 +255,11 @@ describe('approve-ai-draft route', () => {
     }));
 
     expect(response.status).toBe(200);
-    expect(mocks.getSecret).toHaveBeenCalledWith('postmark-secret');
+    expect(mocks.resolveProviderConfig).toHaveBeenCalledWith(
+      'org-1',
+      'email',
+      expect.objectContaining({ loadSecret: expect.any(Function) }),
+    );
     expect(mocks.sendReply).toHaveBeenCalledWith(
       'conversation-1',
       'Draft response',
@@ -227,6 +288,39 @@ describe('approve-ai-draft route', () => {
     );
   });
 
+  it('clears the draft when persistence fails after the provider accepted the reply', async () => {
+    mocks.sendReply.mockRejectedValue(
+      new mocks.PostDispatchError('provider accepted before persistence failed'),
+    );
+
+    const response = await POST(makeRequest({
+      conversationId: 'conversation-1',
+      aiDecisionId: 'decision-1',
+    }));
+
+    expect(response.status).toBe(202);
+    await expect(response.json()).resolves.toMatchObject({
+      status: 'accepted',
+      data: { message: null },
+    });
+    expect(scenario.updates).toContainEqual({
+      table: 'conversations',
+      values: { ai_state: 'idle' },
+    });
+    expect(scenario.updates).not.toContainEqual({
+      table: 'conversations',
+      values: { ai_state: 'drafted' },
+    });
+    expect(scenario.inserts).toContainEqual({
+      table: 'audit_logs',
+      values: [expect.objectContaining({
+        action: 'ai_draft_approved',
+        resource_id: 'decision-1',
+        metadata: expect.objectContaining({ reconciliationRequired: true }),
+      })],
+    });
+  });
+
   it('retries the final state transition after delivery instead of stranding the claim', async () => {
     scenario.idleUpdateFailuresRemaining = 1;
 
@@ -241,6 +335,80 @@ describe('approve-ai-draft route', () => {
     )).toHaveLength(2);
   });
 
+  it('retries a rejected state-transition promise before surfacing provider failure', async () => {
+    mocks.sendReply.mockRejectedValue(new Error('Twilio rejected the message'));
+    scenario.operationRejections['conversations:update:drafted'] = 'transient network rejection';
+    scenario.operationRejectionsRemaining['conversations:update:drafted'] = 1;
+
+    const response = await POST(makeRequest({
+      conversationId: 'conversation-1',
+      aiDecisionId: 'decision-1',
+    }));
+
+    expect(response.status).toBe(500);
+    expect(scenario.updates.filter(
+      ({ values }) => values.ai_state === 'drafted',
+    )).toHaveLength(2);
+  });
+
+  it('records reconciliation when conversation finalization fails after message persistence', async () => {
+    mocks.sendReply.mockRejectedValue(
+      new mocks.PostDispatchError(
+        'conversation update failed after provider acceptance',
+        SENT_MESSAGE,
+        'conversation_update',
+      ),
+    );
+
+    const response = await POST(makeRequest({
+      conversationId: 'conversation-1',
+      aiDecisionId: 'decision-1',
+    }));
+
+    expect(response.status).toBe(202);
+    expect(scenario.inserts).toContainEqual({
+      table: 'audit_logs',
+      values: [expect.objectContaining({
+        action: 'ai_draft_approved',
+        metadata: expect.objectContaining({
+          messageId: SENT_MESSAGE.id,
+          reconciliationRequired: true,
+          finalizationStage: 'conversation_update',
+        }),
+      })],
+    });
+  });
+
+  it('clears the claim and returns accepted when the provider outcome is unknown', async () => {
+    mocks.sendReply.mockRejectedValue(new ProviderSendOutcomeUnknownError({
+      providerId: 'twilio',
+      stage: 'request',
+      message: 'request failed without a provider response',
+      originalError: new Error('socket closed'),
+    }));
+
+    const response = await POST(makeRequest({
+      conversationId: 'conversation-1',
+      aiDecisionId: 'decision-1',
+    }));
+
+    expect(response.status).toBe(202);
+    await expect(response.json()).resolves.toMatchObject({
+      status: 'accepted',
+      warning: expect.stringContaining('outcome is unknown'),
+    });
+    expect(scenario.updates).toContainEqual({
+      table: 'conversations',
+      values: { ai_state: 'idle' },
+    });
+    expect(scenario.inserts).toContainEqual({
+      table: 'audit_logs',
+      values: [expect.objectContaining({
+        metadata: expect.objectContaining({ providerOutcomeUnknown: true }),
+      })],
+    });
+  });
+
   it('preserves webchat realtime delivery without loading provider secrets', async () => {
     configureScenario('webchat');
     const webchatMessage = { ...SENT_MESSAGE, channel: 'webchat' };
@@ -252,7 +420,7 @@ describe('approve-ai-draft route', () => {
     }));
 
     expect(response.status).toBe(200);
-    expect(mocks.getSecret).not.toHaveBeenCalled();
+    expect(mocks.resolveProviderConfig).not.toHaveBeenCalled();
     expect(mocks.sendReply).toHaveBeenCalledWith(
       'conversation-1',
       'Draft response',
@@ -277,5 +445,38 @@ describe('approve-ai-draft route', () => {
 
     expect(response.status).toBe(409);
     expect(mocks.sendReply).not.toHaveBeenCalled();
+  });
+
+  it('returns accepted when the post-send approval audit rejects', async () => {
+    scenario.operationRejections['audit_logs:insert'] = 'audit network failure';
+
+    const response = await POST(makeRequest({
+      conversationId: 'conversation-1',
+      aiDecisionId: 'decision-1',
+    }));
+
+    expect(response.status).toBe(202);
+    await expect(response.json()).resolves.toMatchObject({
+      status: 'accepted',
+      warning: expect.stringContaining('audit network failure'),
+    });
+    expect(mocks.sendReply).toHaveBeenCalledOnce();
+  });
+
+  it('returns accepted when webchat recipient lookup rejects after persistence', async () => {
+    configureScenario('webchat');
+    mocks.sendReply.mockResolvedValue({ ...SENT_MESSAGE, channel: 'webchat' });
+    scenario.operationRejections['webchat_threads:select'] = 'thread lookup network failure';
+
+    const response = await POST(makeRequest({
+      conversationId: 'conversation-1',
+      aiDecisionId: 'decision-1',
+    }));
+
+    expect(response.status).toBe(202);
+    await expect(response.json()).resolves.toMatchObject({
+      status: 'accepted',
+      warning: expect.stringContaining('thread lookup network failure'),
+    });
   });
 });

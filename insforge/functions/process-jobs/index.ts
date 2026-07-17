@@ -14,26 +14,23 @@
 import { createDbClient } from '../_shared/create-db-client.ts';
 import { createRealtimePublisher } from '../_shared/create-realtime-publisher.ts';
 import { publishRealtimeBestEffort } from '../_shared/publish-realtime-best-effort.ts';
-import { createProviderRegistry } from '../_shared/create-provider-registry.ts';
-import { getSecret } from '../_shared/insforge-secrets.ts';
 import { createKnowledgeFileFetch } from '../_shared/create-knowledge-file-fetch.ts';
+import { createOpenRouterAiClient } from '../_shared/openrouter-ai-client.ts';
+import { shouldAutoSendDecision } from '../_shared/auto-reply-policy.ts';
+import { enqueueAutoReplyFallback } from '../_shared/auto-reply-fallback.ts';
+import { createAutoReplySender } from '../_shared/auto-reply-sender.ts';
+import { runClaimedJob, type ClaimedJobResult } from '../_shared/run-claimed-job.ts';
 import { PostgresJobQueue } from '../../../packages/support-core/src/services/postgres-job-queue.ts';
-import { OutboundMessageService } from '../../../packages/support-core/src/services/outbound-message-service.ts';
 import { ConversationRepository } from '../../../packages/support-core/src/repositories/conversation-repository.ts';
 import { MessageRepository } from '../../../packages/support-core/src/repositories/message-repository.ts';
 import { KnowledgeRepository } from '../../../packages/support-core/src/repositories/knowledge-repository.ts';
 import { AiSettingsRepository } from '../../../packages/support-core/src/repositories/ai-settings-repository.ts';
 import { AiDecisionRepository } from '../../../packages/support-core/src/repositories/ai-decision-repository.ts';
 import { AuditLogRepository } from '../../../packages/support-core/src/repositories/audit-log-repository.ts';
-import { ContactRepository } from '../../../packages/support-core/src/repositories/contact-repository.ts';
-import { WebchatThreadRepository } from '../../../packages/support-core/src/repositories/webchat-thread-repository.ts';
-import { SmsProviderAccountRepository } from '../../../packages/support-core/src/repositories/sms-provider-account-repository.ts';
-import { EmailProviderAccountRepository } from '../../../packages/support-core/src/repositories/email-provider-account-repository.ts';
 import { AiAgentService } from '../../../packages/support-core/src/services/ai-agent-service.ts';
 import { KnowledgeIngestionService } from '../../../packages/support-core/src/services/knowledge-ingestion-service.ts';
 import { createFileContentFetcher } from '../../../packages/support-core/src/utils/file-content-fetcher.ts';
 import { createDefaultEscalationEngine } from '../../../packages/support-core/src/services/escalation-rules.ts';
-import type { AiClient } from '../../../packages/support-core/src/interfaces/ai-client.ts';
 import type { Job, JobType } from '../../../packages/support-core/src/types/index.ts';
 import type { DatabaseClient } from '../../../packages/support-core/src/interfaces/database-client.ts';
 
@@ -71,74 +68,6 @@ function getServiceRoleKey(): string | null {
 }
 
 // ---------------------------------------------------------------------------
-// AI Client factory (same as process-ai-job)
-// ---------------------------------------------------------------------------
-
-function createAiClient(baseUrl: string, serviceRoleKey: string): AiClient {
-  // Fetch OpenRouter key lazily, cache for the lifetime of this invocation
-  let openRouterKey: string | null = null;
-  async function getOpenRouterKey(): Promise<string> {
-    if (openRouterKey) return openRouterKey;
-    const res = await fetch(`${baseUrl}/api/ai/openrouter/api-key`, {
-      headers: { Authorization: `Bearer ${serviceRoleKey}` },
-    });
-    if (!res.ok) {
-      throw new Error(`Failed to fetch OpenRouter key: HTTP ${res.status}`);
-    }
-    const data = (await res.json()) as { apiKey: string };
-    openRouterKey = data.apiKey;
-    return openRouterKey;
-  }
-
-  return {
-    async chatCompletion(params) {
-      const key = await getOpenRouterKey();
-      const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${key}`,
-        },
-        body: JSON.stringify({
-          model: params.model,
-          messages: params.messages,
-          response_format: params.responseFormat,
-          temperature: params.temperature,
-        }),
-      });
-      if (!res.ok) {
-        const errorBody = await res.text().catch(() => 'unknown error');
-        throw new Error(`AI chat completion failed: HTTP ${res.status} — ${errorBody}`);
-      }
-      const data = (await res.json()) as Record<string, unknown>;
-      const choices = data.choices as Array<{ message: { content: string } }>;
-      return {
-        content: choices?.[0]?.message?.content ?? '',
-        usage: undefined,
-      };
-    },
-    async createEmbedding(params) {
-      const key = await getOpenRouterKey();
-      const res = await fetch('https://openrouter.ai/api/v1/embeddings', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${key}`,
-        },
-        body: JSON.stringify({ model: params.model, input: params.input }),
-      });
-      if (!res.ok) {
-        const errorBody = await res.text().catch(() => 'unknown error');
-        throw new Error(`AI embedding failed: HTTP ${res.status} — ${errorBody}`);
-      }
-      const data = (await res.json()) as Record<string, unknown>;
-      const embeddings = data.data as Array<{ embedding: number[] }>;
-      return embeddings?.[0]?.embedding ?? [];
-    },
-  };
-}
-
-// ---------------------------------------------------------------------------
 // Job handler builders — create real handlers with injected dependencies
 // ---------------------------------------------------------------------------
 
@@ -148,125 +77,14 @@ function buildJobHandlers(
   serviceRoleKey: string,
 ): Record<JobType, (job: Job) => Promise<void>> {
   const realtime = createRealtimePublisher(baseUrl, serviceRoleKey);
-  const aiClient = createAiClient(baseUrl, serviceRoleKey);
+  const aiClient = createOpenRouterAiClient(baseUrl, serviceRoleKey);
 
-  // ── Shared: send an AI auto-reply immediately (no separate job cycle) ──
-  async function sendAutoReply(
-    conversationId: string,
-    body: string,
-    aiDecisionId: string | null,
-  ): Promise<void> {
-    const conversationRepo = new ConversationRepository(db);
-    const messageRepo = new MessageRepository(db);
-    const contactRepo = new ContactRepository(db);
-    const webchatThreadRepo = new WebchatThreadRepository(db);
-    const auditLogRepo = new AuditLogRepository(db);
-    const aiDecisionRepo = new AiDecisionRepository(db);
-    const smsAccountRepo = new SmsProviderAccountRepository(db);
-    const emailAccountRepo = new EmailProviderAccountRepository(db);
-
-    const conversation = await conversationRepo.findById(conversationId);
-    if (!conversation) {
-      throw new Error(`Conversation not found: ${conversationId}`);
-    }
-
-    const registry = createProviderRegistry();
-    const outboundService = new OutboundMessageService(
-      conversationRepo, contactRepo, messageRepo,
-      registry, smsAccountRepo, emailAccountRepo, auditLogRepo,
-    );
-
-    let providerConfig: Record<string, unknown> = {};
-    if (conversation.channel === 'sms') {
-      const defaultPhone = await smsAccountRepo.findDefaultPhoneNumber(conversation.organizationId);
-      if (defaultPhone) {
-        const smsAccount = await smsAccountRepo.findById(defaultPhone.providerAccountId);
-        if (smsAccount && smsAccount.isActive && smsAccount.provider !== 'mock') {
-          const secret = await getSecret<Record<string, unknown>>(
-            smsAccount.credentialsSecretId, baseUrl, serviceRoleKey,
-          );
-          if (secret) providerConfig = secret;
-        }
-      }
-    } else if (conversation.channel === 'email') {
-      const defaultEmail = await emailAccountRepo.findDefaultEmailAddress(conversation.organizationId);
-      if (defaultEmail) {
-        const emailAccount = await emailAccountRepo.findById(defaultEmail.providerAccountId);
-        if (emailAccount && emailAccount.isActive && emailAccount.provider !== 'mock') {
-          const secret = await getSecret<Record<string, unknown>>(
-            emailAccount.credentialsSecretId, baseUrl, serviceRoleKey,
-          );
-          if (secret) providerConfig = secret;
-        }
-      }
-    }
-
-    const message = await outboundService.sendReply(
-      conversationId,
-      body,
-      { type: 'ai', id: null },
-      providerConfig,
-      { writeAuditLog: false },
-    );
-
-    try {
-      await auditLogRepo.create({
-        organizationId: conversation.organizationId,
-        actorId: null,
-        actorType: 'ai',
-        action: 'message_sent',
-        resourceType: 'message',
-        resourceId: message.id,
-        metadata: {
-          trigger: 'auto_reply',
-          channel: conversation.channel,
-          conversationId: conversation.id,
-        },
-      });
-    } catch (err) {
-      console.error(
-        `sendAutoReply: failed to write ai audit log for message ${message.id}: ` +
-          (err instanceof Error ? err.message : String(err)),
-      );
-    }
-
-    if (conversation.channel === 'webchat') {
-      const thread = await webchatThreadRepo.findByConversationId(conversation.id);
-      if (thread) {
-        await publishRealtimeBestEffort(
-          realtime,
-          `widget:${thread.widgetId}:${thread.visitorTokenJti}`,
-          'new_message',
-          { message, conversationId: message.conversationId },
-          `sendAutoReply message ${message.id}`,
-        );
-      }
-    }
-
-    await publishRealtimeBestEffort(
-      realtime,
-      `org:${conversation.organizationId}`,
-      'new_message',
-      {
-        message,
-        conversationId: message.conversationId,
-      },
-      `sendAutoReply message ${message.id}`,
-    );
-
-    if (aiDecisionId) {
-      try {
-        await aiDecisionRepo.update(aiDecisionId, {
-          metadata: { autoSent: true, sentAt: new Date().toISOString() },
-        });
-      } catch (err) {
-        console.error(
-          `sendAutoReply: failed to update AI decision ${aiDecisionId} metadata after sending ` +
-            `message ${message.id}: ${err instanceof Error ? err.message : String(err)}`,
-        );
-      }
-    }
-  }
+  const sendAutoReply = createAutoReplySender({
+    db,
+    baseUrl,
+    serviceRoleKey,
+    realtime,
+  });
 
   return {
     async process_ai_message(job: Job) {
@@ -288,33 +106,32 @@ function buildJobHandlers(
         aiClient, jobQueue, auditLogRepo,
       );
 
-      const decision = await aiAgentService.processMessage(conversationId, orgId);
+      const decision = await aiAgentService.processMessage(
+        conversationId,
+        orgId,
+        { sourceJobId: job.id },
+      );
 
       // Inline auto-reply send: if the AI auto-replied, send immediately
       // instead of waiting for a separate process-jobs cycle.
-      if (decision.responseText) {
-        const conversation = await conversationRepo.findById(conversationId);
-        if (conversation?.aiState === 'auto_replied') {
-          try {
-            await sendAutoReply(conversationId, decision.responseText, decision.id);
-          } catch (err) {
-            // Fall back to enqueueing a send_outbound_message job for retry
-            console.error(
-              'process_ai_message: inline auto-reply send failed, ' +
-                'falling back to job queue — ' +
-                (err instanceof Error ? err.message : String(err)),
-            );
-            await jobQueue.enqueue(
-              'send_outbound_message',
-              {
-                conversationId,
-                body: decision.responseText,
-                senderType: 'ai',
-                aiDecisionId: decision.id,
-              },
-              orgId,
-            );
-          }
+      if (shouldAutoSendDecision(decision)) {
+        try {
+          await sendAutoReply(conversationId, decision.responseText, decision.id);
+        } catch (err) {
+          // Fall back to enqueueing a send_outbound_message job for retry.
+          // NonRetryableJobError is rethrown by the helper instead.
+          console.error(
+            'process_ai_message: inline auto-reply send failed — ' +
+              (err instanceof Error ? err.message : String(err)),
+          );
+          await enqueueAutoReplyFallback({
+            error: err,
+            jobQueue,
+            conversationId,
+            responseText: decision.responseText,
+            aiDecisionId: decision.id,
+            organizationId: orgId,
+          });
         }
       }
 
@@ -333,6 +150,7 @@ function buildJobHandlers(
 
     async process_knowledge_document(job: Job) {
       const documentId = (job.payload.documentId ?? job.payload.document_id) as string;
+      const revision = job.payload.revision as string | undefined;
       const orgId = job.organizationId;
 
       const knowledgeRepo = new KnowledgeRepository(db);
@@ -346,7 +164,8 @@ function buildJobHandlers(
         knowledgeRepo, aiClient, auditLogRepo, fileFetcher, aiSettingsRepo,
       );
 
-      await ingestionService.processDocument(documentId);
+      const outcome = await ingestionService.processDocument(documentId, revision);
+      if (outcome === 'superseded') return;
 
       await publishRealtimeBestEffort(
         realtime,
@@ -400,10 +219,10 @@ function buildJobHandlers(
       //
       // Idempotency: insert_ai_decision_chunks (migration 007) uses
       // ON CONFLICT (ai_decision_id, knowledge_chunk_id) DO NOTHING so
-      // re-runs after a transient Supabase 5xx — where some rows may
+      // re-runs after a transient InsForge/PostgREST 5xx — where some rows may
       // have already committed before the error — complete the missing
       // rows instead of failing on the unique constraint. Combined with
-      // the 008 migration that re-claims failed jobs past their
+      // the current claim RPC that re-claims failed jobs past their
       // run_after backoff, this gives the chunk-ref pipeline at-least-
       // once delivery with idempotent application.
       //
@@ -477,31 +296,41 @@ export default async function (_req: Request): Promise<Response> {
 
     const jobs = await jobQueue.claim(MAX_JOBS_PER_RUN);
 
-    const results: Array<{ jobId: string; jobType: string; status: 'completed' | 'failed'; error?: string }> = [];
+    const results: ClaimedJobResult[] = [];
 
     for (const job of jobs) {
       const handler = jobHandlers[job.jobType];
 
       if (!handler) {
-        await jobQueue.fail(job.id, `Unknown job type: ${job.jobType}`);
-        results.push({ jobId: job.id, jobType: job.jobType, status: 'failed', error: `Unknown job type: ${job.jobType}` });
+        results.push(await runClaimedJob(
+          job,
+          async () => {
+            throw new Error(`Unknown job type: ${job.jobType}`);
+          },
+          jobQueue,
+        ));
         continue;
       }
 
-      try {
-        await handler(job);
-        await jobQueue.complete(job.id);
-        results.push({ jobId: job.id, jobType: job.jobType, status: 'completed' });
-      } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : String(err);
-        await jobQueue.fail(job.id, errorMessage);
-        results.push({ jobId: job.id, jobType: job.jobType, status: 'failed', error: errorMessage });
-      }
+      results.push(await runClaimedJob(job, handler, jobQueue));
     }
 
+    const persistenceFailure = results.some(({ status }) => (
+      status === 'quarantined' ||
+      status === 'failure_persistence_failed' ||
+      status === 'completion_quarantined' ||
+      status === 'completion_persistence_failed'
+    ));
     return new Response(
-      JSON.stringify({ status: 'ok', claimed: jobs.length, results }),
-      { status: 200, headers: { 'Content-Type': 'application/json' } },
+      JSON.stringify({
+        status: persistenceFailure ? 'reconciliation_required' : 'ok',
+        claimed: jobs.length,
+        results,
+      }),
+      {
+        status: persistenceFailure ? 500 : 200,
+        headers: { 'Content-Type': 'application/json' },
+      },
     );
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : String(err);

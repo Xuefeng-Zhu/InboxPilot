@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { PostmarkEmailAdapter } from '@support-core/adapters/postmark-email-adapter';
+import { ProviderSendOutcomeUnknownError } from '@support-core/adapters';
 import type { WebhookVerificationRequest } from '@support-core/types/index';
 
 describe('PostmarkEmailAdapter', () => {
@@ -344,6 +345,72 @@ describe('PostmarkEmailAdapter', () => {
       fetchSpy.mockRestore();
     });
 
+    it('marks a rejected fetch as an unknown provider outcome', async () => {
+      const networkError = new TypeError('connection closed before response');
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockRejectedValueOnce(networkError);
+
+      const result = adapter.sendEmail({
+        to: 'customer@example.com',
+        from: 'support@company.com',
+        subject: 'Test',
+        bodyText: 'Hello',
+        providerConfig: { serverToken: 'test-server-token' },
+      });
+
+      await expect(result).rejects.toBeInstanceOf(ProviderSendOutcomeUnknownError);
+      await expect(result).rejects.toMatchObject({
+        providerId: 'postmark',
+        stage: 'request',
+        originalError: networkError,
+      });
+      fetchSpy.mockRestore();
+    });
+
+    it('marks an unreadable successful response as an unknown provider outcome', async () => {
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+        new Response('not-json', { status: 200 }),
+      );
+
+      const result = adapter.sendEmail({
+        to: 'customer@example.com',
+        from: 'support@company.com',
+        subject: 'Test',
+        bodyText: 'Hello',
+        providerConfig: { serverToken: 'test-server-token' },
+      });
+
+      await expect(result).rejects.toMatchObject({
+        name: 'ProviderSendOutcomeUnknownError',
+        providerId: 'postmark',
+        stage: 'response',
+      });
+      fetchSpy.mockRestore();
+    });
+
+    it('marks a successful response without a message ID as an unknown outcome', async () => {
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+        new Response('{}', {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
+
+      const result = adapter.sendEmail({
+        to: 'customer@example.com',
+        from: 'support@company.com',
+        subject: 'Test',
+        bodyText: 'Hello',
+        providerConfig: { serverToken: 'test-server-token' },
+      });
+
+      await expect(result).rejects.toMatchObject({
+        name: 'ProviderSendOutcomeUnknownError',
+        providerId: 'postmark',
+        stage: 'response',
+      });
+      fetchSpy.mockRestore();
+    });
+
     it('throws on non-OK response from Postmark', async () => {
       const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
         new Response('{"ErrorCode":10,"Message":"Bad request"}', {
@@ -351,17 +418,17 @@ describe('PostmarkEmailAdapter', () => {
         }),
       );
 
-      await expect(
-        adapter.sendEmail({
-          to: 'customer@example.com',
-          from: 'support@company.com',
-          subject: 'Test',
-          bodyText: 'Hello',
-          providerConfig: {
-            serverToken: 'bad-token',
-          },
-        }),
-      ).rejects.toThrow('422');
+      const result = adapter.sendEmail({
+        to: 'customer@example.com',
+        from: 'support@company.com',
+        subject: 'Test',
+        bodyText: 'Hello',
+        providerConfig: {
+          serverToken: 'bad-token',
+        },
+      });
+      await expect(result).rejects.toThrow('422');
+      await expect(result).rejects.not.toBeInstanceOf(ProviderSendOutcomeUnknownError);
 
       fetchSpy.mockRestore();
     });

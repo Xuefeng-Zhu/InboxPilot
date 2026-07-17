@@ -14,8 +14,8 @@
 | `AiSettingsRepository` | `ai_settings` | |
 | `AiDecisionRepository` | `ai_decisions` | |
 | `JobRepository` | `support_jobs` | Low-level CRUD; the orchestrator is `services/postgres-job-queue.ts` |
-| `KnowledgeRepository` | `knowledge_documents` + `knowledge_chunks` | Also calls `match_knowledge_chunks` RPC for RAG |
-| `AuditLogRepository` | `audit_logs` | **Append-only** — no update/delete methods |
+| `KnowledgeRepository` | `knowledge_documents` + `knowledge_chunks` | Calls RAG search and atomic chunk-replacement RPCs |
+| `AuditLogRepository` | `audit_logs` | **Append-only** — creates rows and calls the atomic inbound-audit repair RPC |
 | `SmsProviderAccountRepository` | `sms_provider_accounts` + `sms_phone_numbers` | |
 | `EmailProviderAccountRepository` | `email_provider_accounts` + `email_addresses` | |
 | `DeliveryEventRepository` | `sms_delivery_events` + `email_delivery_events` | Unified by `channel` |
@@ -57,5 +57,5 @@ export class ContactRepository {
 
 ## UNIQUE
 - Docs say "16 repositories" — that's wrong. The 16th data-access role is `PostgresJobQueue` (lives in `services/`, implements `JobQueue`, carries orchestration logic — idempotency, backoff, dead-lettering — not table CRUD).
-- `KnowledgeRepository` is the only repo that calls an RPC (`match_knowledge_chunks`).
+- `KnowledgeRepository` calls the RAG search and both atomic chunk-replacement RPCs; `AuditLogRepository` calls the concurrency-safe inbound-audit repair RPC.
 - `DeliveryEventRepository` unifies two channel-specific tables behind a single class.

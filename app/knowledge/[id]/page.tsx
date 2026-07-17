@@ -12,7 +12,12 @@ import { Tag, Select } from '@/components/ui';
 import { MarkdownEditor } from '@/components/knowledge/MarkdownEditor';
 import { MarkdownRenderer } from '@/components/knowledge/MarkdownRenderer';
 import { SOURCE_TYPES } from '@/components/knowledge/types';
-import { removeKnowledgeFile } from '../storage';
+import {
+  deleteKnowledgeDocument,
+  reprocessKnowledgeDocument,
+  updateKnowledgeDocument,
+} from '../mutations';
+import { storeKnowledgeMutationWarning } from '../mutation-warning';
 
 export default function KnowledgeDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -100,8 +105,11 @@ export default function KnowledgeDetailPage({ params }: { params: Promise<{ id: 
           if (list.length >= 5) break;
         }
         setLinkedConversations(list);
-      } catch {
-        // Non-fatal — sidebar is decorative
+      } catch (linkError) {
+        console.warn(
+          'Linked knowledge conversations could not be loaded:',
+          linkError instanceof Error ? linkError.message : String(linkError),
+        );
       }
     })();
     return () => {
@@ -131,48 +139,13 @@ export default function KnowledgeDetailPage({ params }: { params: Promise<{ id: 
     setSaving(true);
     setSaveError(null);
     try {
-      const { error: updateError } = await insforge.database
-        .from('knowledge_documents')
-        .update({
-          title: title.trim(),
-          source_type: sourceType,
-          body: body.trim(),
-          status: 'pending',
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', doc.id);
-
-      if (updateError) {
-        setSaveError(updateError.message);
-        return;
-      }
-
-      const warnings: string[] = [];
-      const { error: auditError } = await insforge.database
-        .from('audit_logs')
-        .insert([{
-          organization_id: doc.organization_id,
-          actor_id: user.id,
-          actor_type: 'user',
-          action: 'knowledge_document_updated',
-          resource_type: 'knowledge_document',
-          resource_id: doc.id,
-          metadata: { title: title.trim() },
-        }]);
-      if (auditError) warnings.push(`audit logging failed: ${auditError.message}`);
-
-      const { error: jobError } = await insforge.database
-        .from('support_jobs')
-        .insert([{
-          organization_id: doc.organization_id,
-          job_type: 'process_knowledge_document',
-          payload: { documentId: doc.id },
-          status: 'pending',
-          attempts: 0,
-          max_attempts: 3,
-          run_after: new Date().toISOString(),
-        }]);
-      if (jobError) warnings.push(`processing could not be queued: ${jobError.message}`);
+      const { warnings } = await updateKnowledgeDocument({
+        document: doc,
+        actorId: user.id,
+        title: title.trim(),
+        sourceType,
+        body: body.trim(),
+      });
 
       setEditing(false);
       await Promise.all([
@@ -203,42 +176,18 @@ export default function KnowledgeDetailPage({ params }: { params: Promise<{ id: 
     }
     setSaveError(null);
     try {
-      const { error: deleteError } = await insforge.database
-        .from('knowledge_documents')
-        .delete()
-        .eq('id', doc.id);
-      if (deleteError) throw new Error(deleteError.message);
-
-      const warnings: string[] = [];
-      if (doc.file_key) {
-        try {
-          await removeKnowledgeFile(doc.file_key);
-        } catch (storageError) {
-          warnings.push(
-            `stored file cleanup failed: ${storageError instanceof Error ? storageError.message : 'unknown error'}`,
-          );
-        }
-      }
-
-      const { error: auditError } = await insforge.database
-        .from('audit_logs')
-        .insert([{
-          organization_id: doc.organization_id,
-          actor_id: user.id,
-          actor_type: 'user',
-          action: 'knowledge_document_deleted',
-          resource_type: 'knowledge_document',
-          resource_id: doc.id,
-          metadata: { title: doc.title },
-        }]);
-      if (auditError) warnings.push(`audit logging failed: ${auditError.message}`);
+      const { warnings } = await deleteKnowledgeDocument({
+        document: doc,
+        actorId: user.id,
+      });
 
       await queryClient.invalidateQueries({
         queryKey: queryKeys.knowledgeDocs(doc.organization_id),
       });
       if (warnings.length > 0) {
-        setSaveError(`Document deleted, but ${warnings.join('; ')}`);
-        return;
+        storeKnowledgeMutationWarning(
+          `Document deleted, but ${warnings.join('; ')}`,
+        );
       }
       router.push('/knowledge');
     } catch (deleteFailure) {
@@ -253,46 +202,10 @@ export default function KnowledgeDetailPage({ params }: { params: Promise<{ id: 
     }
     setSaveError(null);
     try {
-      const { error: updateError } = await insforge.database
-        .from('knowledge_documents')
-        .update({
-          status: 'pending',
-          error_message: null,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', doc.id);
-
-      if (updateError) {
-        setSaveError(updateError.message);
-        return;
-      }
-
-      const warnings: string[] = [];
-      const { error: auditError } = await insforge.database
-        .from('audit_logs')
-        .insert([{
-          organization_id: doc.organization_id,
-          actor_id: user.id,
-          actor_type: 'user',
-          action: 'knowledge_document_updated',
-          resource_type: 'knowledge_document',
-          resource_id: doc.id,
-          metadata: { status: 'pending' },
-        }]);
-      if (auditError) warnings.push(`audit logging failed: ${auditError.message}`);
-
-      const { error: jobError } = await insforge.database
-        .from('support_jobs')
-        .insert([{
-          organization_id: doc.organization_id,
-          job_type: 'process_knowledge_document',
-          payload: { documentId: doc.id },
-          status: 'pending',
-          attempts: 0,
-          max_attempts: 3,
-          run_after: new Date().toISOString(),
-        }]);
-      if (jobError) warnings.push(`processing could not be queued: ${jobError.message}`);
+      const { warnings } = await reprocessKnowledgeDocument({
+        document: doc,
+        actorId: user.id,
+      });
       await Promise.all([
         queryClient.invalidateQueries({
           queryKey: queryKeys.knowledgeDoc(doc.organization_id, doc.id),

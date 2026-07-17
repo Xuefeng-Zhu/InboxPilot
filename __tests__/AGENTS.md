@@ -14,7 +14,7 @@ Support-core has its own `__tests__/` (unit, properties, integration) — see `p
 __tests__/
 ├── api-auth.test.ts                       API route JWT auth (401/403 paths)
 ├── inbox-infinite-loading.test.tsx        Inbox pagination + scroll behavior
-├── middleware.test.ts                     ⚠ Should be renamed to proxy.test.ts (Next.js 16)
+├── proxy.test.ts                          Next.js 16 root proxy routing/auth behavior
 ├── properties/                            Property-based component tests
 │   ├── button.property.test.tsx
 │   ├── conversation-item.property.test.tsx
@@ -42,7 +42,7 @@ __tests__/
 - **Use `numRuns: 100`** for fast-check properties. (One outlier at 50 in `design-tokens.property.test.ts:82` — that's the exception, not the rule.)
 - **Use `import * as fc from 'fast-check'`** at root tests (support-core mixes `import fc` and `import * as fc`).
 - **Module-level `vi.mock()`** is acceptable at root; support-core prefers per-test `vi.fn()` factories.
-- **`as any` and `: any`** are tolerated in tests (15 hits in `__tests__/`, all in test files). Do NOT use in production code.
+- **Do not use `any` or TypeScript suppression directives.** Model narrow test doubles or cast through `unknown` to the exact framework type.
 
 ## CONVENTIONS
 - **Module-level `vi.mock(...)` for Next.js hooks** — `inbox-infinite-loading.test.tsx` mocks `@/lib/auth-context`, `@/lib/queries`, `@/lib/use-realtime`, and stubs `cancelAnimationFrame` via `vi.stubGlobal`.
@@ -58,7 +58,6 @@ __tests__/
 - Importing from `packages/support-core/src/...` directly (use `@support-core/*` alias).
 
 ## UNIQUE
-- **`__tests__/middleware.test.ts` should be `__tests__/proxy.test.ts`** — Next.js 16 renamed `middleware.ts` to `proxy.ts`. Rename in flight.
 - **`design-tokens.property.test.ts:82` is the only file with `numRuns: 50`** — every other property test uses 100.
 - **No `__mocks__/`, no `test-helpers/`, no `fixtures/` dirs** — every test inlines its own setup.
 - **The 3 symphony tests cover only `River`, `MiniMap`, `RiverCard`** — not `SymphonyView`, `SymphonyControls`, `TimeAxis`, or `RiverExpandedPanel`. Gap.

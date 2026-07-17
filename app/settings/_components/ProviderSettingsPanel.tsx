@@ -161,7 +161,7 @@ export default function ProviderSettingsPanel({
                   variant="secondary"
                   size="sm"
                   onClick={() => void settings.testConnection(account.id)}
-                  disabled={settings.testingId === account.id}
+                  disabled={settings.testingId !== null}
                   aria-label={`Test connection for ${account.label}`}
                 >
                   {settings.testingId === account.id ? 'Testing…' : 'Test Connection'}

@@ -168,13 +168,16 @@ Claims and processes pending jobs from the queue. Designed to be called on a sch
   "claimed": 3,
   "results": [
     { "jobId": "uuid", "jobType": "process_ai_message", "status": "completed" },
-    { "jobId": "uuid", "jobType": "send_outbound_message", "status": "completed" },
-    { "jobId": "uuid", "jobType": "process_ai_message", "status": "failed", "error": "..." }
+    { "jobId": "uuid", "jobType": "send_outbound_message", "status": "completed" }
   ]
 }
 ```
 
-**Behaviour**: Claims up to **10 jobs per invocation** via `claim_support_jobs(10)`. Routes each to a handler by `job_type`. Handlers implemented: `process_ai_message` (full AI pipeline), `process_knowledge_document` (chunk + embed), `send_outbound_message` (stub — sends are done synchronously elsewhere), `process_delivery_status` (stub), `retry_failed_jobs` (stub). Failed jobs are retried with exponential backoff via `PostgresJobQueue.fail()`; see [`jobs.md`](jobs.md).
+Quarantined or persistence-failure results use HTTP 500 with
+`"status": "reconciliation_required"` so operators are alerted without
+automatically replaying customer-facing side effects.
+
+**Behaviour**: Claims up to **10 jobs per invocation** via `claim_support_jobs(10)`. Routes each to a handler by `job_type`. Implemented handlers are `process_ai_message` (full AI pipeline), `process_knowledge_document` (chunk + embed), `send_outbound_message` (AI auto-reply fallback through `OutboundMessageService`), and `record_chunk_refs` (persist grounding citations). `process_delivery_status` and `retry_failed_jobs` remain explicit unsupported retry paths. Handler failures are retried with exponential backoff via `PostgresJobQueue.fail()`. Non-retryable outcomes and completion-write failures are quarantined rather than replayed; persistence failures make the worker return HTTP 500 with `status='reconciliation_required'`. See [`jobs.md`](jobs.md).
 
 ### webchat-thread-init
 
@@ -355,7 +358,12 @@ Sends a reply message on an existing conversation.
 
 Updates `conversations.last_message_at`.
 
-**Errors**: `400` (missing fields), `401` (no user), `404` (conversation not found), `500`.
+If a provider accepts the request but local finalization fails—or the network
+closes before the adapter can determine the provider outcome—the route returns
+`202 accepted`, records reconciliation metadata when possible, and suppresses
+automatic retry to avoid a duplicate customer reply.
+
+**Errors**: `400` (missing fields), `401` (no user), `404` (conversation not found), `500` for failures known to be pre-dispatch/retryable.
 
 ### POST /api/functions/approve-ai-draft
 
@@ -379,6 +387,10 @@ Approves and sends an AI-drafted response.
 
 **Behaviour**: Loads the matching `ai_decision`; an optional non-empty `body` overrides the generated text for edit-before-send. It dispatches through `OutboundMessageService` with AI actor attribution. Only after provider delivery and message persistence succeed does it clear `conversation.ai_state`; a provider failure leaves the draft available to retry. Webchat replies publish on the visitor's realtime channel. Writes `audit_logs` row (`action: 'ai_draft_approved'`).
 
+Post-dispatch finalization failures and unknown provider outcomes clear the
+claimed draft, return `202 accepted`, and write reconciliation metadata rather
+than exposing a retryable response.
+
 **Errors**: `400`, `401`, `404` (decision missing or no response text), `500`.
 
 ### POST /api/functions/regenerate-ai-draft
@@ -391,13 +403,13 @@ Regenerates an AI draft by enqueuing a new `process_ai_message` job.
 { "conversationId": "uuid" }
 ```
 
-**Response (200):**
+**Response (202):**
 
 ```json
-{ "status": "ok" }
+{ "status": "queued" }
 ```
 
-**Behaviour**: Loads the conversation's `organization_id`. Sets `conversations.ai_state = 'thinking'`. Inserts a `support_jobs` row with `job_type = 'process_ai_message'`, `payload = { conversationId }`. Fire-and-forget POSTs to the InsForge `process-jobs` function to trigger processing immediately. **No audit log entry** (a `ai_draft_regenerated` action would be a good addition; tracked in [`../plans/refactor.md`](../plans/refactor.md)).
+**Behaviour**: Loads the conversation's `organization_id`. Durably inserts an idempotent `support_jobs` row with `job_type = 'process_ai_message'`, `payload = { conversationId }`, then best-effort sets `conversations.ai_state = 'thinking'`; the worker repeats that transition after it claims the job. The route then POSTs to the InsForge `process-jobs` function with a 1.5-second timeout; state/trigger failures leave the queued job for the scheduler and are returned or logged as non-retryable warnings. **No audit log entry** (an `ai_draft_regenerated` action would be a useful follow-up; tracked in [`../plans/refactor.md`](../plans/refactor.md)).
 
 **Errors**: `400`, `401`, `404` (conversation not found), `500`.
 

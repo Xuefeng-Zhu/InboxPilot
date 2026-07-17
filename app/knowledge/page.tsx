@@ -10,15 +10,14 @@ import { AppShell } from '@/components/layout';
 import { Pill, Tag } from '@/components/ui';
 import {
   AddDocumentForm,
-  MAX_FILE_SIZE_MB,
   type KnowledgeDocument,
   SOURCE_TYPES,
 } from '@/components/knowledge';
 import {
-  removeKnowledgeFile,
-  rollbackKnowledgeUpload,
-  uploadKnowledgeFile,
-} from './storage';
+  createKnowledgeDocument,
+  deleteKnowledgeDocument,
+} from './mutations';
+import { takeKnowledgeMutationWarning } from './mutation-warning';
 
 type TypeFilter = 'all' | (typeof SOURCE_TYPES)[number];
 
@@ -65,6 +64,13 @@ export default function KnowledgePage() {
 
   const [chunkCounts, setChunkCounts] = useState<Record<string, number>>({});
 
+  useEffect(() => {
+    const mutationWarning = takeKnowledgeMutationWarning();
+    if (mutationWarning) {
+      setError(mutationWarning);
+    }
+  }, []);
+
   const refetchDocs = () => queryClient.invalidateQueries({
     queryKey: queryKeys.knowledgeDocs(membership?.organizationId ?? ''),
   });
@@ -88,8 +94,11 @@ export default function KnowledgePage() {
           counts[row.document_id] = (counts[row.document_id] ?? 0) + 1;
         }
         if (!cancelled) setChunkCounts(counts);
-      } catch {
-        // Non-fatal: chunk counts are decorative
+      } catch (countError) {
+        console.warn(
+          'Knowledge chunk counts could not be loaded:',
+          countError instanceof Error ? countError.message : String(countError),
+        );
       }
     })();
     return () => {
@@ -118,90 +127,12 @@ export default function KnowledgePage() {
     }
     setAdding(true);
     setError(null);
-    let fileKey: string | null = null;
-    let documentPersisted = false;
     try {
-      let fileUrl: string | null = null;
-      let fileName: string | null = null;
-
-      if (data.file) {
-        if (data.file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
-          setError(`File size must be under ${MAX_FILE_SIZE_MB}MB`);
-          setAdding(false);
-          return;
-        }
-
-        const uploadedFile = await uploadKnowledgeFile(
-          membership.organizationId,
-          data.file,
-        );
-        fileUrl = uploadedFile.url;
-        fileName = data.file.name;
-        fileKey = uploadedFile.key;
-      }
-
-      const { data: insertedData, error: insertError } = await insforge.database
-        .from('knowledge_documents')
-        .insert([{
-          organization_id: membership.organizationId,
-          title: data.title,
-          source_type: data.sourceType,
-          body: data.body,
-          status: 'pending',
-          file_url: fileUrl,
-          file_name: fileName,
-          file_key: fileKey,
-        }])
-        .select();
-
-      if (insertError) {
-        setError(
-          fileKey
-            ? await rollbackKnowledgeUpload(fileKey, insertError.message)
-            : insertError.message,
-        );
-        return;
-      }
-
-      const inserted = Array.isArray(insertedData) ? insertedData[0] : insertedData;
-      if (!inserted) {
-        const missingRowError = 'Document insert did not return the created row.';
-        setError(
-          fileKey
-            ? await rollbackKnowledgeUpload(fileKey, missingRowError)
-            : missingRowError,
-        );
-        return;
-      }
-      const doc = inserted as Record<string, unknown>;
-      documentPersisted = true;
-
-      const warnings: string[] = [];
-      const { error: auditError } = await insforge.database
-        .from('audit_logs')
-        .insert([{
-          organization_id: membership.organizationId,
-          actor_id: user.id,
-          actor_type: 'user',
-          action: 'knowledge_document_created',
-          resource_type: 'knowledge_document',
-          resource_id: doc.id ?? null,
-          metadata: { title: data.title },
-        }]);
-      if (auditError) warnings.push(`audit logging failed: ${auditError.message}`);
-
-      const { error: jobError } = await insforge.database
-        .from('support_jobs')
-        .insert([{
-          organization_id: membership.organizationId,
-          job_type: 'process_knowledge_document',
-          payload: { documentId: doc.id },
-          status: 'pending',
-          attempts: 0,
-          max_attempts: 3,
-          run_after: new Date().toISOString(),
-        }]);
-      if (jobError) warnings.push(`processing could not be queued: ${jobError.message}`);
+      const { warnings } = await createKnowledgeDocument({
+        organizationId: membership.organizationId,
+        actorId: user.id,
+        document: data,
+      });
 
       setShowAddForm(false);
       await refetchDocs();
@@ -212,12 +143,7 @@ export default function KnowledgePage() {
         setTimeout(() => setSuccess(null), 3000);
       }
     } catch (addError) {
-      const message = addError instanceof Error ? addError.message : 'Failed to add document';
-      setError(
-        fileKey && !documentPersisted
-          ? await rollbackKnowledgeUpload(fileKey, message)
-          : message,
-      );
+      setError(addError instanceof Error ? addError.message : 'Failed to add document');
     } finally {
       setAdding(false);
     }
@@ -236,39 +162,10 @@ export default function KnowledgePage() {
         return;
       }
 
-      const { error: deleteError } = await insforge.database
-        .from('knowledge_documents')
-        .delete()
-        .eq('id', docId);
-
-      if (deleteError) {
-        setError(deleteError.message);
-        return;
-      }
-
-      const warnings: string[] = [];
-      if (doc.file_key) {
-        try {
-          await removeKnowledgeFile(doc.file_key);
-        } catch (storageError) {
-          warnings.push(
-            `stored file cleanup failed: ${storageError instanceof Error ? storageError.message : 'unknown error'}`,
-          );
-        }
-      }
-
-      const { error: auditError } = await insforge.database
-        .from('audit_logs')
-        .insert([{
-          organization_id: doc.organization_id,
-          actor_id: user.id,
-          actor_type: 'user',
-          action: 'knowledge_document_deleted',
-          resource_type: 'knowledge_document',
-          resource_id: docId,
-          metadata: { title: doc.title },
-        }]);
-      if (auditError) warnings.push(`audit logging failed: ${auditError.message}`);
+      const { warnings } = await deleteKnowledgeDocument({
+        document: doc,
+        actorId: user.id,
+      });
 
       await refetchDocs();
       if (warnings.length > 0) {

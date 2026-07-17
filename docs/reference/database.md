@@ -1,6 +1,6 @@
 # Database Reference
 
-> PostgreSQL schema reference. 20 application tables, 16 migration files, 6 application-callable RPCs, and role-aware RLS on tenant-scoped data.
+> PostgreSQL schema reference. 20 application tables, 18 migration files, 8 application-callable RPCs, and role-aware RLS on tenant-scoped data.
 
 ## Migration files
 
@@ -24,8 +24,10 @@ Apply pending files in the order shown. Do not replay the whole set against an i
 | `insforge/migrations/20260615074718_trigger-process-jobs-on-insert.sql` | Adds an HTTP job trigger (superseded by the next migration after the extension proved unreliable) |
 | `insforge/migrations/20260615080500_drop-broken-trigger.sql` | Drops the unreliable HTTP job trigger; scheduled processing remains the active path |
 | `insforge/migrations/014_role_aware_rls_and_knowledge_storage.sql` | Adds role-aware settings/knowledge/job policies, secret-safe client grants, file keys, and organization-scoped storage policies |
+| `insforge/migrations/015_bind_knowledge_jobs_to_documents.sql` | Binds browser-enqueued knowledge jobs to documents owned by the same organization |
+| `insforge/migrations/016_job_and_ai_decision_idempotency.sql` | Adds retry-safe job/decision, stale-claim, knowledge-revision, and inbound-audit guards |
 
-Apply via the InsForge SQL editor or migrations API. Migration `014` cannot change bucket configuration: after applying it, mark the existing `knowledge-files` bucket **private** in the InsForge dashboard. Storage object keys must use `<organization-id>/documents/...` so its policies can derive the tenant from the first path segment.
+Apply via the InsForge SQL editor or migrations API. Migration `014` cannot change bucket configuration: after applying it, mark the existing `knowledge-files` bucket **private** in the InsForge dashboard. Then apply `015` for knowledge-job tenant binding and `016` for job/decision idempotency, claim leases, revision-safe knowledge re-indexing, and atomic inbound-audit repair. Storage object keys must use `<organization-id>/documents/...` so its policies can derive the tenant from the first path segment.
 
 ---
 
@@ -243,6 +245,7 @@ Identical structure to `sms_delivery_events`.
 | `id` | `uuid` | PK | |
 | `conversation_id` | `uuid` | NOT NULL, FK → `conversations` (CASCADE) | |
 | `organization_id` | `uuid` | NOT NULL, FK → `organizations` (CASCADE) | |
+| `source_job_id` | `uuid` | nullable, FK → `support_jobs` (SET NULL), unique when present | Queue job that produced the decision (since 016) |
 | `message_id` | `uuid` | nullable, FK → `messages` | The triggering inbound message |
 | `decision_type` | `text` | NOT NULL, CHECK `('respond','escalate','clarify')` | |
 | `confidence` | `numeric(3,2)` | NOT NULL | 0.00 – 1.00 |
@@ -278,6 +281,7 @@ Identical structure to `sms_delivery_events`.
 | `title` | `text` | NOT NULL | |
 | `source_type` | `text` | NOT NULL | `manual`, `upload`, … |
 | `body` | `text` | NOT NULL | Full document text |
+| `content_revision` | `uuid` | NOT NULL, default `gen_random_uuid()` | Immutable version token for queued re-index work (since 016) |
 | `file_url` | `text` | nullable | Legacy/source URL for uploaded content |
 | `file_name` | `text` | nullable | Original upload filename |
 | `file_key` | `text` | nullable | Object key in the private `knowledge-files` bucket; new uploads use `<organization-id>/documents/...` |
@@ -310,6 +314,7 @@ Identical structure to `sms_delivery_events`.
 | `organization_id` | `uuid` | NOT NULL, FK → `organizations` (CASCADE) | |
 | `job_type` | `text` | NOT NULL | See [`jobs.md`](jobs.md) |
 | `payload` | `jsonb` | NOT NULL, default `'{}'` | |
+| `idempotency_key` | `text` | nullable; unique with org/type while active | Deterministic key for concurrent enqueue protection (since 016) |
 | `status` | `text` | NOT NULL, default `'pending'`, CHECK `('pending','claimed','completed','failed','dead')` | |
 | `attempts` | `integer` | NOT NULL, default `0` | |
 | `max_attempts` | `integer` | NOT NULL, default `5` | |
@@ -319,7 +324,7 @@ Identical structure to `sms_delivery_events`.
 | `updated_at` | `timestamptz` | NOT NULL | |
 | `completed_at` | `timestamptz` | nullable | |
 
-**Indexes:** `idx_support_jobs_claimable` — partial on `(run_after, created_at)` where status is `pending` or `failed`.
+**Indexes:** `idx_support_jobs_claimable` — partial on `(run_after, created_at)` where status is `pending` or `failed`; `idx_support_jobs_active_idempotency` — unique partial on `(organization_id, job_type, idempotency_key)` while status is pending, claimed, or failed; `idx_support_jobs_stale_claim` — partial on `updated_at` for claimed-job lease reconciliation.
 
 #### audit_logs
 
@@ -398,7 +403,7 @@ Called by `KnowledgeRepository.matchChunks()`.
 
 ### `claim_support_jobs(claim_limit int DEFAULT 5)`
 
-Atomically claims up to N pending or retryable failed jobs whose `run_after <= now()`, setting their status to `claimed`. Uses `SELECT FOR UPDATE SKIP LOCKED` to prevent contention between concurrent workers.
+Atomically claims up to N pending or retryable failed jobs whose `run_after <= now()`, setting their status to `claimed`. Uses `SELECT FOR UPDATE SKIP LOCKED` to prevent contention between concurrent workers. Nonzero claim calls first quarantine claims older than 15 minutes as dead for manual reconciliation rather than replaying work with unknown side effects.
 
 `PostgresJobQueue.claim(limit)` first calls the live-compatible `max_count` signature and retries with `claim_limit` when the backend exposes the migration-008 signature.
 
@@ -424,9 +429,17 @@ Called by `lib/onboarding.ts` after signup.
 
 Atomically deletes and replaces all chunks for one knowledge document. It verifies the document belongs to `p_organization_id`, so a failed replacement rolls back without losing the last known-good chunks.
 
+### `replace_knowledge_chunks_if_revision(p_document_id uuid, p_organization_id uuid, p_content_revision uuid, p_chunks jsonb)`
+
+Server-only revision-aware replacement used by queued knowledge ingestion. It locks the document row, verifies the organization, and replaces chunks only when `p_content_revision` is still current. It returns `false` for superseded work so an older job cannot overwrite chunks from a newer edit.
+
 ### `publish_realtime_message(p_channel_name text, p_event_name text, p_payload jsonb)`
 
 Server-only wrapper around `realtime.publish`. Execute permission is granted only to `project_admin`; browser roles cannot publish through this RPC.
+
+### `ensure_message_received_audit(p_organization_id uuid, p_message_id uuid, p_metadata jsonb)`
+
+Server-only idempotent audit repair for inbound messages. It validates the message's organization and uses a transaction-scoped advisory lock so concurrent provider retries create at most one `message_received` audit row.
 
 ---
 
@@ -469,6 +482,7 @@ Migration `014` first revokes broad table SELECT, then grants authenticated user
 | `knowledge_documents` | `idx_knowledge_documents_org_id` | btree | Org lookup |
 | `knowledge_chunks` | `idx_knowledge_chunks_embedding` | **HNSW** `(embedding vector_cosine_ops)` | Vector similarity |
 | `support_jobs` | `idx_support_jobs_claimable` | **partial** `(run_after, created_at) WHERE status IN ('pending','failed')` | Pending and retryable job claims |
+| `support_jobs` | `idx_support_jobs_stale_claim` | **partial** `(updated_at) WHERE status = 'claimed'` | Expired claim reconciliation |
 | `audit_logs` | `idx_audit_logs_org_created` | btree `(organization_id, created_at DESC)` | Chronological audit query |
 | `ai_decision_chunks` | `idx_ai_decision_chunks_decision` | btree `(ai_decision_id)` | Lookup by decision |
 | `ai_decision_chunks` | `idx_ai_decision_chunks_org` | btree `(organization_id)` | Org lookup |

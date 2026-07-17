@@ -24,10 +24,7 @@ import { MessageRepository } from '../../../packages/support-core/src/repositori
 import { AuditLogRepository } from '../../../packages/support-core/src/repositories/audit-log-repository.ts';
 import { WebchatThreadRepository } from '../../../packages/support-core/src/repositories/webchat-thread-repository.ts';
 import { InboundMessageService } from '../../../packages/support-core/src/services/inbound-message-service.ts';
-
-import type { DatabaseClient } from '../../../packages/support-core/src/interfaces/database-client.ts';
-import type { JobQueue } from '../../../packages/support-core/src/interfaces/job-queue.ts';
-import type { Job, JobType } from '../../../packages/support-core/src/types/index.ts';
+import { PostgresJobQueue } from '../../../packages/support-core/src/services/postgres-job-queue.ts';
 
 // ---------------------------------------------------------------------------
 // Anti-flood: in-memory rate limiter (per worker instance)
@@ -52,54 +49,6 @@ function checkRateLimit(threadId: string): boolean {
 
   entry.count++;
   return true;
-}
-
-// ---------------------------------------------------------------------------
-// PostgREST JobQueue (same pattern as sms-inbound)
-// ---------------------------------------------------------------------------
-
-class PostgRestJobQueue implements JobQueue {
-  constructor(private db: DatabaseClient) {}
-
-  async enqueue(jobType: JobType, payload: Record<string, unknown>, orgId: string): Promise<Job> {
-    const row = {
-      organization_id: orgId,
-      job_type: jobType,
-      payload,
-      status: 'pending',
-      attempts: 0,
-      max_attempts: 5,
-      run_after: new Date().toISOString(),
-    };
-
-    const { data, error } = await this.db
-      .from('support_jobs')
-      .insert(row)
-      .select('*')
-      .single();
-
-    if (error) throw new Error(`PostgRestJobQueue.enqueue failed: ${error.message}`);
-
-    const d = data as Record<string, unknown>;
-    return {
-      id: d.id as string,
-      organizationId: d.organization_id as string,
-      jobType: d.job_type as JobType,
-      payload: d.payload as Record<string, unknown>,
-      status: d.status as Job['status'],
-      attempts: d.attempts as number,
-      maxAttempts: d.max_attempts as number,
-      lastError: (d.last_error as string) ?? null,
-      runAfter: new Date(d.run_after as string),
-      createdAt: new Date(d.created_at as string),
-      updatedAt: new Date(d.updated_at as string),
-      completedAt: d.completed_at ? new Date(d.completed_at as string) : null,
-    };
-  }
-
-  async claim(): Promise<Job[]> { throw new Error('Not implemented'); }
-  async complete(): Promise<void> { throw new Error('Not implemented'); }
-  async fail(): Promise<void> { throw new Error('Not implemented'); }
 }
 
 // ---------------------------------------------------------------------------
@@ -169,7 +118,7 @@ export default async function (req: Request): Promise<Response> {
     const conversationRepo = new ConversationRepository(db);
     const messageRepo = new MessageRepository(db);
     const auditLogRepo = new AuditLogRepository(db);
-    const jobQueue = new PostgRestJobQueue(db);
+    const jobQueue = new PostgresJobQueue(db);
 
     const inboundService = new InboundMessageService(
       contactRepo,

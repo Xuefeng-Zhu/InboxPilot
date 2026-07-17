@@ -66,4 +66,48 @@ export class AuditLogRepository {
 
     return toAuditLog(data as AuditLogRow);
   }
+
+  /** Check whether an append-only action has already been recorded. */
+  async existsForActionResource(
+    organizationId: string,
+    action: string,
+    resourceType: string,
+    resourceId: string,
+  ): Promise<boolean> {
+    const { data, error } = await this.db
+      .from('audit_logs')
+      .select('id')
+      .eq('organization_id', organizationId)
+      .eq('action', action)
+      .eq('resource_type', resourceType)
+      .eq('resource_id', resourceId)
+      .limit(1)
+      .maybeSingle();
+
+    if (error) {
+      throw new Error(`AuditLogRepository.existsForActionResource failed: ${error.message}`);
+    }
+
+    return data !== null && data !== undefined;
+  }
+
+  /**
+   * Atomically ensure the one message_received audit row for an inbound
+   * message. The database RPC serializes concurrent provider retries so this
+   * repair path stays append-only without duplicate audit entries.
+   */
+  async ensureMessageReceived(
+    organizationId: string,
+    messageId: string,
+    metadata: Record<string, unknown> = {},
+  ): Promise<void> {
+    const { error } = await this.db.rpc('ensure_message_received_audit', {
+      p_organization_id: organizationId,
+      p_message_id: messageId,
+      p_metadata: metadata,
+    });
+    if (error) {
+      throw new Error(`AuditLogRepository.ensureMessageReceived failed: ${error.message}`);
+    }
+  }
 }

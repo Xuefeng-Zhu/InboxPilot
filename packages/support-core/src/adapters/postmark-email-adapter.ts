@@ -12,6 +12,10 @@
 
 import { timingSafeEqual } from 'crypto';
 import type { EmailProviderAdapter } from '../interfaces/email-provider-adapter.js';
+import {
+  PROVIDER_SEND_TIMEOUT_MS,
+  ProviderSendOutcomeUnknownError,
+} from './provider-send-outcome-unknown-error';
 import type {
   SendEmailParams,
   SendEmailResult,
@@ -79,15 +83,26 @@ export class PostmarkEmailAdapter implements EmailProviderAdapter {
       ]);
     }
 
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-        'X-Postmark-Server-Token': serverToken,
-      },
-      body: JSON.stringify(body),
-    });
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'X-Postmark-Server-Token': serverToken,
+        },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(PROVIDER_SEND_TIMEOUT_MS),
+      });
+    } catch (error) {
+      throw new ProviderSendOutcomeUnknownError({
+        providerId: this.providerId,
+        stage: 'request',
+        message: 'PostmarkEmailAdapter.sendEmail: request failed without a provider response',
+        originalError: error,
+      });
+    }
 
     if (!response.ok) {
       const errorBody = await response.text();
@@ -96,10 +111,35 @@ export class PostmarkEmailAdapter implements EmailProviderAdapter {
       );
     }
 
-    const data = (await response.json()) as { MessageID: string };
+    let data: unknown;
+    try {
+      data = await response.json();
+    } catch (error) {
+      throw new ProviderSendOutcomeUnknownError({
+        providerId: this.providerId,
+        stage: 'response',
+        message: 'PostmarkEmailAdapter.sendEmail: accepted response was not valid JSON',
+        originalError: error,
+      });
+    }
+
+    const responseData = data && typeof data === 'object'
+      ? data as Record<string, unknown>
+      : {};
+    if (
+      typeof responseData.MessageID !== 'string' ||
+      responseData.MessageID.trim().length === 0
+    ) {
+      throw new ProviderSendOutcomeUnknownError({
+        providerId: this.providerId,
+        stage: 'response',
+        message: 'PostmarkEmailAdapter.sendEmail: accepted response did not include a message ID',
+        originalError: new Error('missing MessageID'),
+      });
+    }
 
     return {
-      externalMessageId: data.MessageID,
+      externalMessageId: responseData.MessageID,
       provider: this.providerId,
       status: 'queued',
     };

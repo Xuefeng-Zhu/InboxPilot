@@ -17,6 +17,7 @@ import type { KnowledgeDocument, AuditLog } from '../../src/types/index.js';
 
 const ORG_ID = 'org-001';
 const DOC_ID = 'doc-001';
+const REVISION = '11111111-1111-4111-8111-111111111111';
 
 const SAMPLE_DOCUMENT: KnowledgeDocument = {
   id: DOC_ID,
@@ -51,7 +52,9 @@ function createMockKnowledgeRepo(): KnowledgeRepository {
   return {
     getDocument: vi.fn().mockResolvedValue(SAMPLE_DOCUMENT),
     updateDocument: vi.fn().mockResolvedValue(SAMPLE_DOCUMENT),
+    updateDocumentForRevision: vi.fn().mockResolvedValue(true),
     replaceChunksByDocument: vi.fn().mockResolvedValue([]),
+    replaceChunksForRevision: vi.fn().mockResolvedValue(true),
     deleteChunksByDocument: vi.fn().mockResolvedValue(undefined),
     createDocument: vi.fn(),
     deleteDocumentWithChunks: vi.fn(),
@@ -167,6 +170,95 @@ describe('KnowledgeIngestionService', () => {
       );
     });
 
+    it('does not mark ready content failed when only success audit persistence fails', async () => {
+      vi.mocked(auditLog.create).mockRejectedValueOnce(new Error('audit unavailable'));
+
+      await expect(service.processDocument(DOC_ID)).rejects.toThrow('audit unavailable');
+
+      expect(knowledgeRepo.updateDocument).toHaveBeenCalledWith(DOC_ID, {
+        status: 'ready',
+        errorMessage: null,
+      });
+      expect(knowledgeRepo.updateDocument).not.toHaveBeenCalledWith(
+        DOC_ID,
+        expect.objectContaining({ status: 'failed' }),
+      );
+    });
+
+    it('uses revision-guarded writes for queued knowledge work', async () => {
+      vi.mocked(knowledgeRepo.getDocument).mockResolvedValue({
+        ...SAMPLE_DOCUMENT,
+        contentRevision: REVISION,
+      });
+
+      await service.processDocument(DOC_ID, REVISION);
+
+      expect(knowledgeRepo.updateDocument).not.toHaveBeenCalled();
+      expect(knowledgeRepo.updateDocumentForRevision).toHaveBeenNthCalledWith(
+        1,
+        DOC_ID,
+        REVISION,
+        { status: 'processing' },
+      );
+      expect(knowledgeRepo.replaceChunksForRevision).toHaveBeenCalledWith(
+        DOC_ID,
+        ORG_ID,
+        REVISION,
+        expect.any(Array),
+      );
+      expect(knowledgeRepo.updateDocumentForRevision).toHaveBeenNthCalledWith(
+        2,
+        DOC_ID,
+        REVISION,
+        { status: 'ready', errorMessage: null },
+      );
+    });
+
+    it('does no work when a queued revision is already stale', async () => {
+      vi.mocked(knowledgeRepo.getDocument).mockResolvedValue({
+        ...SAMPLE_DOCUMENT,
+        contentRevision: '22222222-2222-4222-8222-222222222222',
+      });
+
+      await service.processDocument(DOC_ID, REVISION);
+
+      expect(knowledgeRepo.updateDocumentForRevision).not.toHaveBeenCalled();
+      expect(aiClient.createEmbedding).not.toHaveBeenCalled();
+      expect(knowledgeRepo.replaceChunksForRevision).not.toHaveBeenCalled();
+      expect(auditLog.create).not.toHaveBeenCalled();
+    });
+
+    it('does not publish stale chunks when a newer edit arrives during embedding', async () => {
+      vi.mocked(knowledgeRepo.getDocument).mockResolvedValue({
+        ...SAMPLE_DOCUMENT,
+        contentRevision: REVISION,
+      });
+      vi.mocked(knowledgeRepo.replaceChunksForRevision).mockResolvedValue(false);
+
+      await expect(service.processDocument(DOC_ID, REVISION)).resolves.toBe('superseded');
+
+      expect(knowledgeRepo.replaceChunksForRevision).toHaveBeenCalled();
+      expect(knowledgeRepo.updateDocumentForRevision).toHaveBeenCalledTimes(1);
+      expect(auditLog.create).not.toHaveBeenCalled();
+    });
+
+    it('snapshots the current revision for legacy jobs without one in their payload', async () => {
+      vi.mocked(knowledgeRepo.getDocument).mockResolvedValue({
+        ...SAMPLE_DOCUMENT,
+        contentRevision: REVISION,
+      });
+
+      await expect(service.processDocument(DOC_ID)).resolves.toBe('processed');
+
+      expect(knowledgeRepo.updateDocument).not.toHaveBeenCalled();
+      expect(knowledgeRepo.replaceChunksForRevision).toHaveBeenCalledWith(
+        DOC_ID,
+        ORG_ID,
+        REVISION,
+        expect.any(Array),
+      );
+    });
+
     it('passes the storage key to the injected file fetcher', async () => {
       const fileFetcher = {
         fetchTextContent: vi.fn().mockResolvedValue('File-backed knowledge content.'),
@@ -193,6 +285,32 @@ describe('KnowledgeIngestionService', () => {
         'policy.txt',
         `${ORG_ID}/documents/policy.txt`,
       );
+    });
+
+    it('records degraded file extraction when body fallback succeeds', async () => {
+      const fileFetcher = {
+        fetchTextContent: vi.fn().mockRejectedValue(new Error('PDF parser unavailable')),
+      };
+      vi.mocked(knowledgeRepo.getDocument).mockResolvedValue({
+        ...SAMPLE_DOCUMENT,
+        fileUrl: 'https://storage.example.invalid/object',
+        fileName: 'policy.pdf',
+      });
+      service = new KnowledgeIngestionService(
+        knowledgeRepo,
+        aiClient,
+        auditLog,
+        fileFetcher,
+        aiSettingsRepo,
+      );
+
+      await expect(service.processDocument(DOC_ID)).resolves.toBe('processed');
+
+      expect(auditLog.create).toHaveBeenCalledWith(expect.objectContaining({
+        metadata: expect.objectContaining({
+          fileExtractionWarning: 'PDF parser unavailable',
+        }),
+      }));
     });
 
     it('clears any previous errorMessage when reprocessing succeeds', async () => {
@@ -273,6 +391,42 @@ describe('KnowledgeIngestionService', () => {
           metadata: expect.objectContaining({ status: 'failed' }),
         }),
       );
+    });
+
+    it('surfaces status and audit persistence failures alongside the processing error', async () => {
+      aiClient.createEmbedding = vi.fn().mockRejectedValue(new Error('Embedding API error'));
+      vi.mocked(knowledgeRepo.updateDocument).mockImplementation(
+        async (_id, updates) => {
+          if (updates.status === 'failed') throw new Error('status database unavailable');
+          return SAMPLE_DOCUMENT;
+        },
+      );
+      vi.mocked(auditLog.create).mockRejectedValue(new Error('audit database unavailable'));
+
+      await expect(service.processDocument(DOC_ID)).rejects.toThrow(
+        'Embedding API error; failed to persist document failure status: status database unavailable; failed to persist failure audit: audit database unavailable',
+      );
+    });
+
+    it('does not retry or audit a failure after the queued revision becomes stale', async () => {
+      vi.mocked(knowledgeRepo.getDocument).mockResolvedValue({
+        ...SAMPLE_DOCUMENT,
+        contentRevision: REVISION,
+      });
+      vi.mocked(knowledgeRepo.updateDocumentForRevision)
+        .mockResolvedValueOnce(true)
+        .mockResolvedValueOnce(false);
+      aiClient.createEmbedding = vi.fn().mockRejectedValue(new Error('Embedding API error'));
+
+      await expect(service.processDocument(DOC_ID, REVISION)).resolves.toBe('superseded');
+
+      expect(knowledgeRepo.updateDocumentForRevision).toHaveBeenNthCalledWith(
+        2,
+        DOC_ID,
+        REVISION,
+        { status: 'failed', errorMessage: 'Embedding API error' },
+      );
+      expect(auditLog.create).not.toHaveBeenCalled();
     });
 
     it('throws when document is not found', async () => {

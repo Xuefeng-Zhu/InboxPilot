@@ -170,6 +170,7 @@ function createMockAiDecisionRepo(): AiDecisionRepository {
       id: SAMPLE_AI_DECISION.id,
       conversationId: input.conversationId,
       organizationId: input.organizationId,
+      sourceJobId: input.sourceJobId ?? null,
       messageId: input.messageId ?? null,
       decisionType: input.decisionType,
       confidence: input.confidence,
@@ -180,6 +181,7 @@ function createMockAiDecisionRepo(): AiDecisionRepository {
       rawResponse: input.rawResponse ?? null,
       createdAt: SAMPLE_AI_DECISION.createdAt,
     })),
+    findBySourceJobId: vi.fn().mockResolvedValue(null),
     findLatestByConversation: vi.fn(),
   } as unknown as AiDecisionRepository;
 }
@@ -187,6 +189,7 @@ function createMockAiDecisionRepo(): AiDecisionRepository {
 function createMockAuditLog(): AuditLogRepository {
   return {
     create: vi.fn().mockResolvedValue(SAMPLE_AUDIT_LOG),
+    existsForActionResource: vi.fn().mockResolvedValue(false),
   } as unknown as AuditLogRepository;
 }
 
@@ -313,7 +316,11 @@ describe('AiAgentService', () => {
       }));
       const service = createService();
 
-      const result = await service.processMessage(CONV_ID, ORG_ID);
+      const result = await service.processMessage(
+        CONV_ID,
+        ORG_ID,
+        { sourceJobId: 'job-auto-reply-001' },
+      );
 
       // Should set ai_state to "auto_replied"
       expect(conversationRepo.update).toHaveBeenCalledWith(
@@ -323,6 +330,7 @@ describe('AiAgentService', () => {
       // Should return a decision with responseText (the caller sends it inline)
       expect(result.responseText).toBe('Here is your answer.');
       expect(result.requiresHuman).toBe(false);
+      expect(result.rawResponse).toMatchObject({ _shouldAutoSend: true });
     });
   });
 
@@ -672,6 +680,92 @@ describe('AiAgentService', () => {
         }),
         ORG_ID,
       );
+    });
+
+    it('resumes downstream work without creating a second decision on worker retry', async () => {
+      vi.mocked(knowledgeRepo.matchChunks).mockResolvedValue([
+        {
+          id: 'chunk-001',
+          documentId: 'doc-001',
+          organizationId: ORG_ID,
+          content: 'Returns are accepted within 30 days.',
+          embedding: [],
+          metadata: {},
+          createdAt: new Date('2024-01-01'),
+        },
+      ]);
+      vi.mocked(jobQueue.enqueue)
+        .mockRejectedValueOnce(new Error('queue unavailable'))
+        .mockResolvedValue(SAMPLE_JOB);
+      const sourceJobId = 'job-process-ai-001';
+      const persistedDecision: AiDecision = {
+        ...SAMPLE_AI_DECISION,
+        conversationId: CONV_ID,
+        organizationId: ORG_ID,
+        sourceJobId,
+        rawResponse: {
+          decision_type: 'respond',
+          _groundingChunkIds: ['chunk-001'],
+          _auditMetadata: {
+            decisionType: 'respond',
+            mode: 'draft_only',
+          },
+        },
+      };
+      vi.mocked(aiDecisionRepo.findBySourceJobId)
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(persistedDecision);
+      const service = createService();
+
+      await expect(
+        service.processMessage(CONV_ID, ORG_ID, { sourceJobId }),
+      ).rejects.toThrow('queue unavailable');
+      await expect(
+        service.processMessage(CONV_ID, ORG_ID, { sourceJobId }),
+      ).resolves.toBe(persistedDecision);
+
+      expect(aiDecisionRepo.create).toHaveBeenCalledTimes(1);
+      expect(aiDecisionRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sourceJobId,
+          rawResponse: expect.objectContaining({
+            _groundingChunkIds: ['chunk-001'],
+          }),
+        }),
+      );
+      expect(aiClient.chatCompletion).toHaveBeenCalledTimes(1);
+      expect(jobQueue.enqueue).toHaveBeenCalledTimes(2);
+      expect(auditLog.create).toHaveBeenCalledTimes(1);
+      expect(auditLog.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          resourceId: persistedDecision.id,
+          metadata: { decisionType: 'respond', mode: 'draft_only' },
+        }),
+      );
+    });
+
+    it('does not duplicate an existing decision audit when later handler work retries', async () => {
+      const sourceJobId = 'job-process-ai-001';
+      vi.mocked(aiDecisionRepo.findBySourceJobId).mockResolvedValue({
+        ...SAMPLE_AI_DECISION,
+        conversationId: CONV_ID,
+        organizationId: ORG_ID,
+        sourceJobId,
+        rawResponse: { _groundingChunkIds: [] },
+      });
+      vi.mocked(auditLog.existsForActionResource).mockResolvedValue(true);
+      const service = createService();
+
+      await service.processMessage(CONV_ID, ORG_ID, { sourceJobId });
+
+      expect(auditLog.existsForActionResource).toHaveBeenCalledWith(
+        ORG_ID,
+        'ai_decision_produced',
+        'ai_decision',
+        SAMPLE_AI_DECISION.id,
+      );
+      expect(auditLog.create).not.toHaveBeenCalled();
+      expect(aiClient.chatCompletion).not.toHaveBeenCalled();
     });
   });
 });

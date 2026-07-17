@@ -35,6 +35,7 @@ Provider integrations. **All adapters are stateless** — no constructor params,
 - **`providerId` is a string literal** typed as the union in the interface.
 - **No state.** Counters, queues, retries live in services, not adapters.
 - **Per-call `providerConfig`** carries the credentials (`accountSid`/`authToken` for Twilio, `serverToken` for Postmark, etc.).
+- **Unknown send outcomes are typed.** Real HTTP adapters use a 15-second timeout and throw `ProviderSendOutcomeUnknownError` when fetch rejects without a response or a successful response lacks a trustworthy provider ID; callers must not retry those automatically.
 - **Stubs throw `Error('not implemented')` on every method.** Type system stays satisfied; replace when building.
 - **Verify with `crypto.timingSafeEqual`** for HMAC comparisons; constant-time check, not `===`.
 

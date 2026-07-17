@@ -19,7 +19,7 @@ components/                   React components – inbox/, knowledge/, customers
 lib/                          Frontend utilities & React Query hooks (insforge.ts, auth-context.tsx, queries/)
 packages/support-core/        Portable business logic (see packages/support-core/AGENTS.md)
 insforge/functions/           9 Deno serverless entrypoints (see insforge/functions/AGENTS.md)
-insforge/migrations/          16 SQL migration files + seed.sql
+insforge/migrations/          18 SQL migration files + seed.sql
 widget-src/                   Vite + TS webchat widget bundle
 docs/                         Architecture, database, API, RBAC, audit, jobs, webchat, testing references + guides
 ```
@@ -60,10 +60,10 @@ Next.js Client (agent actions)
 ```
 
 ### Key Modules
-- **InboundMessageService**: Normalize inbound SMS/email → deduplicate → create/update conversation → escalation check → AI auto-reply or draft → enqueue delivery
-- **OutboundMessageService**: Validate → create message → send via provider adapter → handle delivery event
-- **AiAgentService**: Select mode (draft/auto-reply/human) → call OpenRouter → store AI decision → enqueue reply
-- **PostgresJobQueue**: PostgresJobQueue: claim available jobs → process with exponential backoff → dead-letter after max attempts
+- **InboundMessageService**: Normalize inbound SMS/email → deduplicate → create/update conversation → persist message → enqueue idempotent AI work → atomically audit receipt
+- **OutboundMessageService**: Resolve conversation/contact → dispatch through the injected provider adapter → persist message → finalize conversation/audit with typed retry boundaries
+- **AiAgentService**: Evaluate deterministic escalation → retrieve knowledge → call OpenRouter when allowed → store one recoverable decision per source job
+- **PostgresJobQueue**: Enqueue with active/lifetime idempotency → atomically claim → retry with exponential backoff → quarantine uncertain/stale work
 - **EscalationRules**: Pre-AI rule evaluation (profanity, legal threats, safety concerns) → blocks/overrides AI auto-reply
 
 ## CORE CONVENTIONS
@@ -129,14 +129,12 @@ Next.js Client (agent actions)
 
 - **Repository count: 15, not 16.** `PostgresJobQueue` lives in `services/` (not `repositories/`) — it implements the `JobQueue` interface and carries business logic (idempotency, backoff, dead-lettering), not table CRUD. Update the README if you touch this.
 - **Table count: 20 application tables.** The 20th is `ai_decision_chunks` (added in migration 007); storage/realtime platform tables are not included.
-- **Migration count: 16 files.** This includes numbered migrations `001` through `014` plus two timestamped job-trigger migrations; preserve the documented application order because the second timestamped file drops the first file's unreliable trigger.
+- **Migration count: 18 files.** This includes numbered migrations `001` through `016` plus two timestamped job-trigger migrations; preserve the documented application order because the second timestamped file drops the first file's unreliable trigger.
 - **`app/symphony/` is built but undocumented** in `README.md` and the original AGENTS.md. Has its own 7 components, 3 tests, and a data hook (`useSymphony.ts`), linked from Sidebar. Treat as in-progress.
 - **`TelnyxSmsAdapter.verifyWebhook` verifies ed25519 signatures** using the configured Telnyx public key in `signingSecret` (hex/base64/base64url) and a 5-minute timestamp replay window.
 - **6 of 6 integration test files are 100% `it.todo` placeholders** (45 placeholders total) — they need a real InsForge DB; pass as "todo" without exercising code.
-- **`__tests__/middleware.test.ts` should be `__tests__/proxy.test.ts`** — Next.js 16 rename in flight.
 - **`proxy.ts` checks cookie PRESENCE only** (not JWT validity). Real auth boundary is in `app/api/functions/_auth.ts` and `insforge/functions/_shared/verify-jwt.ts`.
 - **`insforge/functions/_bundled/` is deno bundle output**, mtime `Jun 8` (older than entrypoints `Jun 14`). Regenerate before deploy.
-- **`tsconfig.tsbuildinfo` is committed at root** despite `*.tsbuildinfo` in `.gitignore` (the rule may not match this filename).
 - **`.kiro/settings/mcp.json` contains plaintext API keys** (Stitch + InsForge). If you fork publicly, scrub these.
 - **Two `Topbar.tsx` files exist on purpose** — `components/Topbar.tsx` (landing) vs `components/layout/Topbar.tsx` (in-app, with auth). Not duplicates.
 

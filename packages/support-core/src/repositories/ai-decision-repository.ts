@@ -13,6 +13,7 @@ interface AiDecisionRow {
   id: string;
   conversation_id: string;
   organization_id: string;
+  source_job_id: string | null;
   message_id: string | null;
   decision_type: AiDecisionType;
   confidence: number;
@@ -30,6 +31,7 @@ function toAiDecision(row: AiDecisionRow): AiDecision {
     id: row.id,
     conversationId: row.conversation_id,
     organizationId: row.organization_id,
+    sourceJobId: row.source_job_id ?? null,
     messageId: row.message_id,
     decisionType: row.decision_type,
     confidence: Number(row.confidence),
@@ -56,6 +58,7 @@ export class AiDecisionRepository {
     };
 
     if (input.messageId !== undefined) row.message_id = input.messageId;
+    if (input.sourceJobId !== undefined) row.source_job_id = input.sourceJobId;
     if (input.reasoningSummary !== undefined) row.reasoning_summary = input.reasoningSummary;
     if (input.responseText !== undefined) row.response_text = input.responseText;
     if (input.tags !== undefined) row.tags = input.tags;
@@ -74,6 +77,25 @@ export class AiDecisionRepository {
     return toAiDecision(data as AiDecisionRow);
   }
 
+  /** Find the decision already produced by a queue job, if any. */
+  async findBySourceJobId(
+    sourceJobId: string,
+    organizationId: string,
+  ): Promise<AiDecision | null> {
+    const { data, error } = await this.db
+      .from('ai_decisions')
+      .select('*')
+      .eq('source_job_id', sourceJobId)
+      .eq('organization_id', organizationId)
+      .maybeSingle();
+
+    if (error) {
+      throw new Error(`AiDecisionRepository.findBySourceJobId failed: ${error.message}`);
+    }
+
+    return data ? toAiDecision(data as AiDecisionRow) : null;
+  }
+
   /** Update an existing AI decision by ID (partial update). */
   async update(id: string, fields: Partial<Pick<AiDecision, 'reasoningSummary' | 'responseText' | 'tags' | 'requiresHuman'>> & { metadata?: Record<string, unknown> }): Promise<AiDecision> {
     const row: Record<string, unknown> = {};
@@ -81,7 +103,25 @@ export class AiDecisionRepository {
     if (fields.responseText !== undefined) row.response_text = fields.responseText;
     if (fields.tags !== undefined) row.tags = fields.tags;
     if (fields.requiresHuman !== undefined) row.requires_human = fields.requiresHuman;
-    if (fields.metadata !== undefined) row.raw_response = fields.metadata;
+    if (fields.metadata !== undefined) {
+      const { data: existingData, error: existingError } = await this.db
+        .from('ai_decisions')
+        .select('raw_response')
+        .eq('id', id)
+        .single();
+      if (existingError) {
+        throw new Error(`AiDecisionRepository.update metadata read failed: ${existingError.message}`);
+      }
+      const existingRow = existingData && typeof existingData === 'object'
+        ? existingData as Record<string, unknown>
+        : {};
+      const existingRaw = existingRow.raw_response &&
+          typeof existingRow.raw_response === 'object' &&
+          !Array.isArray(existingRow.raw_response)
+        ? existingRow.raw_response as Record<string, unknown>
+        : {};
+      row.raw_response = { ...existingRaw, ...fields.metadata };
+    }
 
     const { data, error } = await this.db
       .from('ai_decisions')

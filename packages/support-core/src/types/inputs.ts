@@ -92,6 +92,7 @@ export interface CreateAiSettingsInput {
 export interface CreateAiDecisionInput {
   conversationId: string;
   organizationId: string;
+  sourceJobId?: string | null;
   messageId?: string | null;
   decisionType: AiDecisionType;
   confidence: number;
@@ -109,6 +110,7 @@ export interface CreateDocumentInput {
   title: string;
   sourceType: string;
   body: string;
+  contentRevision?: string;
   fileUrl?: string | null;
   fileName?: string | null;
   fileKey?: string | null;

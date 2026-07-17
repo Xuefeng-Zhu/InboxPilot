@@ -71,7 +71,7 @@ Each function reads from `Deno.env`:
 |---|---|---|
 | `INSFORGE_BASE_URL` | yes | All functions |
 | `INSFORGE_SERVICE_ROLE_KEY` | yes | All functions |
-| `SERVICE_ROLE_KEY` | sometimes (fallback) | `process-jobs` (checks this if `INSFORGE_SERVICE_ROLE_KEY` is unset) |
+| `SERVICE_ROLE_KEY` | sometimes (fallback) | `process-jobs` and the shared SMS/email inbound/status webhook runtime |
 
 Set these via the InsForge dashboard or CLI. The functions **must not** be reachable without these set.
 
@@ -135,7 +135,8 @@ Variables prefixed `NEXT_PUBLIC_` are exposed to the browser. Only the InsForge 
 
 ## Pre-deploy checklist
 
-- [ ] All 16 migration files applied in the documented order (through `014`, including both timestamped job-trigger migrations).
+- [ ] All 18 migration files applied in the documented order (through `016`, including both timestamped job-trigger migrations).
+- [ ] Migration `016` applied **before** deploying the updated routes/functions; inbound audit repair, job leases, decision idempotency, and knowledge revisions depend on it.
 - [ ] Existing `knowledge-files` bucket set to **private** in the InsForge dashboard after applying `014`.
 - [ ] Knowledge uploads use `<organization-id>/documents/...` object keys.
 - [ ] Seed data applied (optional for production).

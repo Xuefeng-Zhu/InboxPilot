@@ -6,12 +6,23 @@ const migrationPath = new URL(
   import.meta.url,
 );
 const migration = readFileSync(migrationPath, 'utf8');
+const knowledgeJobBindingMigration = readFileSync(
+  new URL(
+    '../../insforge/migrations/015_bind_knowledge_jobs_to_documents.sql',
+    import.meta.url,
+  ),
+  'utf8',
+);
 const knowledgeListPage = readFileSync(
   new URL('../../app/knowledge/page.tsx', import.meta.url),
   'utf8',
 );
 const knowledgeDetailPage = readFileSync(
   new URL('../../app/knowledge/[id]/page.tsx', import.meta.url),
+  'utf8',
+);
+const knowledgeMutations = readFileSync(
+  new URL('../../app/knowledge/mutations.ts', import.meta.url),
   'utf8',
 );
 
@@ -65,6 +76,25 @@ describe('role-aware RLS and knowledge storage migration', () => {
     expect(migration).not.toContain('CREATE POLICY support_jobs_update');
   });
 
+  it('binds browser-enqueued knowledge jobs to a document in the same organization', () => {
+    expect(knowledgeJobBindingMigration).toMatch(
+      /FUNCTION public\.knowledge_document_belongs_to_org[\s\S]*SECURITY DEFINER[\s\S]*SET search_path = pg_catalog, public/,
+    );
+    expect(knowledgeJobBindingMigration).toContain('kd.id::text = p_document_id');
+    expect(knowledgeJobBindingMigration).toContain(
+      'kd.organization_id = p_organization_id',
+    );
+    expect(knowledgeJobBindingMigration).toContain(
+      "p_organization_id,\n    ARRAY['owner', 'admin']",
+    );
+    expect(knowledgeJobBindingMigration).toContain(
+      "COALESCE(payload ->> 'documentId', payload ->> 'document_id')",
+    );
+    expect(knowledgeJobBindingMigration).toContain(
+      'public.user_has_org_role(organization_id',
+    );
+  });
+
   it('binds client-written file keys to their document organization', () => {
     const documentPolicies = migration.slice(
       migration.indexOf('CREATE POLICY knowledge_documents_select'),
@@ -94,8 +124,8 @@ describe('role-aware RLS and knowledge storage migration', () => {
   });
 
   it('stores file-only documents with an empty body so extraction failures stay failed', () => {
-    expect(knowledgeListPage).toContain('body: data.body,');
-    expect(knowledgeListPage).not.toContain("body: data.body || (fileName ?? ''),");
+    expect(knowledgeMutations).toContain('body: input.document.body,');
+    expect(knowledgeMutations).not.toContain("body: input.document.body || (fileName ?? ''),");
   });
 
   it('prevents browser audit inserts from impersonating system or AI actors', () => {
@@ -138,9 +168,10 @@ describe('role-aware RLS and knowledge storage migration', () => {
   });
 
   it('wires upload rollback and file deletion into both knowledge screens', () => {
-    expect(knowledgeListPage).toContain('file_key: fileKey');
-    expect(knowledgeListPage).toContain('rollbackKnowledgeUpload(fileKey');
-    expect(knowledgeListPage).toContain('removeKnowledgeFile(doc.file_key)');
-    expect(knowledgeDetailPage).toContain('removeKnowledgeFile(doc.file_key)');
+    expect(knowledgeMutations).toContain('file_key: fileKey');
+    expect(knowledgeMutations).toContain('rollbackKnowledgeUpload(fileKey');
+    expect(knowledgeMutations).toContain('removeKnowledgeFile(fileKey)');
+    expect(knowledgeListPage).toContain('deleteKnowledgeDocument({');
+    expect(knowledgeDetailPage).toContain('deleteKnowledgeDocument({');
   });
 });

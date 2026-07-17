@@ -27,7 +27,7 @@ InboxPilot uses **property-based testing** as the primary correctness strategy. 
 
 ```
 __tests__/                                  # Top-level UI tests (vitest, jsdom env)
-  ├── middleware.test.ts                    # Legacy filename; exercises root proxy.ts
+  ├── proxy.test.ts                         # Exercises root proxy.ts
   ├── properties/                           # UI property-based tests (fast-check)
   │   ├── button.property.test.tsx
   │   ├── conversation-item.property.test.tsx
@@ -134,7 +134,7 @@ npx vitest run __tests__/ui/
 npx vitest run packages/support-core/__tests__/integration/
 
 # Next.js proxy test (legacy test filename)
-npx vitest run __tests__/middleware.test.ts
+npx vitest run __tests__/proxy.test.ts
 ```
 
 ### By file or pattern

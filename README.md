@@ -91,8 +91,10 @@ Apply the SQL migration files in order to your InsForge PostgreSQL database:
 | `insforge/migrations/20260615074718_trigger-process-jobs-on-insert.sql` | Adds an HTTP job trigger (superseded by the next migration after the extension proved unreliable) |
 | `insforge/migrations/20260615080500_drop-broken-trigger.sql` | Removes the unreliable HTTP job trigger; scheduled processing remains the active path |
 | `insforge/migrations/014_role_aware_rls_and_knowledge_storage.sql` | Enforces role-aware settings/knowledge RLS, hides provider and widget secrets, records knowledge object keys, and adds organization-scoped storage policies |
+| `insforge/migrations/015_bind_knowledge_jobs_to_documents.sql` | Requires browser-enqueued knowledge jobs to reference a document in the same organization |
+| `insforge/migrations/016_job_and_ai_decision_idempotency.sql` | Adds retry-safe job/decision, stale-claim, knowledge-revision, and inbound-audit guards |
 
-Apply all 16 files via the InsForge SQL editor or migrations API in the order shown above. Migration `014` intentionally does not change bucket visibility: after applying it, mark the existing `knowledge-files` bucket **private** in the InsForge dashboard. Keep knowledge object keys under `<organization-id>/documents/...`; the migration's storage policies depend on that prefix.
+Apply all 18 files via the InsForge SQL editor or migrations API in the order shown above. Migration `014` intentionally does not change bucket visibility: after applying it, mark the existing `knowledge-files` bucket **private** in the InsForge dashboard. Keep knowledge object keys under `<organization-id>/documents/...`; the migration's storage policies depend on that prefix.
 
 ### Seed Data
 

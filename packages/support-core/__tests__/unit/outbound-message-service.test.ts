@@ -1,5 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { OutboundMessageService } from '../../src/services/outbound-message-service.js';
+import {
+  OutboundMessagePostDispatchError,
+  OutboundMessageService,
+} from '../../src/services/outbound-message-service.js';
 import type { ConversationRepository } from '../../src/repositories/conversation-repository.js';
 import type { ContactRepository } from '../../src/repositories/contact-repository.js';
 import type { MessageRepository } from '../../src/repositories/message-repository.js';
@@ -645,6 +648,90 @@ describe('OutboundMessageService', () => {
       await expect(
         service.sendReply('conv-email-001', 'body', USER_ACTOR),
       ).rejects.toThrow('has no email address for email reply');
+    });
+
+    it('marks persistence failures after an SMS provider accepts the message', async () => {
+      vi.mocked(messageRepo.create).mockRejectedValue(new Error('database unavailable'));
+
+      const result = service.sendReply('conv-sms-001', 'body', USER_ACTOR);
+
+      await expect(result).rejects.toBeInstanceOf(OutboundMessagePostDispatchError);
+      await expect(result).rejects.toThrow(
+        'Message delivery reached message_persistence before local finalization failed: database unavailable',
+      );
+      expect(smsAdapter.sendSms).toHaveBeenCalledTimes(1);
+
+      try {
+        await result;
+      } catch (error) {
+        expect(error).toMatchObject({
+          stage: 'message_persistence',
+          dispatchedMessage: null,
+          receipt: {
+            channel: 'sms',
+            provider: 'mock',
+            providerAccountId: 'sms-acct-001',
+            externalMessageId: 'mock_sms_1',
+            deliveryStatus: 'queued',
+          },
+        });
+      }
+    });
+
+    it('attaches the persisted message when conversation finalization fails', async () => {
+      vi.mocked(conversationRepo.update).mockRejectedValue(new Error('conversation write failed'));
+
+      const result = service.sendReply('conv-sms-001', 'body', USER_ACTOR);
+
+      await expect(result).rejects.toMatchObject({
+        name: 'OutboundMessagePostDispatchError',
+        stage: 'conversation_update',
+        dispatchedMessage: OUTBOUND_SMS_MESSAGE,
+      });
+      expect(messageRepo.create).toHaveBeenCalledTimes(1);
+      expect(auditLog.create).not.toHaveBeenCalled();
+    });
+
+    it('attaches the persisted message when audit finalization fails', async () => {
+      vi.mocked(auditLog.create).mockRejectedValue(new Error('audit write failed'));
+
+      const result = service.sendReply('conv-sms-001', 'body', USER_ACTOR);
+
+      await expect(result).rejects.toMatchObject({
+        name: 'OutboundMessagePostDispatchError',
+        stage: 'audit_log',
+        dispatchedMessage: OUTBOUND_SMS_MESSAGE,
+      });
+      expect(messageRepo.create).toHaveBeenCalledTimes(1);
+      expect(conversationRepo.update).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps webchat persistence failures retryable because no provider was called', async () => {
+      vi.mocked(conversationRepo.findById).mockResolvedValue(WEBCHAT_CONVERSATION);
+      vi.mocked(contactRepo.findById).mockResolvedValue(WEBCHAT_CONTACT);
+      const persistenceError = new Error('database unavailable');
+      vi.mocked(messageRepo.create).mockRejectedValue(persistenceError);
+
+      const result = service.sendReply('conv-webchat-001', 'body', USER_ACTOR);
+
+      await expect(result).rejects.toBe(persistenceError);
+      await expect(result).rejects.not.toBeInstanceOf(OutboundMessagePostDispatchError);
+    });
+
+    it('marks webchat cleanup failures non-retryable after the message row exists', async () => {
+      vi.mocked(conversationRepo.findById).mockResolvedValue(WEBCHAT_CONVERSATION);
+      vi.mocked(contactRepo.findById).mockResolvedValue(WEBCHAT_CONTACT);
+      vi.mocked(messageRepo.create).mockResolvedValue(OUTBOUND_WEBCHAT_MESSAGE);
+      vi.mocked(conversationRepo.update).mockRejectedValue(new Error('conversation write failed'));
+
+      const result = service.sendReply('conv-webchat-001', 'body', USER_ACTOR);
+
+      await expect(result).rejects.toMatchObject({
+        name: 'OutboundMessagePostDispatchError',
+        stage: 'conversation_update',
+        dispatchedMessage: OUTBOUND_WEBCHAT_MESSAGE,
+        receipt: expect.objectContaining({ channel: 'webchat' }),
+      });
     });
   });
 

@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { NextRequest } from 'next/server';
 import { getUserFromToken } from '../app/api/functions/_auth';
 
 vi.mock('@/lib/insforge-admin', () => ({
@@ -9,7 +10,7 @@ vi.mock('@/lib/insforge-admin', () => ({
   },
 }));
 
-function createRequest(token: string | null) {
+function createRequest(token: string | null): NextRequest {
   return {
     headers: {
       get: (name: string) => (name.toLowerCase() === 'authorization' && token ? `Bearer ${token}` : null),
@@ -17,7 +18,7 @@ function createRequest(token: string | null) {
     cookies: {
       get: () => undefined,
     },
-  };
+  } as unknown as NextRequest;
 }
 
 describe('API function auth', () => {
@@ -34,7 +35,7 @@ describe('API function auth', () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: false });
     vi.stubGlobal('fetch', fetchMock);
 
-    const user = await getUserFromToken(createRequest('forged-token') as any);
+    const user = await getUserFromToken(createRequest('forged-token'));
 
     expect(user).toBeNull();
     expect(fetchMock).toHaveBeenCalledWith(
@@ -51,6 +52,6 @@ describe('API function auth', () => {
       json: async () => ({ user: { id: 'user-1' } }),
     }));
 
-    await expect(getUserFromToken(createRequest('valid-token') as any)).resolves.toEqual({ id: 'user-1' });
+    await expect(getUserFromToken(createRequest('valid-token'))).resolves.toEqual({ id: 'user-1' });
   });
 });

@@ -4,9 +4,15 @@ import {
   isLocalMockWebhookAllowed,
   parseSmsWebhookBody,
   readWebhookProvider,
+  resolveEmailStatusWebhookContext,
   resolveEmailInboundWebhookContext,
   resolveSmsInboundWebhookContext,
+  resolveSmsStatusWebhookContext,
 } from '../../insforge/functions/_shared/webhook-credentials.ts';
+import {
+  getWebhookRuntimeConfig,
+  jsonResponse,
+} from '../../insforge/functions/_shared/webhook-runtime.ts';
 
 function queryBuilder(result) {
   const builder = {
@@ -44,6 +50,25 @@ function database(results) {
     rpc: vi.fn().mockResolvedValue({ data: null, error: null }),
   };
 }
+
+const statusResolverCases = [
+  {
+    channel: 'SMS',
+    provider: 'telnyx',
+    accountTable: 'sms_provider_accounts',
+    credentials: { webhookPublicKey: 'telnyx-public-key' },
+    signingSecret: 'telnyx-public-key',
+    resolve: resolveSmsStatusWebhookContext,
+  },
+  {
+    channel: 'email',
+    provider: 'postmark',
+    accountTable: 'email_provider_accounts',
+    credentials: { serverToken: 'postmark-server-token' },
+    signingSecret: 'postmark-server-token',
+    resolve: resolveEmailStatusWebhookContext,
+  },
+];
 
 describe('webhook credential resolution', () => {
   afterEach(() => {
@@ -285,4 +310,194 @@ describe('webhook credential resolution', () => {
       undefined,
     )).toBe(false);
   });
+
+  it('uses the same service-role fallback in every webhook handler', () => {
+    const env = new Map([
+      ['INSFORGE_BASE_URL', 'https://example.insforge.app'],
+      ['SERVICE_ROLE_KEY', 'legacy-service-role-key'],
+      ['INBOXPILOT_ALLOW_LOCAL_MOCK_WEBHOOKS', 'true'],
+    ]);
+    vi.stubGlobal('Deno', {
+      env: { get: vi.fn((key) => env.get(key)) },
+    });
+
+    expect(getWebhookRuntimeConfig()).toEqual({
+      baseUrl: 'https://example.insforge.app',
+      serviceRoleKey: 'legacy-service-role-key',
+      localMockOptIn: 'true',
+    });
+  });
+
+  it('builds consistent JSON responses for every webhook handler', async () => {
+    const response = jsonResponse({ status: 'ok' }, 202);
+
+    expect(response.status).toBe(202);
+    expect(response.headers.get('content-type')).toBe('application/json');
+    await expect(response.json()).resolves.toEqual({ status: 'ok' });
+  });
 });
+
+describe.each(statusResolverCases)(
+  '$channel status webhook credential resolution',
+  ({ provider, accountTable, credentials, signingSecret, resolve }) => {
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    it('resolves the active account recorded on the outbound message', async () => {
+      const db = database({
+        messages: { data: { provider_account_id: 'account-1' }, error: null },
+        [accountTable]: {
+          data: {
+            id: 'account-1',
+            organization_id: 'org-1',
+            provider,
+            credentials_secret_id: 'secret-1',
+            is_active: true,
+          },
+          error: null,
+        },
+      });
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
+        new Response(JSON.stringify(credentials), { status: 200 }),
+      ));
+
+      await expect(resolve(
+        db,
+        provider,
+        'external-message-1',
+        'https://example.insforge.app',
+        'service-role-key',
+      )).resolves.toEqual({
+        organizationId: 'org-1',
+        providerAccountId: 'account-1',
+        provider,
+        signingSecret,
+      });
+    });
+
+    it.each([
+      ['provider mismatch', {
+        id: 'account-1',
+        organization_id: 'org-1',
+        provider: 'different-provider',
+        credentials_secret_id: 'secret-1',
+        is_active: true,
+      }],
+      ['inactive account', {
+        id: 'account-1',
+        organization_id: 'org-1',
+        provider,
+        credentials_secret_id: 'secret-1',
+        is_active: false,
+      }],
+      ['missing account', null],
+    ])('rejects a %s', async (_name, account) => {
+      const db = database({
+        messages: { data: { provider_account_id: 'account-1' }, error: null },
+        [accountTable]: { data: account, error: null },
+      });
+      const fetchMock = vi.fn();
+      vi.stubGlobal('fetch', fetchMock);
+
+      await expect(resolve(
+        db,
+        provider,
+        'external-message-1',
+        'https://example.insforge.app',
+        'service-role-key',
+      )).resolves.toBeNull();
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('returns null when the message has no provider account', async () => {
+      const db = database({
+        messages: { data: { provider_account_id: null }, error: null },
+      });
+
+      await expect(resolve(
+        db,
+        provider,
+        'external-message-1',
+        'https://example.insforge.app',
+        'service-role-key',
+      )).resolves.toBeNull();
+    });
+
+    it('resolves a handler-approved mock callback without a remote secret lookup', async () => {
+      const db = database({
+        messages: { data: { provider_account_id: 'mock-account' }, error: null },
+      });
+      const fetchMock = vi.fn();
+      vi.stubGlobal('fetch', fetchMock);
+
+      await expect(resolve(
+        db,
+        'mock',
+        'mock-message-1',
+        'http://127.0.0.1:54321',
+        'service-role-key',
+      )).resolves.toEqual({
+        organizationId: '',
+        providerAccountId: 'mock-account',
+        provider: 'mock',
+        signingSecret: '',
+      });
+      expect(db.from).toHaveBeenCalledTimes(1);
+      expect(db.from).toHaveBeenCalledWith('messages');
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('surfaces message and provider-account database failures', async () => {
+      const messageFailureDb = database({
+        messages: { data: null, error: { message: 'messages unavailable' } },
+      });
+      await expect(resolve(
+        messageFailureDb,
+        provider,
+        'external-message-1',
+        'https://example.insforge.app',
+        'service-role-key',
+      )).rejects.toThrow('findMessageProviderAccountId failed: messages unavailable');
+
+      const accountFailureDb = database({
+        messages: { data: { provider_account_id: 'account-1' }, error: null },
+        [accountTable]: { data: null, error: { message: 'accounts unavailable' } },
+      });
+      await expect(resolve(
+        accountFailureDb,
+        provider,
+        'external-message-1',
+        'https://example.insforge.app',
+        'service-role-key',
+      )).rejects.toThrow('findProviderAccount failed: accounts unavailable');
+    });
+
+    it('returns null when the configured signing secret is missing', async () => {
+      const db = database({
+        messages: { data: { provider_account_id: 'account-1' }, error: null },
+        [accountTable]: {
+          data: {
+            id: 'account-1',
+            organization_id: 'org-1',
+            provider,
+            credentials_secret_id: 'missing-secret',
+            is_active: true,
+          },
+          error: null,
+        },
+      });
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
+        new Response('', { status: 404 }),
+      ));
+
+      await expect(resolve(
+        db,
+        provider,
+        'external-message-1',
+        'https://example.insforge.app',
+        'service-role-key',
+      )).resolves.toBeNull();
+    });
+  },
+);

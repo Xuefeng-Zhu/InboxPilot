@@ -21,6 +21,7 @@ interface DocumentRow {
   title: string;
   source_type: string;
   body: string;
+  content_revision: string | null;
   status: KnowledgeDocumentStatus;
   error_message: string | null;
   file_url: string | null;
@@ -117,6 +118,7 @@ function toDocument(row: DocumentRow): KnowledgeDocument {
     title: row.title,
     sourceType: row.source_type,
     body: row.body,
+    contentRevision: row.content_revision ?? null,
     status: row.status,
     errorMessage: row.error_message,
     fileUrl: row.file_url,
@@ -167,6 +169,7 @@ export class KnowledgeRepository {
       title: input.title,
       source_type: input.sourceType,
       body: input.body,
+      ...(input.contentRevision ? { content_revision: input.contentRevision } : {}),
       file_url: input.fileUrl ?? null,
       file_name: input.fileName ?? null,
       file_key: input.fileKey ?? null,
@@ -195,6 +198,7 @@ export class KnowledgeRepository {
     if (updates.title !== undefined) row.title = updates.title;
     if (updates.sourceType !== undefined) row.source_type = updates.sourceType;
     if (updates.body !== undefined) row.body = updates.body;
+    if (updates.contentRevision !== undefined) row.content_revision = updates.contentRevision;
     if (updates.status !== undefined) row.status = updates.status;
     if (updates.errorMessage !== undefined) row.error_message = updates.errorMessage;
     row.updated_at = new Date().toISOString();
@@ -211,6 +215,31 @@ export class KnowledgeRepository {
     }
 
     return toDocument(data as DocumentRow);
+  }
+
+  /** Update only when the queued content revision is still current. */
+  async updateDocumentForRevision(
+    id: string,
+    contentRevision: string,
+    updates: Partial<KnowledgeDocument>,
+  ): Promise<boolean> {
+    const row: Record<string, unknown> = {};
+    if (updates.status !== undefined) row.status = updates.status;
+    if (updates.errorMessage !== undefined) row.error_message = updates.errorMessage;
+    row.updated_at = new Date().toISOString();
+
+    const { data, error } = await this.db
+      .from('knowledge_documents')
+      .update(row)
+      .eq('id', id)
+      .eq('content_revision', contentRevision)
+      .select('id')
+      .maybeSingle();
+
+    if (error) {
+      throw new Error(`KnowledgeRepository.updateDocumentForRevision failed: ${error.message}`);
+    }
+    return data !== null && data !== undefined;
   }
 
   /** Delete a knowledge document and all associated chunks (cascade). */
@@ -283,6 +312,36 @@ export class KnowledgeRepository {
 
     const resultRows = (data ?? []) as ChunkRow[];
     return resultRows.map(toChunk);
+  }
+
+  /** Atomically replace chunks only if the queued revision is still current. */
+  async replaceChunksForRevision(
+    documentId: string,
+    organizationId: string,
+    contentRevision: string,
+    chunks: CreateChunkInput[],
+  ): Promise<boolean> {
+    const mismatchedChunk = chunks.find(
+      (chunk) => chunk.documentId !== documentId || chunk.organizationId !== organizationId,
+    );
+    if (mismatchedChunk) {
+      throw new Error('KnowledgeRepository.replaceChunksForRevision failed: chunk document/org mismatch');
+    }
+
+    const { data, error } = await this.db.rpc('replace_knowledge_chunks_if_revision', {
+      p_document_id: documentId,
+      p_organization_id: organizationId,
+      p_content_revision: contentRevision,
+      p_chunks: chunks.map((chunk) => ({
+        content: chunk.content,
+        embedding: chunk.embedding,
+        metadata: chunk.metadata ?? {},
+      })),
+    });
+    if (error) {
+      throw new Error(`KnowledgeRepository.replaceChunksForRevision failed: ${error.message}`);
+    }
+    return data === true || (Array.isArray(data) && data[0] === true);
   }
 
   /** Delete all chunks belonging to a document. */

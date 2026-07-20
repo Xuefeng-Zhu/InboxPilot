@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { readResponseJsonObject } from '@/lib/http-json';
 import { getAccessToken } from '@/lib/insforge';
@@ -31,6 +31,9 @@ interface AiDecisionRow {
   created_at: string;
 }
 
+const REGENERATED_DRAFT_POLL_INTERVAL_MS = 2_000;
+const REGENERATED_DRAFT_POLL_TIMEOUT_MS = 30_000;
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
@@ -50,10 +53,13 @@ export function AiDraftPanel({ conversationId, aiState, onPrefillComposer }: AiD
     data: decisionData,
     isLoading: loading,
     error: decisionError,
+    refetch: refetchDecision,
   } = useAiDecision(shouldLoadDecision ? conversationId : undefined);
   const [actionLoading, setActionLoading] = useState<'approve' | 'regenerate' | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [supersededDecisionId, setSupersededDecisionId] = useState<string | null>(null);
+  const [regenerationRecoveryError, setRegenerationRecoveryError] = useState<string | null>(null);
+  const refetchDecisionRef = useRef(refetchDecision);
 
   const queriedDecision = (decisionData as AiDecisionRow | null | undefined) ?? null;
   const decision =
@@ -70,6 +76,7 @@ export function AiDraftPanel({ conversationId, aiState, onPrefillComposer }: AiD
     setActionLoading(null);
     setActionError(null);
     setSupersededDecisionId(null);
+    setRegenerationRecoveryError(null);
   }, [conversationId]);
 
   useEffect(() => {
@@ -79,8 +86,72 @@ export function AiDraftPanel({ conversationId, aiState, onPrefillComposer }: AiD
       queriedDecision.id !== supersededDecisionId
     ) {
       setSupersededDecisionId(null);
+      setRegenerationRecoveryError(null);
     }
   }, [queriedDecision?.id, supersededDecisionId]);
+
+  useEffect(() => {
+    refetchDecisionRef.current = refetchDecision;
+  }, [refetchDecision]);
+
+  useEffect(() => {
+    if (!supersededDecisionId || regenerationRecoveryError) return;
+
+    let cancelled = false;
+    let pollTimer: ReturnType<typeof setTimeout> | null = null;
+    const deadline = Date.now() + REGENERATED_DRAFT_POLL_TIMEOUT_MS;
+
+    const stopWithError = (message: string) => {
+      if (!cancelled) setRegenerationRecoveryError(message);
+    };
+
+    const poll = async () => {
+      const result = await refetchDecisionRef.current();
+      if (cancelled) return;
+
+      if (result.error) {
+        stopWithError(
+          result.error instanceof Error
+            ? `Could not refresh the regenerated draft: ${result.error.message}`
+            : 'Could not refresh the regenerated draft.',
+        );
+        return;
+      }
+
+      const refreshedDecisionId = getDecisionId(result.data);
+      if (
+        refreshedDecisionId &&
+        refreshedDecisionId !== supersededDecisionId
+      ) {
+        setSupersededDecisionId(null);
+        setRegenerationRecoveryError(null);
+        return;
+      }
+
+      const remainingMs = deadline - Date.now();
+      if (remainingMs <= 0) {
+        stopWithError(
+          'The regenerated draft is taking longer than expected. Refresh the conversation to check again.',
+        );
+        return;
+      }
+
+      pollTimer = setTimeout(
+        () => void poll(),
+        Math.min(REGENERATED_DRAFT_POLL_INTERVAL_MS, remainingMs),
+      );
+    };
+
+    pollTimer = setTimeout(
+      () => void poll(),
+      REGENERATED_DRAFT_POLL_INTERVAL_MS,
+    );
+
+    return () => {
+      cancelled = true;
+      if (pollTimer) clearTimeout(pollTimer);
+    };
+  }, [regenerationRecoveryError, supersededDecisionId]);
 
   // ---- Approve handler ---------------------------------------------------
 
@@ -151,6 +222,7 @@ export function AiDraftPanel({ conversationId, aiState, onPrefillComposer }: AiD
 
       const previousDecisionId = decision?.id ?? null;
       if (previousDecisionId) {
+        setRegenerationRecoveryError(null);
         setSupersededDecisionId(previousDecisionId);
         queryClient.setQueryData(
           queryKeys.aiDecision(conversationId),
@@ -220,6 +292,18 @@ export function AiDraftPanel({ conversationId, aiState, onPrefillComposer }: AiD
 
   if (aiState === 'drafted') {
     if (loading || (supersededDecisionId && !decision)) {
+      if (regenerationRecoveryError) {
+        return (
+          <div
+            className="border-t border-[var(--m03-red-line)] bg-[var(--m03-red-fill)] px-6 py-3 text-[13px] text-[var(--m03-red)]"
+            role="alert"
+            aria-label="AI draft regeneration failed"
+          >
+            {regenerationRecoveryError}
+          </div>
+        );
+      }
+
       return (
         <div
           className="border-t border-[var(--m03-orange-line)] bg-[var(--m03-orange-fill)] px-6 py-3"

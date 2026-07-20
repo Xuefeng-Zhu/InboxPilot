@@ -3,12 +3,12 @@
 **Always loaded** for any work on support-core tests, mock factory patterns, or property-based correctness properties.
 
 ## OVERVIEW
-35 test files for the portable business logic. Three categories: **18 unit tests** (mocked interfaces), **11 property-based tests** (fast-check, `numRuns: 100`), and **6 integration stubs** (100% `it.todo` placeholders requiring a real DB). All run via `cd packages/support-core && npm test` or `npm test` from the root.
+39 test files for the portable business logic. Three categories: **24 unit tests** (mocked interfaces), **14 property-based tests** (fast-check, normally `numRuns: 100`), and **1 opt-in live seed integration suite** requiring a disposable InsForge branch. All local tests run via `npm test` from the root; live suites use the dedicated `npm run test:integration:*` commands.
 
 ## STRUCTURE
 ```
 __tests__/
-├── unit/                          18 files (*.test.ts, example-based)
+├── unit/                          24 files (*.test.ts, example-based)
 │   ├── inbound-message-service.test.ts    canonical mock factory pattern
 │   ├── outbound-message-service.test.ts   most extensive vi.mocked() usage
 │   ├── ai-agent-service.test.ts           mocks AI + JobQueue + repos
@@ -26,7 +26,7 @@ __tests__/
 │   ├── mock-email-adapter.test.ts         real test double (not mocked)
 │   ├── sms-stubs.test.ts                  describe.each() over stub adapters
 │   └── email-stubs.test.ts
-├── properties/                    11 files (*.prop.test.ts, fast-check)
+├── properties/                    14 files (*.prop.test.ts, fast-check)
 │   ├── ai-decision.prop.test.ts           JSON round-trip
 │   ├── audit-log.prop.test.ts             immutability (uses `import * as fc`)
 │   ├── auto-reply.prop.test.ts            threshold gating
@@ -38,19 +38,14 @@ __tests__/
 │   ├── rbac.prop.test.ts                  13 properties
 │   ├── state-machine.prop.test.ts
 │   └── webhook-roundtrip.prop.test.ts
-└── integration/                   6 files, ALL 100% it.todo placeholders
-    ├── inbound-email-flow.test.ts         7 it.todo
-    ├── inbound-sms-flow.test.ts           7 it.todo
-    ├── outbound-message-flow.test.ts      7 it.todo
-    ├── realtime-events.test.ts             8 it.todo
-    ├── rls-policies.test.ts                9 it.todo
-    └── seed-idempotency.test.ts            7 it.todo
+└── integration/                   1 opt-in live suite
+    └── seed-idempotency.test.ts           guarded destructive seed replay
 ```
 
 ## WHERE TO LOOK
 - **Add a unit test for a service** → `__tests__/unit/<service-name>.test.ts`. Use the canonical mock-factory pattern from `inbound-message-service.test.ts`.
 - **Add a property test** → `__tests__/properties/<name>.prop.test.ts`. `numRuns: 100`, `fc.assert(fc.property(...))`.
-- **Implement an integration test** → the placeholders describe what to test. Need a real InsForge DB.
+- **Add an integration test** → put backend-facing live coverage under root `__tests__/insforge/`, guard it with `INBOXPILOT_LIVE_INTEGRATION=1`, and refuse production/non-`qa-*` projects before mutation.
 - **Test a repository** → `__tests__/unit/<repo>-repository.test.ts` (uses `vi.fn()` chain stubs, not a real DB).
 - **Test an adapter** → `__tests__/unit/<adapter>.test.ts` (instantiate the adapter directly, no HTTP-level mocking).
 
@@ -59,7 +54,7 @@ __tests__/
 2. **Mock factories inlined per test file** — no shared `test-helpers/`. Each file declares its own `createMock*Repo()` and `SAMPLE_*` constants.
 3. **Adapter tests use real instances, not mocks** — `MockSmsAdapter` / `MockEmailAdapter` are real test doubles with deterministic counters.
 4. **Stub-adapter tests assert "not implemented"** — `sms-stubs.test.ts` and `email-stubs.test.ts` use `describe.each()` over the 4 SMS / 4 email stubs.
-5. **Integration tests are placeholders** — don't run them; they need a real InsForge DB.
+5. **Live integration tests are opt-in** — normal `npm test` skips remote mutation. Use only a linked disposable `qa-*` InsForge branch and the dedicated package script.
 
 ## CONVENTIONS
 ### Mock factory pattern (from `inbound-message-service.test.ts`):
@@ -98,14 +93,14 @@ it('round-trips', () => {
 - Using `vi.mock()` at the module level in support-core tests (preference: per-test `vi.fn()` factories).
 - Setting `numRuns: < 50` (slow tests but correctness matters more).
 - Mocking `MockSmsAdapter` / `MockEmailAdapter` (use as real test doubles).
-- Implementing the integration test stubs without a real InsForge DB (they stay placeholders).
+- Running live integration tests against production or an unbranched project.
 - Using `vi.spyOn` instead of `vi.fn()` (project prefers the factory pattern).
 - `as any` in production code (allowed in tests, but only as `as unknown as X`).
 
 ## UNIQUE
 - **`audit-log.prop.test.ts` uses `import * as fc`** (the only support-core property test that does — the other 10 use `import fc from 'fast-check'`).
-- **45 `it.todo` placeholders across 6 integration files** — pass as "todo" without exercising code. Mark this when adding CI dashboards.
+- **No integration placeholders remain.** Seed idempotency lives here; inbound/outbound, RLS, and realtime live suites live under root `__tests__/insforge/`.
 - **`sms-stubs.test.ts` uses `describe.each()`** over the 4 SMS stub adapters — the only file that does so.
 - **`twilio-sms-adapter.test.ts` and `telnyx-sms-adapter.test.ts` test webhook signature verification** with constructed inputs (no HTTP-level mocking).
 - **No test-helpers, no __mocks__, no fixtures dirs** — entirely inlined per file.
-- **The integration test placeholders are executable documentation** of expected integration scenarios — they describe what the tests SHOULD do but can't yet.
+- **Live integration suites are production-guarded** and clean up temporary organization fixtures; the seed suite recreates only the fixed seed organization on a disposable branch.

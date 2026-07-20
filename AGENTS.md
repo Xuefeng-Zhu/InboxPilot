@@ -113,6 +113,7 @@ Next.js Client (agent actions)
 | `npm test` | Run all tests (Vitest) |
 | `npm run test:watch` | Test watch mode |
 | `npm run test:core` | Run support-core tests only |
+| `npm run test:integration:*` | Run one guarded live suite against a linked disposable `qa-*` branch |
 | `npm run lint` | `tsc --noEmit`, Deno safety scan, and `deno check` for all 9 function entrypoints |
 | `cd packages/support-core && npm test` | Support-core tests only |
 | `node scripts/mock-sms.mjs inbound "Hi"` | Simulate SMS traffic against real backend |
@@ -132,7 +133,7 @@ Next.js Client (agent actions)
 - **Migration count: 25 files.** This includes numbered migrations `001` through `023` plus two timestamped job-trigger migrations; preserve the documented application order because the second timestamped file drops the first file's unreliable trigger.
 - **`app/symphony/` is built but undocumented** in `README.md` and the original AGENTS.md. Has its own 7 components, 3 tests, and a data hook (`useSymphony.ts`), linked from Sidebar. Treat as in-progress.
 - **`TelnyxSmsAdapter.verifyWebhook` verifies ed25519 signatures** using the configured Telnyx public key in `signingSecret` (hex/base64/base64url) and a 5-minute timestamp replay window.
-- **6 of 6 integration test files are 100% `it.todo` placeholders** (45 placeholders total) — they need a real InsForge DB; pass as "todo" without exercising code.
+- **Six opt-in live integration suites replace the former 45 placeholders.** Seed idempotency lives under support-core; inbound SMS/email, outbound, RLS, and realtime live under root `__tests__/insforge/`. Normal `npm test` skips their remote mutations.
 - **`proxy.ts` checks cookie PRESENCE only** (not JWT validity). Real auth boundary is in `app/api/functions/_auth.ts` and `insforge/functions/_shared/verify-jwt.ts`.
 - **`insforge/functions/_bundled/` is deno bundle output**, mtime `Jun 8` (older than entrypoints `Jun 14`). Regenerate before deploy.
 - **`.kiro/settings/mcp.json` contains plaintext API keys** (Stitch + InsForge). If you fork publicly, scrub these.

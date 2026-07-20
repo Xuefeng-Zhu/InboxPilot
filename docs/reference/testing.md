@@ -13,7 +13,7 @@ InboxPilot uses **property-based testing** as the primary correctness strategy. 
 - **React Testing Library** for UI component tests.
 - **jsdom** for browser-like test environment.
 - **Example-based unit tests** for service-level logic with mocks.
-- **Opt-in live integration tests and scenario stubs** for database-dependent flows.
+- **Opt-in live integration tests** for database-dependent flows.
 
 ### Test file patterns
 

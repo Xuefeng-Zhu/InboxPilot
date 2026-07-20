@@ -90,7 +90,7 @@ Pause scheduled `process-jobs` invocations and let active work finish before app
 
 - 1 organization ("Acme Support") with 1 owner member
 - 3 contacts (mix of SMS and email)
-- 5 conversations with 10 messages
+- 5 conversations with 9 persisted messages and 1 pending AI draft decision
 - 2 knowledge documents with chunks and embeddings
 - Sample AI settings
 

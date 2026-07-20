@@ -116,7 +116,7 @@ The seed script is idempotent — running it multiple times will not create dupl
 - 1 organization with 1 owner member
 - 3 contacts (SMS and email)
 - 5 conversations across SMS and email channels
-- 10 messages with varied sender types and directions
+- 9 persisted messages plus 1 pending AI draft decision
 - 2 knowledge documents with chunks and embeddings
 - Sample AI settings
 

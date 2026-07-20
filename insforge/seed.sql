@@ -7,7 +7,8 @@
 --   1 owner member
 --   3 contacts
 --   5 conversations (SMS + email, various statuses)
---   10 messages (varied sender_types and directions)
+--   9 messages (varied sender_types and directions)
+--   1 pending AI draft decision
 --   2 knowledge documents with chunks and placeholder embeddings
 --   1 AI settings record
 
@@ -72,14 +73,15 @@ ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO conversations (id, organization_id, contact_id, channel, status, ai_state, subject, last_message_at)
 VALUES
-  -- Conv 1: Alice, SMS, open, AI drafted a reply
+  -- Conv 1: Alice, SMS, open; the pending draft is bound after its source
+  -- message and AI decision are inserted below.
   (
     'd0000000-0000-4000-8000-000000000001',
     'a0000000-0000-4000-8000-000000000001',
     'c0000000-0000-4000-8000-000000000001',
     'sms',
     'open',
-    'drafted',
+    'idle',
     NULL,
     '2025-01-15 10:30:00+00'
   ),
@@ -130,12 +132,13 @@ VALUES
 ON CONFLICT (id) DO NOTHING;
 
 -- =============================================================================
--- 5. Messages (10) — varied sender_types and directions
+-- 5. Messages (9) — varied sender_types and directions
 -- =============================================================================
 
 INSERT INTO messages (id, conversation_id, sender_type, sender_id, direction, channel, body, subject, delivery_status)
 VALUES
-  -- Conv 1 (Alice SMS): inbound from contact, then AI draft outbound
+  -- Conv 1 (Alice SMS): inbound from contact; its unsent draft remains an
+  -- ai_decisions row until an agent approves it.
   (
     'e0000000-0000-4000-8000-000000000001',
     'd0000000-0000-4000-8000-000000000001',
@@ -146,17 +149,6 @@ VALUES
     'Hi, I need help with my account login. It keeps saying invalid password.',
     NULL,
     'delivered'
-  ),
-  (
-    'e0000000-0000-4000-8000-000000000002',
-    'd0000000-0000-4000-8000-000000000001',
-    'ai',
-    NULL,
-    'outbound',
-    'sms',
-    'Hello! I can help you reset your password. Please visit our password reset page at https://acme.example.com/reset. Let me know if you need further assistance.',
-    NULL,
-    'pending'
   ),
 
   -- Conv 2 (Bob email): inbound from contact, then system escalation note
@@ -257,7 +249,53 @@ VALUES
 ON CONFLICT (id) DO NOTHING;
 
 -- =============================================================================
--- 6. Knowledge Documents (2) with chunks and placeholder embeddings
+-- 6. Pending AI Draft Decision (1)
+-- =============================================================================
+
+-- A draft is not an outbound message until an agent approves it. Insert the
+-- immutable decision first, then publish its exact owner pointer in the same
+-- seed statement. The UPDATE only runs when the decision was newly inserted,
+-- so replaying the seed does not overwrite later conversation state.
+WITH inserted_draft AS (
+  INSERT INTO ai_decisions (
+    id,
+    conversation_id,
+    organization_id,
+    message_id,
+    decision_type,
+    confidence,
+    reasoning_summary,
+    response_text,
+    tags,
+    requires_human,
+    raw_response
+  )
+  VALUES (
+    'a2000000-0000-4000-8000-000000000001',
+    'd0000000-0000-4000-8000-000000000001',
+    'a0000000-0000-4000-8000-000000000001',
+    'e0000000-0000-4000-8000-000000000001',
+    'respond',
+    0.92,
+    'The password-reset FAQ directly answers the customer question.',
+    'Hello! I can help you reset your password. Please visit our password reset page at https://acme.example.com/reset. Let me know if you need further assistance.',
+    ARRAY['account', 'password-reset'],
+    false,
+    '{"seed": true}'::jsonb
+  )
+  ON CONFLICT (id) DO NOTHING
+  RETURNING id
+)
+UPDATE conversations AS conversation
+SET
+  ai_state = 'drafted',
+  pending_ai_decision_id = inserted_draft.id,
+  updated_at = now()
+FROM inserted_draft
+WHERE conversation.id = 'd0000000-0000-4000-8000-000000000001';
+
+-- =============================================================================
+-- 7. Knowledge Documents (2) with chunks and placeholder embeddings
 -- =============================================================================
 
 -- Document 1: FAQ
@@ -331,7 +369,7 @@ VALUES
 ON CONFLICT (id) DO NOTHING;
 
 -- =============================================================================
--- 7. AI Settings
+-- 8. AI Settings
 -- =============================================================================
 
 INSERT INTO ai_settings (id, organization_id, ai_mode, confidence_threshold, context_window_size, max_consecutive_failures, knowledge_similarity_threshold, escalation_keywords, system_prompt, model, embedding_model)

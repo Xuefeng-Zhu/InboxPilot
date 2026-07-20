@@ -64,6 +64,7 @@ interface InboxPilotWidgetWindow extends Window {
   let isOpen = false;
   let destroyed = false;
   let togglePending = false;
+  let pendingDraft: string | null = null;
   const requestAbortController = new AbortController();
 
   // ---------------------------------------------------------------------------
@@ -282,6 +283,15 @@ interface InboxPilotWidgetWindow extends Window {
     iframeEl.setAttribute('title', 'Chat widget');
     iframeEl.setAttribute('allow', 'clipboard-write');
 
+    const mountedIframe = iframeEl;
+    mountedIframe.addEventListener('load', () => {
+      if (mountedIframe !== iframeEl || !pendingDraft) return;
+      mountedIframe.contentWindow?.postMessage({
+        type: 'inboxpilot:restore_draft',
+        draft: pendingDraft,
+      }, appOrigin);
+    }, { once: true });
+
     container.appendChild(iframeEl);
   }
 
@@ -334,8 +344,17 @@ interface InboxPilotWidgetWindow extends Window {
       visitorToken = event.data.token;
       localStorage.setItem(STORAGE_KEY, event.data.token);
     }
+    if (event.data?.type === 'inboxpilot:draft_restored') {
+      pendingDraft = null;
+    }
     if (event.data?.type === 'inboxpilot:auth_expired') {
       // Token expired mid-session — tear down iframe and re-init on next open
+      if (
+        typeof event.data.draft === 'string' &&
+        event.data.draft.trim()
+      ) {
+        pendingDraft = event.data.draft;
+      }
       localStorage.removeItem(STORAGE_KEY);
       visitorToken = null;
       if (iframeEl) {

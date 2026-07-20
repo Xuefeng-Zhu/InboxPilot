@@ -80,4 +80,56 @@ describe('embeddable widget lifecycle', () => {
     const iframe = document.querySelector('iframe');
     expect(new URL(iframe?.src ?? '').searchParams.get('prechat')).toBe('1');
   });
+
+  it('restores a draft after an expired session replaces the iframe', async () => {
+    let initCalls = 0;
+    vi.stubGlobal('fetch', vi.fn(() => {
+      initCalls += 1;
+      return Promise.resolve(new Response(JSON.stringify({
+        data: { visitorToken: `fresh-token-${initCalls}` },
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }));
+    }));
+
+    await import('../../widget-src/widget');
+    document.getElementById('inboxpilot-widget-btn')?.click();
+
+    await vi.waitFor(() => {
+      expect(document.querySelector('iframe')).not.toBeNull();
+    });
+    const firstIframe = document.querySelector('iframe');
+    const firstIframeWindow = firstIframe?.contentWindow ?? null;
+    expect(firstIframeWindow).not.toBeNull();
+
+    window.dispatchEvent(new MessageEvent('message', {
+      origin: 'https://app.example.com',
+      source: firstIframeWindow,
+      data: {
+        type: 'inboxpilot:auth_expired',
+        draft: 'Please keep this draft',
+      },
+    }));
+
+    expect(firstIframe?.isConnected).toBe(false);
+    expect(document.querySelector('iframe')).toBeNull();
+
+    document.getElementById('inboxpilot-widget-btn')?.click();
+    await vi.waitFor(() => {
+      expect(document.querySelector('iframe')).not.toBeNull();
+    });
+
+    const replacementIframe = document.querySelector('iframe');
+    const replacementWindow = replacementIframe?.contentWindow;
+    expect(replacementWindow).not.toBeNull();
+    const restorePostMessage = vi.spyOn(replacementWindow!, 'postMessage');
+
+    replacementIframe?.dispatchEvent(new Event('load'));
+
+    expect(restorePostMessage).toHaveBeenCalledWith({
+      type: 'inboxpilot:restore_draft',
+      draft: 'Please keep this draft',
+    }, 'https://app.example.com');
+  });
 });

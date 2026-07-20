@@ -81,6 +81,23 @@ function WidgetChatContent() {
   const identifyingRef = useRef(false);
   const preChatCompletedRef = useRef(false);
 
+  useEffect(() => {
+    const handleParentMessage = (event: MessageEvent) => {
+      if (
+        event.source !== window.parent ||
+        event.data?.type !== 'inboxpilot:restore_draft' ||
+        typeof event.data.draft !== 'string' ||
+        !event.data.draft.trim()
+      ) return;
+
+      setInput((current) => current || event.data.draft);
+      window.parent.postMessage({ type: 'inboxpilot:draft_restored' }, '*');
+    };
+
+    window.addEventListener('message', handleParentMessage);
+    return () => window.removeEventListener('message', handleParentMessage);
+  }, []);
+
   // Deduplicated message handler for realtime
   const handleRealtimeMessage = useCallback((msg: ChatMessage) => {
     if (messageIdsRef.current.has(msg.id)) return;
@@ -313,7 +330,10 @@ function WidgetChatContent() {
 
       if (res.status === 401) {
         restoreFailedMessage('Your chat session expired. Reconnecting…');
-        window.parent.postMessage({ type: 'inboxpilot:auth_expired' }, '*');
+        window.parent.postMessage({
+          type: 'inboxpilot:auth_expired',
+          draft: text,
+        }, '*');
         return;
       }
 

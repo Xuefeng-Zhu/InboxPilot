@@ -2,7 +2,7 @@
  * @vitest-environment jsdom
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 const searchParams = new URLSearchParams(
   't=visitor-token&prechat=1&color=%23123456',
@@ -236,5 +236,53 @@ describe('WidgetChatPage', () => {
     });
     expect(screen.queryByRole('alert')).toBeNull();
     expect(screen.getByText('Please retry this message')).not.toBeNull();
+  });
+
+  it('hands an expired-session draft to the parent and accepts it back', async () => {
+    const fetchMock = vi.fn(
+      (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+        const url = String(input);
+        if (url.includes('webchat-session-info')) {
+          return Promise.resolve(jsonResponse({
+            data: { requiresPreChat: false, history: [] },
+          }));
+        }
+        if (url.includes('webchat-inbound') && init?.method === 'POST') {
+          return Promise.resolve(jsonResponse({ error: 'Session expired' }, 401));
+        }
+        return Promise.reject(new Error(`Unexpected fetch: ${url}`));
+      },
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const parentPostMessage = vi.spyOn(window.parent, 'postMessage');
+
+    render(<WidgetChatPage />);
+
+    const input = await screen.findByLabelText('Message input');
+    fireEvent.change(input, { target: { value: 'Keep this draft' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
+
+    await waitFor(() => {
+      expect(parentPostMessage).toHaveBeenCalledWith({
+        type: 'inboxpilot:auth_expired',
+        draft: 'Keep this draft',
+      }, '*');
+    });
+
+    fireEvent.change(input, { target: { value: '' } });
+    act(() => {
+      window.dispatchEvent(new MessageEvent('message', {
+        data: {
+          type: 'inboxpilot:restore_draft',
+          draft: 'Keep this draft',
+        },
+        source: window.parent,
+      }));
+    });
+
+    expect((input as HTMLInputElement).value).toBe('Keep this draft');
+    expect(parentPostMessage).toHaveBeenCalledWith({
+      type: 'inboxpilot:draft_restored',
+    }, '*');
   });
 });

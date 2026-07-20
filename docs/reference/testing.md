@@ -75,7 +75,7 @@ packages/support-core/__tests__/            # support-core tests (vitest, node e
       └── seed-idempotency.test.ts
 ```
 
-The test runner is configured in `vitest.config.ts` to pick up both `__tests__/**` and `packages/support-core/__tests__/**`, with both `.test.ts(x)` and `.prop.test.ts` / `.property.test.ts(x)` patterns.
+The test runner is configured in `vitest.config.mts` to pick up both `__tests__/**` and `packages/support-core/__tests__/**`, with both `.test.ts(x)` and `.prop.test.ts` / `.property.test.ts(x)` patterns.
 
 ---
 
@@ -143,7 +143,7 @@ npx vitest run -t "normalizePhone"
 
 ### Test config
 
-`vitest.config.ts`:
+`vitest.config.mts`:
 - Environment: `node` (default; UI tests use jsdom via per-file directive or may need a separate project)
 - Globals: enabled (no need to `import { describe, it, expect } from 'vitest'`)
 - Path aliases: `@support-core` → `packages/support-core/src`, `@` → repo root

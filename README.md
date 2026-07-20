@@ -267,7 +267,7 @@ packages/support-core/__tests__/
 │       │   └── utils/            # Normalization, chunking
 │       └── __tests__/            # Tests
 ├── proxy.ts                       # Next.js auth proxy
-├── vitest.config.ts              # Test configuration
+├── vitest.config.mts             # Test configuration
 └── .env.example                  # Environment variable template
 ```
 

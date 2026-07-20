@@ -1,5 +1,8 @@
+import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
-import path from 'path';
+import path from 'node:path';
+
+const rootDir = fileURLToPath(new URL('.', import.meta.url));
 
 export default defineConfig({
   esbuild: {
@@ -21,8 +24,8 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      '@support-core': path.resolve(__dirname, 'packages/support-core/src'),
-      '@': path.resolve(__dirname),
+      '@support-core': path.resolve(rootDir, 'packages/support-core/src'),
+      '@': rootDir,
     },
   },
 });

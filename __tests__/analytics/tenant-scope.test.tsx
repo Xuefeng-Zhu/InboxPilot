@@ -3,13 +3,19 @@
  */
 
 import React from 'react';
-import { render, waitFor } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import AnalyticsPage from '@/app/analytics/page';
 
 const mocks = vi.hoisted(() => ({
   eqCalls: [] as Array<{ column: string; value: unknown }>,
   ltCalls: [] as Array<{ column: string; value: unknown }>,
+  from: vi.fn(),
+  membership: {
+    data: 'org-1' as string | null | undefined,
+    isLoading: false,
+    error: null as Error | null,
+  },
 }));
 
 vi.mock('@/lib/auth-context', () => ({
@@ -17,7 +23,7 @@ vi.mock('@/lib/auth-context', () => ({
 }));
 
 vi.mock('@/lib/queries', () => ({
-  useOrgMembership: () => ({ data: 'org-1' }),
+  useOrgMembership: () => mocks.membership,
   useOrganization: () => ({ data: { name: 'Acme' } }),
 }));
 
@@ -56,13 +62,24 @@ vi.mock('@/lib/insforge', () => {
   return {
     insforge: {
       database: {
-        from: vi.fn(() => makeBuilder()),
+        from: mocks.from.mockImplementation(() => makeBuilder()),
       },
     },
   };
 });
 
 describe('Analytics tenant scoping', () => {
+  beforeEach(() => {
+    mocks.eqCalls = [];
+    mocks.ltCalls = [];
+    mocks.membership = { data: 'org-1', isLoading: false, error: null };
+    mocks.from.mockClear();
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
   it('filters conversation metrics to the current organization', async () => {
     render(<AnalyticsPage />);
 
@@ -78,5 +95,30 @@ describe('Analytics tenant scoping', () => {
         },
       ]);
     });
+  });
+
+  it.each([
+    {
+      label: 'missing',
+      membership: { data: null, isLoading: false, error: null },
+      expected: 'No workspace membership was found.',
+    },
+    {
+      label: 'failed',
+      membership: {
+        data: undefined,
+        isLoading: false,
+        error: new Error('membership unavailable'),
+      },
+      expected: 'Could not load your workspace.',
+    },
+  ])('shows an actionable state when membership is $label', ({ membership, expected }) => {
+    mocks.membership = membership;
+
+    render(<AnalyticsPage />);
+
+    expect(screen.getByRole('alert').textContent).toContain(expected);
+    expect(screen.queryByText('Loading analytics…')).toBeNull();
+    expect(mocks.from).not.toHaveBeenCalled();
   });
 });

@@ -164,10 +164,14 @@ function computeVolumeBucketCount(
 
 export default function AnalyticsPage() {
   const { user, loading: authLoading } = useAuth();
-  const { data: orgId } = useOrgMembership(user?.id);
+  const {
+    data: orgId,
+    isLoading: membershipLoading,
+    error: membershipError,
+  } = useOrgMembership(user?.id);
   const { data: org } = useOrganization(orgId ?? undefined);
   const authReady = !authLoading && !!user;
-  const analyticsReady = authReady && !!orgId;
+  const analyticsReady = authReady && !membershipLoading && !membershipError && !!orgId;
   const [range, setRange] = useState<RangeKey>('30d');
   const interval = useMemo(() => rangeToInterval(range), [range]);
   const endDate = useMemo(() => {
@@ -329,7 +333,15 @@ export default function AnalyticsPage() {
     volumeBuckets.length > 0
       ? volumeBuckets.length
       : computeVolumeBucketCount(range, interval);
-  const rangeDisabled = loading || refreshing;
+  const membershipStateMessage = authReady && !membershipLoading
+    ? membershipError
+      ? 'Could not load your workspace.'
+      : !orgId
+        ? 'No workspace membership was found.'
+        : null
+    : null;
+  const displayError = membershipStateMessage ?? error;
+  const rangeDisabled = loading || refreshing || membershipLoading || !!membershipStateMessage;
 
   const subline = `${endDate}${org?.name ? ` · ${org.name} workspace` : ''}`;
 
@@ -376,13 +388,18 @@ export default function AnalyticsPage() {
           </div>
         </div>
 
-        {error && (
-          <div className="mb-4 rounded border border-[var(--m03-red-line)] bg-[var(--m03-red-fill)] p-3 text-[13px] text-[var(--m03-red)]">
-            {error}
+        {displayError && (
+          <div
+            role="alert"
+            className="mb-4 rounded border border-[var(--m03-red-line)] bg-[var(--m03-red-fill)] p-3 text-[13px] text-[var(--m03-red)]"
+          >
+            {displayError}
           </div>
         )}
 
-        {loading && !metrics && !refreshing ? (
+        {authReady && membershipLoading ? (
+          <p className="text-[13px] text-[var(--m03-fg-2)]">Loading workspace…</p>
+        ) : membershipStateMessage ? null : loading && !metrics && !refreshing ? (
           <p className="text-[13px] text-[var(--m03-fg-2)]">Loading analytics…</p>
         ) : (
           <>

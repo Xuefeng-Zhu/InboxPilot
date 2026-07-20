@@ -8,7 +8,7 @@
 |---|---|---|
 | `ContactRepository` | `contacts` | |
 | `ConversationRepository` | `conversations` | |
-| `MessageRepository` | `messages` | |
+| `MessageRepository` | `messages` | Delivery callbacks use the server-only atomic monotonic-status RPC |
 | `OrganizationRepository` | `organizations` | |
 | `MemberRepository` | `organization_members` | |
 | `AiSettingsRepository` | `ai_settings` | |

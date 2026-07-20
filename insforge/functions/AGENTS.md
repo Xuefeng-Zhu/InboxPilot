@@ -38,9 +38,9 @@ _bundled/                    – Build artifacts (do not edit)
 | Function | Auth | Trigger | Delegates To |
 |----------|------|---------|-------------|
 | `sms-inbound` | Provider signature | HTTP POST (Telnyx today; Twilio after WebCrypto port); explicit `x-provider`, trusted receiving route, local-only mock | InboundMessageService |
-| `sms-status` | Provider signature | HTTP POST (provider callback); explicit `x-provider`, trusted outbound account, local-only mock | Delivery event update |
+| `sms-status` | Provider signature | HTTP POST (provider callback); explicit `x-provider`, trusted outbound account, local-only mock | Raw delivery event + monotonic message status |
 | `email-inbound` | Provider signature | HTTP POST (real Postmark adapter awaits WebCrypto port); explicit `x-provider`, trusted receiving route, local-only mock | InboundMessageService |
-| `email-status` | Provider signature | HTTP POST (real Postmark adapter awaits WebCrypto port); explicit `x-provider`, trusted outbound account, local-only mock | Delivery event update |
+| `email-status` | Provider signature | HTTP POST (real Postmark adapter awaits WebCrypto port); explicit `x-provider`, trusted outbound account, local-only mock | Raw delivery event + monotonic message status |
 | `process-jobs` | Internal | HTTP POST (cron/manual trigger) | PostgresJobQueue + registered handlers |
 | `webchat-identify` | Visitor JWT | HTTP POST (widget) | WebchatThreadService |
 | `webchat-thread-init` | Visitor JWT | HTTP POST (widget) | WebchatThreadService |

@@ -64,7 +64,7 @@ The docs were previously a flat set of `docs/*.md` files that had drifted out of
 
 - **Renamed and moved** to `reference/` and `guides/` to separate source-of-truth from how-to.
 - **Extended** with five new reference docs that previously existed only as inline content: `rbac.md`, `jobs.md`, `audit.md`, `frontend.md`, `webchat.md`.
-- **Corrected** to reflect the current state of the code: 9 InsForge Deno functions, 12 Next.js API routes, 20 application tables, 15 repositories, 22 migration files, 3 channels (SMS, email, webchat), and React Query on the frontend. Last verified: 2026-07-20.
+- **Corrected** to reflect the current state of the code: 9 InsForge Deno functions, 12 Next.js API routes, 20 application tables, 15 repositories, 23 migration files, 3 channels (SMS, email, webchat), and React Query on the frontend. Last verified: 2026-07-20.
 - **Mermaid diagrams** replace ASCII for component diagrams, sequence flows, and state machines.
 - **ADR directory is now pure** — the living plans (`ui-polish`, `refactor`, `multi-round-ai-fix`) moved to `plans/`. Research artifacts moved to `research/`.
 

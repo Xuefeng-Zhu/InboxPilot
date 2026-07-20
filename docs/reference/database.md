@@ -1,6 +1,6 @@
 # Database Reference
 
-> PostgreSQL schema reference. 20 application tables, 22 migration files, 13 application-callable RPCs, and role-aware RLS on tenant-scoped data.
+> PostgreSQL schema reference. 20 application tables, 23 migration files, 14 application-callable RPCs, and role-aware RLS on tenant-scoped data.
 
 ## Migration files
 
@@ -30,8 +30,9 @@ Apply pending files in the order shown. Do not replay the whole set against an i
 | `insforge/migrations/018_atomic_ai_source_turns.sql` | Tracks the latest conversation turn transactionally and adds source-bound AI transition claims |
 | `insforge/migrations/019_restrict_ai_decision_writes.sql` | Removes browser mutation privileges from server-produced AI decisions |
 | `insforge/migrations/020_bind_pending_ai_drafts.sql` | Binds approval/regeneration to an immutable pending decision and source turn |
+| `insforge/migrations/021_monotonic_delivery_status.sql` | Atomically advances delivery snapshots and makes the status column non-null |
 
-Apply via the InsForge SQL editor or migrations API. Migration `014` cannot change bucket configuration: after applying it, mark the existing `knowledge-files` bucket **private** in the InsForge dashboard. Then apply `015` for knowledge-job tenant binding, `016` for job/decision idempotency, `017` for legacy webchat lockdown, `018` for atomic AI source turns, `019` for the server-only AI-decision write boundary, and `020` for pending-draft ownership. Pause scheduled job processing and let active invocations finish before `018`; deploy the source-bound worker/routes before resuming. Apply `020` before its approval/regeneration route changes. Storage object keys must use `<organization-id>/documents/...` so its policies can derive the tenant from the first path segment.
+Apply via the InsForge SQL editor or migrations API. Migration `014` cannot change bucket configuration: after applying it, mark the existing `knowledge-files` bucket **private** in the InsForge dashboard. Then apply `015` for knowledge-job tenant binding, `016` for job/decision idempotency, `017` for legacy webchat lockdown, `018` for atomic AI source turns, `019` for the server-only AI-decision write boundary, `020` for pending-draft ownership, and `021` for monotonic delivery snapshots. Pause scheduled job processing and let active invocations finish before `018`; deploy the source-bound worker/routes before resuming. Apply `020` before its approval/regeneration route changes and `021` before its status-handler changes. Storage object keys must use `<organization-id>/documents/...` so its policies can derive the tenant from the first path segment.
 
 ---
 
@@ -165,7 +166,7 @@ resolved → open (reopen)
 | `provider` | `text` | nullable | `twilio`, `postmark`, `webchat`, … |
 | `provider_account_id` | `uuid` | nullable | FK by convention (not enforced) |
 | `external_message_id` | `text` | nullable | Provider's message ID |
-| `delivery_status` | `text` | default `'pending'`, CHECK `('pending','queued','sent','delivered','failed','bounced')` | |
+| `delivery_status` | `text` | NOT NULL, default `'pending'`, CHECK `('pending','queued','sent','delivered','failed','bounced')` | Monotonic snapshot since 021; raw callbacks remain in delivery-event tables |
 | `created_at` | `timestamptz` | NOT NULL | |
 | `updated_at` | `timestamptz` | NOT NULL | |
 
@@ -423,6 +424,10 @@ Clears only the same decision's in-flight dispatch claim. Provider-accepted clea
 ### `enqueue_regenerate_ai_draft(p_conversation_id uuid, p_organization_id uuid, p_source_message_id uuid, p_pending_ai_decision_id uuid)`
 
 Atomically claims the exact pending decision for regeneration and inserts a source-bound `process_ai_message` job. Approval and regeneration serialize on the conversation row, and a lost race cannot leave runnable regeneration work behind. Execute is restricted to `project_admin`.
+
+### `advance_message_delivery_status(p_message_id uuid, p_delivery_status text)`
+
+Atomically advances `messages.delivery_status` along `pending → queued → sent` or directly from any nonterminal state to `delivered`, `failed`, or `bounced`. Terminal states never transition again, so late callbacks cannot regress or contradict the snapshot; every callback is still appended to the channel-specific delivery-event table. Returns the effective message row even when an update is ignored. Execute is restricted to `project_admin`.
 
 ### `match_knowledge_chunks(query_embedding vector(1536), match_org_id uuid, match_limit int DEFAULT 5, match_threshold float DEFAULT 0.7)`
 

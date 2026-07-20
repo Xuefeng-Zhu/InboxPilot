@@ -8,6 +8,7 @@ import {
 } from '../../insforge/functions/_shared/webhook-handler-pipelines';
 import type { DatabaseClient } from '../../packages/support-core/src/interfaces/database-client';
 import type {
+  DeliveryStatus,
   Message,
   NormalizedInboundEmail,
   NormalizedInboundSms,
@@ -58,13 +59,19 @@ function unusedDatabase(): DatabaseClient {
 
 function createDependencies(input?: {
   message?: Message | null;
+  effectiveDeliveryStatus?: DeliveryStatus;
 }) {
   const processInboundSms = vi.fn().mockResolvedValue(MESSAGE);
   const processInboundEmail = vi.fn().mockResolvedValue(MESSAGE);
   const findByExternalId = vi.fn().mockResolvedValue(
     input && 'message' in input ? input.message : MESSAGE,
   );
-  const updateDeliveryStatus = vi.fn().mockResolvedValue(MESSAGE);
+  const updateDeliveryStatus = vi.fn().mockImplementation(
+    async (_messageId: string, deliveryStatus: DeliveryStatus) => ({
+      ...(input && 'message' in input && input.message ? input.message : MESSAGE),
+      deliveryStatus: input?.effectiveDeliveryStatus ?? deliveryStatus,
+    }),
+  );
   const createDeliveryEvent = vi.fn().mockResolvedValue({ id: 'event-1' });
   const publish = vi.fn().mockResolvedValue(undefined);
 
@@ -124,23 +131,29 @@ function inboundConfig(input?: { signatureValid?: boolean }) {
   return { config, verifyWebhook, resolveContext };
 }
 
-function statusConfig(input?: { signatureValid?: boolean }) {
+function statusConfig(input?: {
+  signatureValid?: boolean;
+  channel?: 'sms' | 'email';
+  status?: DeliveryStatus;
+}) {
+  const channel = input?.channel ?? 'sms';
+  const provider = channel === 'sms' ? 'telnyx' : 'postmark';
   const verifyWebhook = vi.fn().mockResolvedValue(input?.signatureValid ?? true);
   const resolveContext = vi.fn().mockResolvedValue({
     organizationId: 'organization-1',
     providerAccountId: 'account-1',
-    provider: 'telnyx',
+    provider,
     signingSecret: 'stored-signing-secret',
   });
 
   const config: StatusWebhookPipelineConfig = {
-    channel: 'sms',
-    channelLabel: 'SMS',
-    errorPrefix: 'sms-status',
+    channel,
+    channelLabel: channel === 'sms' ? 'SMS' : 'email',
+    errorPrefix: channel === 'sms' ? 'sms-status' : 'email-status',
     createAdapter: () => ({
       parseStatusWebhook: () => ({
         externalMessageId: 'external-1',
-        status: 'delivered',
+        status: input?.status ?? 'delivered',
         rawPayload: { source: 'test' },
       }),
       verifyWebhook,
@@ -177,6 +190,26 @@ function createConflictingInboundService() {
 
   return { service, enqueue, ensureMessageReceived };
 }
+
+const DELIVERY_STATUS_PERMUTATIONS: Array<{
+  channel: 'sms' | 'email';
+  current: DeliveryStatus;
+  incoming: DeliveryStatus;
+  effective: DeliveryStatus;
+}> = [
+  { channel: 'sms', current: 'delivered', incoming: 'sent', effective: 'delivered' },
+  { channel: 'sms', current: 'failed', incoming: 'queued', effective: 'failed' },
+  { channel: 'sms', current: 'bounced', incoming: 'delivered', effective: 'bounced' },
+  { channel: 'sms', current: 'sent', incoming: 'queued', effective: 'sent' },
+  { channel: 'sms', current: 'queued', incoming: 'sent', effective: 'sent' },
+  { channel: 'sms', current: 'sent', incoming: 'bounced', effective: 'bounced' },
+  { channel: 'email', current: 'delivered', incoming: 'pending', effective: 'delivered' },
+  { channel: 'email', current: 'bounced', incoming: 'sent', effective: 'bounced' },
+  { channel: 'email', current: 'failed', incoming: 'delivered', effective: 'failed' },
+  { channel: 'email', current: 'sent', incoming: 'queued', effective: 'sent' },
+  { channel: 'email', current: 'queued', incoming: 'delivered', effective: 'delivered' },
+  { channel: 'email', current: 'sent', incoming: 'failed', effective: 'failed' },
+];
 
 describe('shared inbound webhook pipeline', () => {
   it('uses trusted account context for processing and realtime publication', async () => {
@@ -354,6 +387,48 @@ describe('shared status webhook pipeline', () => {
     });
     expect(updateDeliveryStatus).toHaveBeenCalledWith(MESSAGE.id, 'delivered');
   });
+
+  it.each(DELIVERY_STATUS_PERMUTATIONS)(
+    'records $channel $incoming after $current while returning effective $effective',
+    async ({ channel, current, incoming, effective }) => {
+      const provider = channel === 'sms' ? 'telnyx' : 'postmark';
+      const message: Message = {
+        ...MESSAGE,
+        direction: 'outbound',
+        channel,
+        provider,
+        deliveryStatus: current,
+      };
+      const {
+        dependencies,
+        updateDeliveryStatus,
+        createDeliveryEvent,
+      } = createDependencies({
+        message,
+        effectiveDeliveryStatus: effective,
+      });
+      const { config } = statusConfig({ channel, status: incoming });
+      const handler = createStatusWebhookHandler(config, dependencies);
+
+      const response = await handler(new Request(`https://functions.test/${channel}-status`, {
+        method: 'POST',
+        headers: { 'x-provider': provider },
+        body: '{}',
+      }));
+
+      expect(response.status).toBe(200);
+      await expect(response.json()).resolves.toEqual({
+        status: 'ok',
+        data: { messageId: message.id, deliveryStatus: effective },
+      });
+      expect(createDeliveryEvent).toHaveBeenCalledWith(channel, expect.objectContaining({
+        messageId: message.id,
+        status: incoming,
+        rawPayload: { source: 'test' },
+      }));
+      expect(updateDeliveryStatus).toHaveBeenCalledWith(message.id, incoming);
+    },
+  );
 
   it('acknowledges an unknown external message without writing a delivery event', async () => {
     const {

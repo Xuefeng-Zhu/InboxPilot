@@ -317,13 +317,16 @@ export function createStatusWebhookHandler(
         errorMessage: normalizedStatus.errorMessage ?? null,
         rawPayload: normalizedStatus.rawPayload,
       });
-      await messageRepository.updateDeliveryStatus(message.id, normalizedStatus.status);
+      const effectiveMessage = await messageRepository.updateDeliveryStatus(
+        message.id,
+        normalizedStatus.status,
+      );
 
       return jsonResponse({
         status: 'ok',
         data: {
           messageId: message.id,
-          deliveryStatus: normalizedStatus.status,
+          deliveryStatus: effectiveMessage.deliveryStatus,
         },
       });
     } catch (error) {

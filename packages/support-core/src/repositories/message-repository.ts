@@ -135,25 +135,29 @@ export class MessageRepository {
   }
 
   /**
-   * Update the delivery_status of a message by its ID.
-   * Used when a delivery status webhook is received to reflect the latest status.
+   * Atomically advance the delivery_status of a message by its ID.
+   * The database preserves terminal outcomes and ignores late regressions while
+   * returning the effective row for an accurate webhook response.
    */
   async updateDeliveryStatus(
     messageId: string,
     deliveryStatus: DeliveryStatus,
   ): Promise<Message> {
-    const { data, error } = await this.db
-      .from('messages')
-      .update({ delivery_status: deliveryStatus, updated_at: new Date().toISOString() })
-      .eq('id', messageId)
-      .select('*')
-      .single();
+    const { data, error } = await this.db.rpc('advance_message_delivery_status', {
+      p_message_id: messageId,
+      p_delivery_status: deliveryStatus,
+    });
 
     if (error) {
       throw new Error(`MessageRepository.updateDeliveryStatus failed: ${error.message}`);
     }
 
-    return toMessage(data as MessageRow);
+    const row = Array.isArray(data) ? data[0] : data;
+    if (!row) {
+      throw new Error('MessageRepository.updateDeliveryStatus failed: row not found');
+    }
+
+    return toMessage(row as MessageRow);
   }
 
   /**

@@ -105,7 +105,7 @@ Tracks SMS delivery status updates from providers.
 { "status": "ok", "message": "Message not found, status ignored" }
 ```
 
-**Side effects (found)**: Inserts `sms_delivery_events` row, updates `messages.delivery_status`.
+**Side effects (found)**: Always inserts the raw `sms_delivery_events` row, then atomically advances `messages.delivery_status`. Late nonterminal callbacks and callbacks after the first terminal outcome are retained as events without regressing the message snapshot. The response reports the effective stored status.
 
 ### email-inbound
 
@@ -149,7 +149,7 @@ Handles inbound email webhooks from providers.
 
 ### email-status
 
-Same pattern as `sms-status`, including its explicit-provider and local-only mock rules, but for email delivery events (`email_delivery_events`).
+Same monotonic pattern as `sms-status`, including its explicit-provider and local-only mock rules, but for email delivery events (`email_delivery_events`). Every raw callback is retained while the message snapshot only advances.
 
 ### process-jobs
 

@@ -37,10 +37,13 @@ function createMockQueryBuilder(result: QueryResult): QueryBuilder {
   return builder;
 }
 
-function createMockDb(builder: QueryBuilder): DatabaseClient {
+function createMockDb(
+  builder: QueryBuilder,
+  rpcResult: QueryResult = { data: null, error: null },
+): DatabaseClient {
   return {
     from: vi.fn().mockReturnValue(builder),
-    rpc: vi.fn(),
+    rpc: vi.fn().mockResolvedValue(rpcResult),
   };
 }
 
@@ -452,35 +455,57 @@ describe('MessageRepository', () => {
   });
 
   describe('updateDeliveryStatus', () => {
-    it('updates delivery_status and returns the updated Message', async () => {
+    it('atomically advances delivery_status and returns the effective Message', async () => {
       const updatedRow = { ...SAMPLE_ROW, delivery_status: 'delivered' as const };
-      const builder = createMockQueryBuilder({ data: updatedRow, error: null });
-      const db = createMockDb(builder);
+      const builder = createMockQueryBuilder({ data: null, error: null });
+      const db = createMockDb(builder, { data: [updatedRow], error: null });
       const repo = new MessageRepository(db);
 
       const result = await repo.updateDeliveryStatus('msg1', 'delivered');
 
-      expect(db.from).toHaveBeenCalledWith('messages');
-      expect(builder.update).toHaveBeenCalledWith(
-        expect.objectContaining({ delivery_status: 'delivered' }),
-      );
-      expect(builder.eq).toHaveBeenCalledWith('id', 'msg1');
-      expect(builder.select).toHaveBeenCalledWith('*');
-      expect(builder.single).toHaveBeenCalled();
+      expect(db.rpc).toHaveBeenCalledWith('advance_message_delivery_status', {
+        p_message_id: 'msg1',
+        p_delivery_status: 'delivered',
+      });
 
       expect(result.id).toBe('msg1');
       expect(result.deliveryStatus).toBe('delivered');
     });
 
-    it('throws on database error', async () => {
-      const builder = createMockQueryBuilder({
-        data: null,
-        error: { message: 'row not found' },
+    it('returns the preserved terminal state when a stale callback is ignored', async () => {
+      const deliveredRow = { ...SAMPLE_ROW, delivery_status: 'delivered' as const };
+      const builder = createMockQueryBuilder({ data: null, error: null });
+      const db = createMockDb(builder, { data: deliveredRow, error: null });
+      const repo = new MessageRepository(db);
+
+      const result = await repo.updateDeliveryStatus('msg1', 'sent');
+
+      expect(db.rpc).toHaveBeenCalledWith('advance_message_delivery_status', {
+        p_message_id: 'msg1',
+        p_delivery_status: 'sent',
       });
-      const db = createMockDb(builder);
+      expect(result.deliveryStatus).toBe('delivered');
+    });
+
+    it('throws on database error', async () => {
+      const builder = createMockQueryBuilder({ data: null, error: null });
+      const db = createMockDb(builder, {
+        data: null,
+        error: { message: 'database unavailable' },
+      });
       const repo = new MessageRepository(db);
 
       await expect(repo.updateDeliveryStatus('msg1', 'failed')).rejects.toThrow(
+        'MessageRepository.updateDeliveryStatus failed: database unavailable',
+      );
+    });
+
+    it('throws when the atomic function cannot find the message', async () => {
+      const builder = createMockQueryBuilder({ data: null, error: null });
+      const db = createMockDb(builder, { data: [], error: null });
+      const repo = new MessageRepository(db);
+
+      await expect(repo.updateDeliveryStatus('missing', 'failed')).rejects.toThrow(
         'MessageRepository.updateDeliveryStatus failed: row not found',
       );
     });

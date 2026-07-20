@@ -6,7 +6,23 @@
  */
 
 import type { DatabaseClient } from '../interfaces/database-client.js';
-import type { AiDecision, AiDecisionType, CreateAiDecisionInput } from '../types/index.js';
+import type {
+  AiDecision,
+  AiDecisionType,
+  AiState,
+  ConversationStatus,
+  CreateAiDecisionInput,
+} from '../types/index.js';
+
+export interface AiTurnFinalization {
+  sourceMessageId?: string | null;
+  aiState: AiState;
+  status?: ConversationStatus;
+  expected?: {
+    aiState?: AiState;
+    status?: ConversationStatus;
+  };
+}
 
 /** Raw row shape returned by the database (snake_case columns). */
 interface AiDecisionRow {
@@ -75,6 +91,38 @@ export class AiDecisionRepository {
     }
 
     return toAiDecision(data as AiDecisionRow);
+  }
+
+  /** Atomically persist a decision and publish its guarded terminal AI state. */
+  async finalizeTurn(
+    input: CreateAiDecisionInput,
+    finalization: AiTurnFinalization,
+  ): Promise<AiDecision | null> {
+    const { data, error } = await this.db.rpc('finalize_ai_turn_with_decision', {
+      p_conversation_id: input.conversationId,
+      p_organization_id: input.organizationId,
+      p_source_message_id: finalization.sourceMessageId ?? null,
+      p_source_job_id: input.sourceJobId ?? null,
+      p_message_id: input.messageId ?? null,
+      p_decision_type: input.decisionType,
+      p_confidence: input.confidence,
+      p_reasoning_summary: input.reasoningSummary ?? null,
+      p_response_text: input.responseText ?? null,
+      p_tags: input.tags ?? [],
+      p_requires_human: input.requiresHuman,
+      p_raw_response: input.rawResponse ?? null,
+      p_ai_state: finalization.aiState,
+      p_status: finalization.status ?? null,
+      p_expected_ai_state: finalization.expected?.aiState ?? null,
+      p_expected_status: finalization.expected?.status ?? null,
+    });
+
+    if (error) {
+      throw new Error(`AiDecisionRepository.finalizeTurn failed: ${error.message}`);
+    }
+
+    const row = Array.isArray(data) ? data[0] : data;
+    return row ? toAiDecision(row as AiDecisionRow) : null;
   }
 
   /** Find the decision already produced by a queue job, if any. */

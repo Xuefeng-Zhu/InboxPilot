@@ -169,8 +169,8 @@ function createMockAiSettingsRepo(settings: AiSettings | null = SAMPLE_AI_SETTIN
 }
 
 function createMockAiDecisionRepo(): AiDecisionRepository {
-  return {
-    create: vi.fn().mockImplementation(async (input: CreateAiDecisionInput): Promise<AiDecision> => ({
+  const create = vi.fn().mockImplementation(
+    async (input: CreateAiDecisionInput): Promise<AiDecision> => ({
       id: SAMPLE_AI_DECISION.id,
       conversationId: input.conversationId,
       organizationId: input.organizationId,
@@ -184,7 +184,13 @@ function createMockAiDecisionRepo(): AiDecisionRepository {
       requiresHuman: input.requiresHuman,
       rawResponse: input.rawResponse ?? null,
       createdAt: SAMPLE_AI_DECISION.createdAt,
-    })),
+    }),
+  );
+  return {
+    create,
+    finalizeTurn: vi.fn().mockImplementation(
+      async (input: CreateAiDecisionInput) => create(input),
+    ),
     findBySourceJobId: vi.fn().mockResolvedValue(null),
     findLatestByConversation: vi.fn(),
   } as unknown as AiDecisionRepository;
@@ -283,6 +289,8 @@ describe('AiAgentService', () => {
       expect(aiClient.createEmbedding).not.toHaveBeenCalled();
       expect(aiClient.chatCompletion).not.toHaveBeenCalled();
       expect(aiDecisionRepo.create).not.toHaveBeenCalled();
+      expect(auditLog.create).not.toHaveBeenCalled();
+      expect(jobQueue.enqueue).not.toHaveBeenCalled();
     });
 
     it('builds context through the immutable source and records that message ID', async () => {
@@ -312,14 +320,14 @@ describe('AiAgentService', () => {
         undefined,
         { status: 'open' },
       );
-      expect(conversationRepo.transitionAiSourceTurn).toHaveBeenNthCalledWith(
-        2,
-        CONV_ID,
-        ORG_ID,
-        SAMPLE_MESSAGE.id,
-        'drafted',
-        undefined,
-        { aiState: 'thinking', status: 'open' },
+      expect(conversationRepo.transitionAiSourceTurn).toHaveBeenCalledTimes(1);
+      expect(aiDecisionRepo.finalizeTurn).toHaveBeenCalledWith(
+        expect.objectContaining({ messageId: SAMPLE_MESSAGE.id }),
+        {
+          sourceMessageId: SAMPLE_MESSAGE.id,
+          aiState: 'drafted',
+          expected: { aiState: 'thinking', status: 'open' },
+        },
       );
     });
 
@@ -334,13 +342,12 @@ describe('AiAgentService', () => {
           .mockImplementationOnce(async () => {
             simulatedAiState = 'thinking';
             return true;
-          })
-          .mockImplementationOnce(async () => {
-            // Manual resolve/escalate changes the expected state/status before
-            // the stale final CAS is evaluated.
-            simulatedAiState = manualAiState;
-            return false;
           });
+        vi.mocked(aiDecisionRepo.finalizeTurn).mockImplementationOnce(async () => {
+          // The atomic finalization loses after a manual state/status change.
+          simulatedAiState = manualAiState;
+          return null;
+        });
         const service = createService();
 
         await expect(service.processMessage(CONV_ID, ORG_ID, {
@@ -352,14 +359,14 @@ describe('AiAgentService', () => {
         expect(aiClient.chatCompletion).toHaveBeenCalledOnce();
         expect(aiDecisionRepo.create).not.toHaveBeenCalled();
         expect(conversationRepo.update).not.toHaveBeenCalled();
-        expect(conversationRepo.transitionAiSourceTurn).toHaveBeenNthCalledWith(
-          2,
-          CONV_ID,
-          ORG_ID,
-          SAMPLE_MESSAGE.id,
-          'drafted',
-          undefined,
-          { aiState: 'thinking', status: 'open' },
+        expect(conversationRepo.transitionAiSourceTurn).toHaveBeenCalledTimes(1);
+        expect(aiDecisionRepo.finalizeTurn).toHaveBeenCalledWith(
+          expect.any(Object),
+          {
+            sourceMessageId: SAMPLE_MESSAGE.id,
+            aiState: 'drafted',
+            expected: { aiState: 'thinking', status: 'open' },
+          },
         );
         expect(simulatedAiState).toBe(manualAiState);
       },
@@ -371,9 +378,8 @@ describe('AiAgentService', () => {
         aiMode: 'auto_reply',
         confidenceThreshold: 0.8,
       });
-      vi.mocked(conversationRepo.transitionAiSourceTurn)
-        .mockResolvedValueOnce(true)
-        .mockResolvedValueOnce(false);
+      vi.mocked(conversationRepo.transitionAiSourceTurn).mockResolvedValueOnce(true);
+      vi.mocked(aiDecisionRepo.finalizeTurn).mockResolvedValueOnce(null);
       const service = createService();
 
       await expect(service.processMessage(CONV_ID, ORG_ID, {
@@ -381,14 +387,14 @@ describe('AiAgentService', () => {
         sourceMessageId: SAMPLE_MESSAGE.id,
       })).resolves.toBeNull();
 
-      expect(conversationRepo.transitionAiSourceTurn).toHaveBeenNthCalledWith(
-        2,
-        CONV_ID,
-        ORG_ID,
-        SAMPLE_MESSAGE.id,
-        'auto_replied',
-        undefined,
-        { aiState: 'thinking', status: 'open' },
+      expect(conversationRepo.transitionAiSourceTurn).toHaveBeenCalledTimes(1);
+      expect(aiDecisionRepo.finalizeTurn).toHaveBeenCalledWith(
+        expect.any(Object),
+        {
+          sourceMessageId: SAMPLE_MESSAGE.id,
+          aiState: 'auto_replied',
+          expected: { aiState: 'thinking', status: 'open' },
+        },
       );
       expect(aiDecisionRepo.create).not.toHaveBeenCalled();
     });
@@ -430,9 +436,9 @@ describe('AiAgentService', () => {
 
       // Should call LLM
       expect(aiClient.chatCompletion).toHaveBeenCalled();
-      // Should set ai_state to "drafted"
-      expect(conversationRepo.update).toHaveBeenCalledWith(
-        CONV_ID,
+      // Decision and drafted state must be committed by one repository call.
+      expect(aiDecisionRepo.finalizeTurn).toHaveBeenCalledWith(
+        expect.any(Object),
         expect.objectContaining({ aiState: 'drafted' }),
       );
       // Should NOT enqueue outbound message
@@ -462,9 +468,9 @@ describe('AiAgentService', () => {
         { sourceJobId: 'job-auto-reply-001' },
       );
 
-      // Should set ai_state to "auto_replied"
-      expect(conversationRepo.update).toHaveBeenCalledWith(
-        CONV_ID,
+      // Decision and auto-reply intent must be committed atomically.
+      expect(aiDecisionRepo.finalizeTurn).toHaveBeenCalledWith(
+        expect.any(Object),
         expect.objectContaining({ aiState: 'auto_replied' }),
       );
       // Should return a decision with responseText (the caller sends it inline)
@@ -489,9 +495,9 @@ describe('AiAgentService', () => {
 
       // Should NOT call LLM
       expect(aiClient.chatCompletion).not.toHaveBeenCalled();
-      // Should set status to "escalated" and ai_state to "needs_human"
-      expect(conversationRepo.update).toHaveBeenCalledWith(
-        CONV_ID,
+      // Escalation decision and terminal state commit together.
+      expect(aiDecisionRepo.finalizeTurn).toHaveBeenCalledWith(
+        expect.any(Object),
         expect.objectContaining({
           status: 'escalated',
           aiState: 'needs_human',
@@ -518,8 +524,8 @@ describe('AiAgentService', () => {
       await service.processMessage(CONV_ID, ORG_ID);
 
       expect(aiClient.chatCompletion).not.toHaveBeenCalled();
-      expect(conversationRepo.update).toHaveBeenCalledWith(
-        CONV_ID,
+      expect(aiDecisionRepo.finalizeTurn).toHaveBeenCalledWith(
+        expect.any(Object),
         expect.objectContaining({
           status: 'escalated',
           aiState: 'needs_human',
@@ -545,8 +551,8 @@ describe('AiAgentService', () => {
       await service.processMessage(CONV_ID, ORG_ID);
 
       expect(aiClient.chatCompletion).not.toHaveBeenCalled();
-      expect(conversationRepo.update).toHaveBeenCalledWith(
-        CONV_ID,
+      expect(aiDecisionRepo.finalizeTurn).toHaveBeenCalledWith(
+        expect.any(Object),
         expect.objectContaining({
           status: 'escalated',
           aiState: 'needs_human',
@@ -719,8 +725,8 @@ describe('AiAgentService', () => {
 
       await service.processMessage(CONV_ID, ORG_ID);
 
-      expect(conversationRepo.update).toHaveBeenCalledWith(
-        CONV_ID,
+      expect(aiDecisionRepo.finalizeTurn).toHaveBeenCalledWith(
+        expect.any(Object),
         expect.objectContaining({
           status: 'escalated',
           aiState: 'needs_human',
@@ -767,9 +773,8 @@ describe('AiAgentService', () => {
 
       await service.processMessage(CONV_ID, ORG_ID);
 
-      // Should set ai_state to "failed"
-      expect(conversationRepo.update).toHaveBeenCalledWith(
-        CONV_ID,
+      expect(aiDecisionRepo.finalizeTurn).toHaveBeenCalledWith(
+        expect.any(Object),
         expect.objectContaining({ aiState: 'failed' }),
       );
     });
@@ -783,9 +788,8 @@ describe('AiAgentService', () => {
 
       await service.processMessage(CONV_ID, ORG_ID);
 
-      // Should set ai_state to "failed"
-      expect(conversationRepo.update).toHaveBeenCalledWith(
-        CONV_ID,
+      expect(aiDecisionRepo.finalizeTurn).toHaveBeenCalledWith(
+        expect.any(Object),
         expect.objectContaining({ aiState: 'failed' }),
       );
     });

@@ -138,6 +138,14 @@ export class AiAgentService {
       }
     }
 
+    const finalizationFor = (transition: AiTurnTransition) => ({
+      sourceMessageId: sourceMessage?.id ?? null,
+      ...transition,
+      expected: sourceMessage
+        ? { aiState: 'thinking' as const, status: 'open' as const }
+        : undefined,
+    });
+
     // A worker retry after decision persistence must resume downstream work,
     // not call the LLM and create another decision. Source validation happens
     // first so an old decision cannot be resumed after a newer customer or
@@ -178,18 +186,6 @@ export class AiAgentService {
 
     // If mode is "off", skip processing entirely.
     if (aiMode === 'off') {
-      if (
-        sourceMessage &&
-        !await this.transitionAiTurn(
-          conversationId,
-          orgId,
-          sourceMessage.id,
-          { aiState: 'idle' },
-          { aiState: 'thinking', status: 'open' },
-        )
-      ) {
-        return null;
-      }
       return decisionRecorder.record({
         conversationId,
         organizationId: orgId,
@@ -201,7 +197,7 @@ export class AiAgentService {
         tags: [],
         requiresHuman: false,
         rawResponse: null,
-      }, { reason: 'ai_mode_off' });
+      }, { reason: 'ai_mode_off' }, finalizationFor({ aiState: 'idle' }));
     }
 
     // Source-bound workers already claimed `thinking` atomically above.
@@ -323,11 +319,6 @@ export class AiAgentService {
 
     // 5. If escalation: skip LLM
     if (escalationResult) {
-      if (!await this.transitionAiTurn(conversationId, orgId, sourceMessage?.id, {
-        status: 'escalated',
-        aiState: 'needs_human',
-      }, { aiState: 'thinking', status: 'open' })) return null;
-
       return decisionRecorder.record({
         conversationId,
         organizationId: orgId,
@@ -343,7 +334,7 @@ export class AiAgentService {
         decisionType: 'escalate',
         ruleName: escalationResult.ruleName,
         reason: escalationResult.reason,
-      });
+      }, finalizationFor({ status: 'escalated', aiState: 'needs_human' }));
     }
 
     // 6. No escalation: call LLM. Keep the error boundary narrow so
@@ -363,10 +354,6 @@ export class AiAgentService {
         temperature: 0.3,
       });
     } catch (err) {
-      if (!await this.transitionAiTurn(conversationId, orgId, sourceMessage?.id, {
-        aiState: 'failed',
-      }, { aiState: 'thinking', status: 'open' })) return null;
-
       const errorMessage = err instanceof Error ? err.message : String(err);
       return decisionRecorder.record({
         conversationId,
@@ -379,17 +366,13 @@ export class AiAgentService {
         tags: ['error'],
         requiresHuman: false,
         rawResponse: { error: errorMessage },
-      }, { decisionType: 'respond', error: errorMessage });
+      }, { decisionType: 'respond', error: errorMessage }, finalizationFor({ aiState: 'failed' }));
     }
 
     const parseResult = parseAiDecision(llmResponse.content);
 
     if (!parseResult.success) {
       // LLM returned invalid JSON — set ai_state to "failed"
-      if (!await this.transitionAiTurn(conversationId, orgId, sourceMessage?.id, {
-        aiState: 'failed',
-      }, { aiState: 'thinking', status: 'open' })) return null;
-
       return decisionRecorder.record({
         conversationId,
         organizationId: orgId,
@@ -401,7 +384,7 @@ export class AiAgentService {
         tags: ['parse_error'],
         requiresHuman: false,
         rawResponse: { raw: llmResponse.content, error: parseResult.error },
-      }, { decisionType: 'respond', error: parseResult.error });
+      }, { decisionType: 'respond', error: parseResult.error }, finalizationFor({ aiState: 'failed' }));
     }
 
     const parsed = parseResult.data;
@@ -419,11 +402,6 @@ export class AiAgentService {
       parsed.decision_type !== 'clarify'
     ) {
       // Low confidence — escalate
-      if (!await this.transitionAiTurn(conversationId, orgId, sourceMessage?.id, {
-        status: 'escalated',
-        aiState: 'needs_human',
-      }, { aiState: 'thinking', status: 'open' })) return null;
-
       return decisionRecorder.record({
         conversationId,
         organizationId: orgId,
@@ -435,17 +413,15 @@ export class AiAgentService {
         tags: [...parsed.tags, 'low_confidence'],
         requiresHuman: true,
         rawResponse: parsed as unknown as Record<string, unknown>,
-      }, { decisionType: 'escalate', reason: 'low_confidence' });
+      }, { decisionType: 'escalate', reason: 'low_confidence' }, finalizationFor({
+        status: 'escalated',
+        aiState: 'needs_human',
+      }));
     }
 
     // 7. Handle mode gating
     if (parsed.requires_human || parsed.decision_type === 'escalate') {
       // LLM itself says escalation needed
-      if (!await this.transitionAiTurn(conversationId, orgId, sourceMessage?.id, {
-        status: 'escalated',
-        aiState: 'needs_human',
-      }, { aiState: 'thinking', status: 'open' })) return null;
-
       return decisionRecorder.record({
         conversationId,
         organizationId: orgId,
@@ -457,15 +433,14 @@ export class AiAgentService {
         tags: parsed.tags,
         requiresHuman: true,
         rawResponse: parsed as unknown as Record<string, unknown>,
-      }, { decisionType: parsed.decision_type, requiresHuman: true });
+      }, { decisionType: parsed.decision_type, requiresHuman: true }, finalizationFor({
+        status: 'escalated',
+        aiState: 'needs_human',
+      }));
     }
 
     if (aiMode === 'draft_only') {
       // Store draft, don't send
-      if (!await this.transitionAiTurn(conversationId, orgId, sourceMessage?.id, {
-        aiState: 'drafted',
-      }, { aiState: 'thinking', status: 'open' })) return null;
-
       return decisionRecorder.record({
         conversationId,
         organizationId: orgId,
@@ -477,18 +452,16 @@ export class AiAgentService {
         tags: parsed.tags,
         requiresHuman: false,
         rawResponse: parsed as unknown as Record<string, unknown>,
-      }, { decisionType: parsed.decision_type, mode: 'draft_only' });
+      }, { decisionType: parsed.decision_type, mode: 'draft_only' }, finalizationFor({
+        aiState: 'drafted',
+      }));
     }
 
     if (aiMode === 'auto_reply') {
       // Auto-send if confidence ≥ threshold and requires_human is false
       if (parsed.confidence >= confidenceThreshold && !parsed.requires_human) {
-        // The successful final source CAS is the durable reply-intent ordering
-        // point. The worker may dispatch only after this transition succeeds.
-        if (!await this.transitionAiTurn(conversationId, orgId, sourceMessage?.id, {
-          aiState: 'auto_replied',
-        }, { aiState: 'thinking', status: 'open' })) return null;
-
+        // The atomic decision/final-state commit is the durable reply-intent
+        // ordering point. The worker dispatches only after it succeeds.
         return decisionRecorder.record({
           conversationId,
           organizationId: orgId,
@@ -500,13 +473,11 @@ export class AiAgentService {
           tags: parsed.tags,
           requiresHuman: false,
           rawResponse: parsed as unknown as Record<string, unknown>,
-        }, { decisionType: parsed.decision_type, mode: 'auto_reply', autoSent: true });
+        }, { decisionType: parsed.decision_type, mode: 'auto_reply', autoSent: true }, finalizationFor({
+          aiState: 'auto_replied',
+        }));
       } else {
         // Confidence below threshold in auto_reply mode — store as draft
-        if (!await this.transitionAiTurn(conversationId, orgId, sourceMessage?.id, {
-          aiState: 'drafted',
-        }, { aiState: 'thinking', status: 'open' })) return null;
-
         return decisionRecorder.record({
           conversationId,
           organizationId: orgId,
@@ -523,15 +494,11 @@ export class AiAgentService {
           mode: 'auto_reply',
           autoSent: false,
           reason: 'confidence_below_threshold',
-        });
+        }, finalizationFor({ aiState: 'drafted' }));
       }
     }
 
     // Fallback: store as draft
-    if (!await this.transitionAiTurn(conversationId, orgId, sourceMessage?.id, {
-      aiState: 'drafted',
-    }, { aiState: 'thinking', status: 'open' })) return null;
-
     return decisionRecorder.record({
       conversationId,
       organizationId: orgId,
@@ -543,7 +510,7 @@ export class AiAgentService {
       tags: parsed.tags,
       requiresHuman: false,
       rawResponse: parsed as unknown as Record<string, unknown>,
-    }, { decisionType: parsed.decision_type });
+    }, { decisionType: parsed.decision_type }, finalizationFor({ aiState: 'drafted' }));
   }
 
   private async transitionAiTurn(

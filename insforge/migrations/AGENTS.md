@@ -1,9 +1,9 @@
 # insforge/migrations/ — SQL Migrations
 
 ## OVERVIEW
-**23 SQL files.** Apply numbered migrations in order while preserving the two timestamped job-trigger migrations in their documented position. Append-only — never edit a past migration.
+**24 SQL files.** Apply numbered migrations in order while preserving the two timestamped job-trigger migrations in their documented position. Append-only — never edit a past migration.
 
-## THE 23 MIGRATIONS
+## THE 24 MIGRATIONS
 | # | File | Purpose |
 |---|---|---|
 | 001 | `001_initial_schema.sql` | 17 core tables + indexes + constraints (enables `pgcrypto`, `vector`) |
@@ -29,11 +29,12 @@
 | 019 | `019_restrict_ai_decision_writes.sql` | Makes AI decisions browser-read-only and reserves mutations for trusted server paths |
 | 020 | `020_bind_pending_ai_drafts.sql` | Binds approval/regeneration to an immutable pending decision and owner-guards dispatch cleanup |
 | 021 | `021_monotonic_delivery_status.sql` | Atomically advances delivery snapshots and preserves terminal outcomes |
+| 022 | `022_atomic_ai_decision_finalization.sql` | Atomically inserts AI decisions and publishes their guarded terminal conversation state |
 
 ## THE 20 APPLICATION TABLES
 1. `organizations` 2. `organization_members` 3. `contacts` 4. `conversations` 5. `messages` 6. `sms_provider_accounts` 7. `sms_phone_numbers` 8. `sms_delivery_events` 9. `email_provider_accounts` 10. `email_addresses` 11. `email_delivery_events` 12. `ai_settings` 13. `ai_decisions` 14. `knowledge_documents` 15. `knowledge_chunks` 16. `support_jobs` 17. `audit_logs` 18. `webchat_widgets` 19. `webchat_threads` 20. `ai_decision_chunks`
 
-## RPC FUNCTIONS (18 total; 14 application-callable)
+## RPC FUNCTIONS (19 total; 15 application-callable)
 | RPC | Defined in | Called by |
 |---|---|---|
 | `public.user_org_ids()` | 003 | Inside RLS policies (helper, not client-facing) |
@@ -54,6 +55,7 @@
 | `finish_pending_ai_draft(...)` | 020 | Owner-guarded post-dispatch cleanup |
 | `enqueue_regenerate_ai_draft(...)` | 020 | Atomic pending-draft claim and regeneration-job enqueue |
 | `advance_message_delivery_status(...)` | 021 | Atomic monotonic SMS/email delivery snapshot advancement |
+| `finalize_ai_turn_with_decision(...)` | 022 | `AiDecisionRepository` (atomic decision insert and terminal source-turn publication) |
 
 ## RLS PATTERN
 - **Policy naming: `{table}_{action}`** where action ∈ {`select`, `insert`, `update`, `delete`}.
@@ -84,7 +86,7 @@
 - Removing `audit_logs` policies or adding UPDATE/DELETE on it (breaks the append-only contract).
 
 ## UNIQUE
-- **Migration count is 23.** This includes `001` through `021` plus two timestamped job-trigger migrations.
+- **Migration count is 24.** This includes `001` through `022` plus two timestamped job-trigger migrations.
 - **Table count is 20, not 19** — the 20th is `ai_decision_chunks` (007). `docs/reference/database.md` is stale.
 - **Claim RPC compatibility is handled in code.** Migration 016 replaces the integer signature with the current `claim_limit` implementation; `PostgresJobQueue` still retries the historical `max_count` named argument for older deployed databases.
 - **`user_org_ids()` is `STABLE SECURITY DEFINER`** — the canonical tenant-isolation primitive.

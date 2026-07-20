@@ -1,4 +1,7 @@
-import type { AiDecisionRepository } from '../repositories/ai-decision-repository.js';
+import type {
+  AiDecisionRepository,
+  AiTurnFinalization,
+} from '../repositories/ai-decision-repository.js';
 import type { AuditLogRepository } from '../repositories/audit-log-repository.js';
 import type { JobQueue } from '../interfaces/job-queue.js';
 import type { AiDecision, CreateAiDecisionInput } from '../types/index.js';
@@ -73,21 +76,25 @@ export class AiDecisionRecorder {
   async record(
     input: CreateAiDecisionInput,
     auditMetadata: Record<string, unknown>,
-  ): Promise<AiDecision> {
-    const decision = await this.aiDecisionRepo.create(
-      this.sourceJobId
-        ? {
-            ...input,
-            sourceJobId: this.sourceJobId,
-            rawResponse: {
-              ...(input.rawResponse ?? {}),
-              _groundingChunkIds: [...this.groundingChunkIds],
-              _auditMetadata: auditMetadata,
-              _shouldAutoSend: auditMetadata.autoSent === true,
-            },
-          }
-        : input,
+    finalization: AiTurnFinalization,
+  ): Promise<AiDecision | null> {
+    const persistedInput = this.sourceJobId
+      ? {
+          ...input,
+          sourceJobId: this.sourceJobId,
+          rawResponse: {
+            ...(input.rawResponse ?? {}),
+            _groundingChunkIds: [...this.groundingChunkIds],
+            _auditMetadata: auditMetadata,
+            _shouldAutoSend: auditMetadata.autoSent === true,
+          },
+        }
+      : input;
+    const decision = await this.aiDecisionRepo.finalizeTurn(
+      persistedInput,
+      finalization,
     );
+    if (!decision) return null;
 
     await this.enqueueChunkRefs(decision.id, this.groundingChunkIds);
     await this.auditLog.create({

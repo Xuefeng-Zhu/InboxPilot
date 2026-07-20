@@ -1,6 +1,6 @@
 # Database Reference
 
-> PostgreSQL schema reference. 20 application tables, 23 migration files, 14 application-callable RPCs, and role-aware RLS on tenant-scoped data.
+> PostgreSQL schema reference. 20 application tables, 24 migration files, 15 application-callable RPCs, and role-aware RLS on tenant-scoped data.
 
 ## Migration files
 
@@ -31,8 +31,9 @@ Apply pending files in the order shown. Do not replay the whole set against an i
 | `insforge/migrations/019_restrict_ai_decision_writes.sql` | Removes browser mutation privileges from server-produced AI decisions |
 | `insforge/migrations/020_bind_pending_ai_drafts.sql` | Binds approval/regeneration to an immutable pending decision and source turn |
 | `insforge/migrations/021_monotonic_delivery_status.sql` | Atomically advances delivery snapshots and makes the status column non-null |
+| `insforge/migrations/022_atomic_ai_decision_finalization.sql` | Atomically inserts each AI decision and publishes its guarded terminal conversation state |
 
-Apply via the InsForge SQL editor or migrations API. Migration `014` cannot change bucket configuration: after applying it, mark the existing `knowledge-files` bucket **private** in the InsForge dashboard. Then apply `015` for knowledge-job tenant binding, `016` for job/decision idempotency, `017` for legacy webchat lockdown, `018` for atomic AI source turns, `019` for the server-only AI-decision write boundary, `020` for pending-draft ownership, and `021` for monotonic delivery snapshots. Pause scheduled job processing and let active invocations finish before `018`; deploy the source-bound worker/routes before resuming. Apply `020` before its approval/regeneration route changes and `021` before its status-handler changes. Storage object keys must use `<organization-id>/documents/...` so its policies can derive the tenant from the first path segment.
+Apply via the InsForge SQL editor or migrations API. Migration `014` cannot change bucket configuration: after applying it, mark the existing `knowledge-files` bucket **private** in the InsForge dashboard. Then apply `015` for knowledge-job tenant binding, `016` for job/decision idempotency, `017` for legacy webchat lockdown, `018` for atomic AI source turns, `019` for the server-only AI-decision write boundary, `020` for pending-draft ownership, `021` for monotonic delivery snapshots, and `022` for atomic decision finalization. Pause scheduled job processing and let active invocations finish before `018`; deploy the source-bound worker/routes before resuming. Apply `020` before its approval/regeneration route changes and `021` before its status-handler changes. For an existing deployment, pause every scheduled or manual worker trigger and wait until no `process_ai_message` job remains `claimed`; migration `022` aborts otherwise. Apply `022`, deploy the atomic-finalization worker, and only then resume. Storage object keys must use `<organization-id>/documents/...` so its policies can derive the tenant from the first path segment.
 
 ---
 
@@ -408,6 +409,10 @@ Identical structure to `sms_delivery_events`.
 Service-only atomic transition for AI work. It updates state/status only when the supplied inbound contact message is still `conversations.latest_message_id` for the same organization and optional expected state/status preconditions still hold. The message-insert trigger shares the conversation-row lock, resets superseded in-flight work, and makes the transition result the ordering point before an auto-reply dispatch. Expected-state guards prevent a worker or delayed fallback from overwriting manual resolve/escalate actions. Returns `false` when a newer turn or manual action won the race. Execute is restricted to `project_admin`.
 
 Migration `018` also revokes browser-role mutation privileges on `conversations` and `messages`; authenticated clients retain tenant-scoped reads, while JWT-authorized routes and functions mutate them through `project_admin`. This prevents clients from forging the server-maintained turn boundary.
+
+### `finalize_ai_turn_with_decision(...)`
+
+Locks and validates the current source turn, inserts its AI decision, and publishes the terminal conversation state in one transaction. Draft finalization sets `pending_ai_decision_id` to the exact inserted row; a lost source/expected-state guard returns no row, and any insert error rolls the state change back. Execute is restricted to `project_admin`.
 
 ### `claim_pending_ai_draft(p_conversation_id uuid, p_organization_id uuid, p_ai_decision_id uuid)`
 

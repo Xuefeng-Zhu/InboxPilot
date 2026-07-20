@@ -76,12 +76,13 @@ Apply the SQL files in order to your InsForge project (via the InsForge SQL edit
 | `insforge/migrations/019_restrict_ai_decision_writes.sql` | Makes AI decisions browser-read-only and reserves mutations for trusted server paths |
 | `insforge/migrations/020_bind_pending_ai_drafts.sql` | Binds approval/regeneration to one pending AI decision with owner-guarded dispatch claims |
 | `insforge/migrations/021_monotonic_delivery_status.sql` | Atomically advances delivery snapshots while preserving terminal outcomes from late callbacks |
+| `insforge/migrations/022_atomic_ai_decision_finalization.sql` | Commits each AI decision and terminal conversation state together |
 
-Apply all 23 files in the order shown. Migration `016` must be applied before deploying the current application routes or functions because the current code depends on its columns and RPCs; migration `017` closes legacy public webchat access. Do not assume the full migration set is safe to replay against an initialized schema; use your environment's migration history to apply only pending files.
+Apply all 24 files in the order shown. Migration `016` must be applied before deploying the current application routes or functions because the current code depends on its columns and RPCs; migration `017` closes legacy public webchat access. Do not assume the full migration set is safe to replay against an initialized schema; use your environment's migration history to apply only pending files.
 
 After applying migration `014`, mark the existing `knowledge-files` storage bucket **private** in the InsForge dashboard. The SQL intentionally does not modify bucket configuration. Uploaded object keys must begin with `<organization-id>/documents/` so the organization-scoped storage policies can authorize them.
 
-Pause scheduled `process-jobs` invocations and let active work finish before applying `018`; deploy the source-bound routes/functions before resuming. Migration `019` then removes direct browser writes to server-produced AI decisions. Apply `020` before deploying the approval/regeneration routes that call its owner-bound RPCs, and `021` before the delivery-status handlers that call atomic advancement.
+Pause scheduled `process-jobs` invocations and let active work finish before applying `018`; deploy the source-bound routes/functions before resuming. Migration `019` then removes direct browser writes to server-produced AI decisions. Apply `020` before deploying the approval/regeneration routes that call its owner-bound RPCs, and `021` before the delivery-status handlers that call atomic advancement. For an existing deployment, pause every scheduled or manual worker trigger again and wait until no `process_ai_message` job is `claimed`; migration `022` aborts otherwise. Apply `022`, deploy the atomic-finalization worker, and only then resume processing.
 
 ## 4. (Optional) Seed dev data
 

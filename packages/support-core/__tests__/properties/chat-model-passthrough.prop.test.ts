@@ -177,6 +177,8 @@ function buildServiceWithModel(model: ModelId): {
 
   const aiDecisionRepo: AiDecisionRepository = {
     create: vi.fn().mockResolvedValue(SAMPLE_AI_DECISION),
+    finalizeTurn: vi.fn().mockResolvedValue(SAMPLE_AI_DECISION),
+    findBySourceJobId: vi.fn().mockResolvedValue(null),
     findLatestByConversation: vi.fn(),
   } as unknown as AiDecisionRepository;
 

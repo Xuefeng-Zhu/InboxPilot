@@ -127,8 +127,8 @@ function buildJobHandlers(
 
       // Inline auto-reply send: if the AI auto-replied, send immediately
       // instead of waiting for a separate process-jobs cycle. AiAgentService's
-      // successful final source CAS is the reply-intent ordering point; a
-      // second read here would recreate a read-then-send race.
+      // atomic decision/final-state commit is the reply-intent ordering point;
+      // a second read here would recreate a read-then-send race.
       if (shouldAutoSendDecision(decision)) {
         try {
           await sendAutoReply(conversationId, decision.responseText, decision.id);

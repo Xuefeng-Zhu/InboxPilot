@@ -66,8 +66,7 @@ packages/support-core/__tests__/            # support-core tests (vitest, node e
   │   ├── state-machine.prop.test.ts
   │   └── webhook-roundtrip.prop.test.ts
   ├── unit/                                 # Services, repositories, adapters, utilities
-  └── integration/                          # Live integration tests and remaining scenario stubs
-      ├── outbound-message-flow.test.ts
+  └── integration/                          # Live seed idempotency suite
       └── seed-idempotency.test.ts
 ```
 
@@ -140,6 +139,14 @@ npm run test:integration:inbound-email
 ```
 
 The inbound email suite exercises the same real repository/RPC path while verifying lowercase sender normalization, subject persistence, open-conversation reuse, deduplication, durable AI jobs, and message-received audits.
+
+### Live outbound persistence
+
+```bash
+npm run test:integration:outbound
+```
+
+The outbound suite uses real conversations, contacts, provider-account repositories, message persistence, and audit logs with in-memory SMS/email adapters. It verifies dispatch receipts, conversation timestamps, missing-default-sender failures, and the service contract that caller layers own realtime publication.
 
 ### Static checks
 

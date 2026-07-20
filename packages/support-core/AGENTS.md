@@ -22,7 +22,7 @@ src/
 __tests__/
   unit/         – 18 co-located unit tests (mock all interfaces)
   properties/   – 10 property-based tests (fast-check, 100+ iterations each)
-  integration/  – 1 opt-in live seed suite plus 1 integration stub (require real DB); live RLS/realtime/inbound flow coverage is in root `__tests__/insforge/`
+  integration/  – 1 opt-in live seed suite (requires real DB); other live flow coverage is in root `__tests__/insforge/`
 ```
 
 ## INTERFACES
@@ -80,7 +80,7 @@ class XxxRepository {
 ## TESTING
 - **Unit** (`__tests__/unit/`): Vitest describe/it, mock all interfaces. 18 files.
 - **Property** (`__tests__/properties/`): fast-check, `numRuns: 100` (one outlier: `__tests__/properties/design-tokens.property.test.ts:82` uses 50). **11 files** covering idempotence, round-trip, state machine, RBAC, dedup, auto-reply gating, escalation triggers, AI decision JSON, audit log immutability, knowledge similarity, normalization.
-- **Integration**: Require a disposable linked `qa-*` InsForge branch. Live suites have dedicated `test:integration:*` scripts; normal test runs skip remote mutations. One support-core file remains a scenario stub.
+- **Integration**: Require a disposable linked `qa-*` InsForge branch. Live suites have dedicated `test:integration:*` scripts; normal test runs skip remote mutations. There are no remaining `it.todo` integration placeholders.
 
 ## CRITICAL CONVENTIONS
 1. NO `@insforge/sdk` imports. EVER. All InsForge access via DatabaseClient interface.

@@ -105,10 +105,17 @@ after the function is active.
 Use the checked-in deployment script:
 
 ```bash
-npm run deploy:functions
+npm run deploy:functions -- --confirm-worker-auth
 ```
 
-The deployment script reads the explicit nine-function source manifest in `scripts/deploy-insforge-functions.mjs`; its test prevents entrypoints from being silently omitted. After deploying, note the functions base URL. It's typically `https://<your-app>.functions.insforge.app`. Set `NEXT_PUBLIC_INSFORGE_FUNCTIONS_URL` in the Next.js app to this value.
+The confirmation flag acknowledges that the Deno/Next.js secrets and any
+existing schedule were secured in steps 1-2. Without it, the script exits before
+bundling or changing the remote project. The script reads the explicit
+nine-function source manifest in `scripts/deploy-insforge-functions.mjs`; its
+test prevents entrypoints from being silently omitted. After deploying, note
+the functions base URL. It's typically
+`https://<your-app>.functions.insforge.app`. Set
+`NEXT_PUBLIC_INSFORGE_FUNCTIONS_URL` in the Next.js app to this value.
 
 Confirm `process-jobs` is active before creating a new schedule:
 
@@ -146,7 +153,7 @@ a duplicate.
 Use the checked-in deployment script:
 
 ```bash
-npm run deploy:functions
+npm run deploy:functions -- --confirm-worker-auth
 ```
 
 The deployment script reads the explicit nine-function source manifest in `scripts/deploy-insforge-functions.mjs`; its test prevents entrypoints from being silently omitted. It first bundles all nine current source entrypoints into a disposable temporary directory, aborts before any remote update if a bundle fails, deploys those fresh self-contained bundles, and removes the temporary directory. It never deploys the potentially stale checked-in `_bundled/` artifacts. After deploying, note the functions base URL. It's typically `https://<your-app>.functions.insforge.app`. Set `NEXT_PUBLIC_INSFORGE_FUNCTIONS_URL` in the Next.js app to this value.

@@ -125,8 +125,12 @@ npx @insforge/cli schedules update <schedule-id> \
 Now deploy with the checked-in deployment script:
 
 ```bash
-npm run deploy:functions
+npm run deploy:functions -- --confirm-worker-auth
 ```
+
+The deployment script refuses to bundle or deploy until this explicit
+confirmation is present. Use it only after completing the worker-auth steps
+above.
 
 The checked-in deployment manifest enumerates all 9 Deno functions. In a new
 project, create the schedule only after `process-jobs` is active. Follow

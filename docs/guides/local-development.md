@@ -20,17 +20,25 @@ This starts the Next.js dev server at `http://localhost:3000`. Hot reload is ena
 | `npm run build:widget` | Build the embeddable widget JS bundle to `public/widget.js` |
 | `npm run start` | Start a production Next.js server (requires `build` first) |
 | `npm run lint` | Run `tsc --noEmit`, the Deno safety scan, and `deno check` for all 9 function entrypoints |
-| `npm run deploy:functions` | Freshly bundle and deploy all 9 function entrypoints from the checked-in manifest |
+| `npm run deploy:functions -- --confirm-worker-auth` | After worker-auth setup, freshly bundle and deploy all 9 function entrypoints from the checked-in manifest |
 
 ## Deploying Deno functions
 
 The InsForge Deno functions live in `insforge/functions/`. To redeploy after a change:
 
 ```bash
-npm run deploy:functions
+npm run deploy:functions -- --confirm-worker-auth
 ```
 
-The deployment script at `scripts/deploy-insforge-functions.mjs` enumerates all nine source entrypoints explicitly so a release cannot silently omit a function. It bundles every current entrypoint into a disposable directory before any deployment begins, then deploys the fresh self-contained files and cleans them up. The checked-in bundles in `insforge/functions/_bundled/` are generated artifacts that may be stale — don't edit or deploy them directly.
+The confirmation flag is accepted only after the worker secret and scheduler
+header are configured as described in the deployment guide. Without it, the
+script stops before bundling or changing the remote project. The script at
+`scripts/deploy-insforge-functions.mjs` enumerates all nine source entrypoints
+explicitly so a release cannot silently omit a function. It bundles every
+current entrypoint into a disposable directory before any deployment begins,
+then deploys the fresh self-contained files and cleans them up. The checked-in
+bundles in `insforge/functions/_bundled/` are generated artifacts that may be
+stale — don't edit or deploy them directly.
 
 ### Local function testing
 

@@ -162,8 +162,11 @@ Then deploy all 9 InsForge Deno function entrypoints from the checked-in source
 manifest:
 
 ```bash
-npm run deploy:functions
+npm run deploy:functions -- --confirm-worker-auth
 ```
+
+The confirmation flag is required so the script cannot replace the worker
+until you have completed the secret and schedule steps above.
 
 For a new environment, create the schedule only after `process-jobs` is active;
 see [the deployment guide](docs/guides/deploying.md#4-create-a-new-schedule-after-deployment).

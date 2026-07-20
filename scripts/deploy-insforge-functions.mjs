@@ -10,6 +10,7 @@ const defaultProjectRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..'
 
 export const DEPLOYMENT_PREFLIGHT_NOTICE =
   'Preflight required before deployment: create the InsForge PROCESS_JOBS_SECRET for the Deno runtime, put the same value in the Next.js server environment, and update any existing process-jobs schedule to POST with X-Process-Jobs-Secret: ${{secrets.PROCESS_JOBS_SECRET}}. See docs/guides/deploying.md.';
+export const WORKER_AUTH_CONFIRMATION_FLAG = '--confirm-worker-auth';
 
 export const FUNCTION_DEPLOYMENTS = Object.freeze([
   { slug: 'email-inbound', source: 'insforge/functions/email-inbound/index.ts' },
@@ -25,6 +26,7 @@ export const FUNCTION_DEPLOYMENTS = Object.freeze([
 
 export function deployInsforgeFunctions({
   projectRoot = defaultProjectRoot,
+  workerAuthConfirmed = false,
   runCommand = spawnSync,
   writeLine = (line) => process.stdout.write(`${line}\n`),
   createBundleDirectory = () =>
@@ -33,6 +35,11 @@ export function deployInsforgeFunctions({
     rmSync(directory, { recursive: true, force: true }),
 } = {}) {
   writeLine(DEPLOYMENT_PREFLIGHT_NOTICE);
+  if (!workerAuthConfirmed) {
+    throw new Error(
+      `Deployment blocked: verify the worker-auth preflight, then re-run with ${WORKER_AUTH_CONFIRMATION_FLAG}.`,
+    );
+  }
 
   const bundleDirectory = createBundleDirectory();
   try {
@@ -109,7 +116,9 @@ export function deployInsforgeFunctions({
 const invokedPath = process.argv[1] ? resolve(process.argv[1]) : null;
 if (invokedPath === fileURLToPath(import.meta.url)) {
   try {
-    deployInsforgeFunctions();
+    deployInsforgeFunctions({
+      workerAuthConfirmed: process.argv.includes(WORKER_AUTH_CONFIRMATION_FLAG),
+    });
   } catch (error) {
     process.stderr.write(
       `${error instanceof Error ? error.message : String(error)}\n`,

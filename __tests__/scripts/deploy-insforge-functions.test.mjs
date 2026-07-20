@@ -5,12 +5,32 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   DEPLOYMENT_PREFLIGHT_NOTICE,
   FUNCTION_DEPLOYMENTS,
+  WORKER_AUTH_CONFIRMATION_FLAG,
   deployInsforgeFunctions,
 } from '../../scripts/deploy-insforge-functions.mjs';
 
 const projectRoot = resolve(import.meta.dirname, '../..');
 
 describe('InsForge function deployment manifest', () => {
+  it('blocks before bundling until worker authentication is confirmed', () => {
+    const runCommand = vi.fn();
+    const createBundleDirectory = vi.fn();
+    const writeLine = vi.fn();
+
+    expect(() =>
+      deployInsforgeFunctions({
+        projectRoot,
+        runCommand,
+        createBundleDirectory,
+        writeLine,
+      }),
+    ).toThrow(WORKER_AUTH_CONFIRMATION_FLAG);
+    expect(writeLine).toHaveBeenCalledOnce();
+    expect(writeLine).toHaveBeenCalledWith(DEPLOYMENT_PREFLIGHT_NOTICE);
+    expect(createBundleDirectory).not.toHaveBeenCalled();
+    expect(runCommand).not.toHaveBeenCalled();
+  });
+
   it('deploys every source entrypoint and never deploys checked-in bundles', () => {
     const functionsRoot = resolve(projectRoot, 'insforge/functions');
     const sourceSlugs = readdirSync(functionsRoot, { withFileTypes: true })
@@ -45,6 +65,7 @@ describe('InsForge function deployment manifest', () => {
 
     deployInsforgeFunctions({
       projectRoot,
+      workerAuthConfirmed: true,
       runCommand,
       writeLine,
       createBundleDirectory: () => bundleDirectory,
@@ -106,6 +127,7 @@ describe('InsForge function deployment manifest', () => {
     expect(() =>
       deployInsforgeFunctions({
         projectRoot,
+        workerAuthConfirmed: true,
         runCommand,
         createBundleDirectory: () => '/tmp/inboxpilot-test-bundles',
         removeBundleDirectory,
@@ -127,6 +149,7 @@ describe('InsForge function deployment manifest', () => {
     expect(() =>
       deployInsforgeFunctions({
         projectRoot,
+        workerAuthConfirmed: true,
         runCommand,
         createBundleDirectory: () => '/tmp/inboxpilot-test-bundles',
         removeBundleDirectory,

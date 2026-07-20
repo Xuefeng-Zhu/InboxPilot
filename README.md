@@ -94,8 +94,10 @@ Apply the SQL migration files in order to your InsForge PostgreSQL database:
 | `insforge/migrations/014_role_aware_rls_and_knowledge_storage.sql` | Enforces role-aware settings/knowledge RLS, hides provider and widget secrets, records knowledge object keys, and adds organization-scoped storage policies |
 | `insforge/migrations/015_bind_knowledge_jobs_to_documents.sql` | Requires browser-enqueued knowledge jobs to reference a document in the same organization |
 | `insforge/migrations/016_job_and_ai_decision_idempotency.sql` | Adds retry-safe job/decision, stale-claim, knowledge-revision, and inbound-audit guards |
+| `insforge/migrations/017_lock_down_legacy_webchat_access.sql` | Removes legacy public webchat policies/grants and the obsolete auth-debug helper |
+| `insforge/migrations/018_atomic_ai_source_turns.sql` | Adds atomic latest-turn tracking and source-bound AI state/dispatch claims |
 
-Apply all 18 files via the InsForge SQL editor or migrations API in the order shown above. Migration `014` intentionally does not change bucket visibility: after applying it, mark the existing `knowledge-files` bucket **private** in the InsForge dashboard. Keep knowledge object keys under `<organization-id>/documents/...`; the migration's storage policies depend on that prefix.
+Apply all 20 files via the InsForge SQL editor or migrations API in the order shown above. Migration `014` intentionally does not change bucket visibility: after applying it, mark the existing `knowledge-files` bucket **private** in the InsForge dashboard. Keep knowledge object keys under `<organization-id>/documents/...`; the migration's storage policies depend on that prefix. Apply migration `017` before release so legacy public webchat access is removed. Pause scheduled `process-jobs` invocations and let any active invocation finish before applying `018`; deploy the source-bound routes/functions before resuming the schedule.
 
 ### Seed Data
 

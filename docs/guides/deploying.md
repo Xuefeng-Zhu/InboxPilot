@@ -152,8 +152,10 @@ triggers must send the same header; unauthenticated calls are rejected.
 
 ## Pre-deploy checklist
 
-- [ ] All 18 migration files applied in the documented order (through `016`, including both timestamped job-trigger migrations).
+- [ ] All 20 migration files applied in the documented order (through `018`, including both timestamped job-trigger migrations).
 - [ ] Migration `016` applied **before** deploying the updated routes/functions; inbound audit repair, job leases, decision idempotency, and knowledge revisions depend on it.
+- [ ] Migration `017` applied so legacy public webchat table policies/grants and `debug_auth_info()` are removed.
+- [ ] Before migration `018`, pause the `process-jobs` schedule and let active invocations finish; apply the migration, deploy the source-bound routes/functions, then resume the schedule.
 - [ ] Existing `knowledge-files` bucket set to **private** in the InsForge dashboard after applying `014`.
 - [ ] Knowledge uploads use `<organization-id>/documents/...` object keys.
 - [ ] Seed data applied (optional for production).

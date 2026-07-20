@@ -6,6 +6,7 @@ export async function enqueueAutoReplyFallback(input: {
   error: unknown;
   jobQueue: Pick<JobQueue, 'enqueue'>;
   conversationId: string;
+  sourceMessageId: string;
   responseText: string;
   aiDecisionId: string;
   organizationId: string;
@@ -19,6 +20,7 @@ export async function enqueueAutoReplyFallback(input: {
     'send_outbound_message',
     {
       conversationId: input.conversationId,
+      sourceMessageId: input.sourceMessageId,
       body: input.responseText,
       senderType: 'ai',
       aiDecisionId: input.aiDecisionId,

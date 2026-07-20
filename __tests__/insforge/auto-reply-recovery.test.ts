@@ -4,6 +4,7 @@ import { reconcileAcceptedDispatch } from '../../insforge/functions/_shared/acce
 import { enqueueAutoReplyFallback } from '../../insforge/functions/_shared/auto-reply-fallback';
 import { NonRetryableJobError } from '../../insforge/functions/_shared/run-claimed-job';
 import { ProviderSendOutcomeUnknownError } from '../../packages/support-core/src/adapters/provider-send-outcome-unknown-error';
+import { dispatchQueuedAutoReply } from '../../insforge/functions/_shared/queued-auto-reply-dispatch';
 
 function postDispatchError(): OutboundMessagePostDispatchError {
   return new OutboundMessagePostDispatchError({
@@ -50,6 +51,7 @@ describe('auto-reply recovery', () => {
       error: new Error('provider unavailable'),
       jobQueue,
       conversationId: 'conversation-1',
+      sourceMessageId: 'message-1',
       responseText: 'Hello',
       aiDecisionId: 'decision-1',
       organizationId: 'org-1',
@@ -60,6 +62,7 @@ describe('auto-reply recovery', () => {
       error: new NonRetryableJobError('provider accepted'),
       jobQueue,
       conversationId: 'conversation-1',
+      sourceMessageId: 'message-1',
       responseText: 'Hello',
       aiDecisionId: 'decision-1',
       organizationId: 'org-1',
@@ -80,10 +83,44 @@ describe('auto-reply recovery', () => {
       error,
       jobQueue,
       conversationId: 'conversation-1',
+      sourceMessageId: 'message-1',
       responseText: 'Hello',
       aiDecisionId: 'decision-1',
       organizationId: 'org-1',
     })).rejects.toBeInstanceOf(NonRetryableJobError);
     expect(jobQueue.enqueue).not.toHaveBeenCalled();
+  });
+
+  it.each(['resolved', 'escalated'])(
+    'suppresses a delayed fallback after a manual %s action',
+    async () => {
+      const claimSourceTurn = vi.fn().mockResolvedValue(false);
+      const send = vi.fn();
+
+      await expect(dispatchQueuedAutoReply({
+        sourceMessageId: 'message-1',
+        claimSourceTurn,
+        send,
+      })).resolves.toBe(false);
+
+      expect(claimSourceTurn).toHaveBeenCalledOnce();
+      expect(claimSourceTurn).toHaveBeenCalledWith('message-1');
+      expect(send).not.toHaveBeenCalled();
+    },
+  );
+
+  it('dispatches a fallback only after its source-turn claim succeeds', async () => {
+    const claimSourceTurn = vi.fn().mockResolvedValue(true);
+    const send = vi.fn().mockResolvedValue(undefined);
+
+    await expect(dispatchQueuedAutoReply({
+      sourceMessageId: 'message-1',
+      claimSourceTurn,
+      send,
+    })).resolves.toBe(true);
+
+    expect(claimSourceTurn.mock.invocationCallOrder[0]).toBeLessThan(
+      send.mock.invocationCallOrder[0],
+    );
   });
 });

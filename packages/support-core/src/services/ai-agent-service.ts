@@ -23,7 +23,10 @@ import type { AiClient } from '../interfaces/ai-client.js';
 import type { JobQueue } from '../interfaces/job-queue.js';
 import type {
   AiDecision,
+  AiState,
   AiSettings,
+  ConversationStatus,
+  Message,
 } from '../types/index.js';
 import { parseAiDecision } from './ai-decision-parser.js';
 import { LowConfidenceRule } from './escalation-rules.js';
@@ -44,6 +47,38 @@ const DEFAULT_AI_SETTINGS: Omit<AiSettings, 'id' | 'organizationId' | 'createdAt
   embeddingModel: 'openai/text-embedding-3-small',
 };
 
+interface AiTurnTransition {
+  aiState: AiState;
+  status?: ConversationStatus;
+}
+
+/** Reconstruct the already-claimed final state when a persisted job retries. */
+export function transitionForRecoveredDecision(
+  decision: Pick<AiDecision, 'requiresHuman' | 'responseText' | 'rawResponse'>,
+): AiTurnTransition {
+  if (decision.requiresHuman) {
+    return { aiState: 'needs_human', status: 'escalated' };
+  }
+  if (decision.rawResponse?._shouldAutoSend === true) {
+    return { aiState: 'auto_replied' };
+  }
+  if (decision.responseText) {
+    return { aiState: 'drafted' };
+  }
+
+  const auditMetadata = decision.rawResponse?._auditMetadata;
+  if (
+    auditMetadata &&
+    typeof auditMetadata === 'object' &&
+    !Array.isArray(auditMetadata) &&
+    'reason' in auditMetadata &&
+    auditMetadata.reason === 'ai_mode_off'
+  ) {
+    return { aiState: 'idle' };
+  }
+  return { aiState: 'failed' };
+}
+
 export class AiAgentService {
   constructor(
     private conversationRepo: ConversationRepository,
@@ -60,8 +95,8 @@ export class AiAgentService {
   async processMessage(
     conversationId: string,
     orgId: string,
-    options: { sourceJobId?: string } = {},
-  ): Promise<AiDecision> {
+    options: { sourceJobId?: string; sourceMessageId?: string } = {},
+  ): Promise<AiDecision | null> {
     const decisionRecorder = new AiDecisionRecorder(
       this.aiDecisionRepo,
       this.jobQueue,
@@ -69,13 +104,6 @@ export class AiAgentService {
       orgId,
       options.sourceJobId,
     );
-
-    // A worker retry after decision persistence must resume downstream work,
-    // not call the LLM and create another decision. The original grounding
-    // IDs are stored with the decision so a failed chunk-ref enqueue can be
-    // retried without recomputing the turn.
-    const existingDecision = await decisionRecorder.recover(conversationId);
-    if (existingDecision) return existingDecision;
 
     // 1. Load AI settings
     const settings = await this.aiSettingsRepo.findByOrg(orgId);
@@ -86,11 +114,86 @@ export class AiAgentService {
     const model = settings?.model ?? DEFAULT_AI_SETTINGS.model;
     const systemPrompt = settings?.systemPrompt ?? DEFAULT_AI_SETTINGS.systemPrompt;
 
-    // If mode is "off", skip processing entirely
+    // 2. Load conversation and history
+    const conversation = await this.conversationRepo.findById(conversationId);
+    if (!conversation) {
+      throw new Error(`Conversation not found: ${conversationId}`);
+    }
+    if (conversation.organizationId !== orgId) {
+      throw new Error(`Conversation ${conversationId} belongs to a different organization`);
+    }
+
+    let sourceMessage: Message | null = null;
+    if (options.sourceMessageId) {
+      sourceMessage = await this.messageRepo.findById(options.sourceMessageId);
+      if (!sourceMessage) {
+        throw new Error(`Source message not found: ${options.sourceMessageId}`);
+      }
+      if (
+        sourceMessage.conversationId !== conversationId ||
+        sourceMessage.direction !== 'inbound' ||
+        sourceMessage.senderType !== 'contact'
+      ) {
+        throw new Error('AI source message is not an inbound contact message for this conversation');
+      }
+    }
+
+    // A worker retry after decision persistence must resume downstream work,
+    // not call the LLM and create another decision. Source validation happens
+    // first so an old decision cannot be resumed after a newer customer or
+    // human turn superseded it.
+    const existingDecision = await decisionRecorder.recover(conversationId);
+    if (existingDecision) {
+      const recoveredTransition = transitionForRecoveredDecision(existingDecision);
+      if (
+        sourceMessage &&
+        !await this.transitionAiTurn(
+          conversationId,
+          orgId,
+          sourceMessage.id,
+          recoveredTransition,
+          {
+            aiState: recoveredTransition.aiState,
+            status: recoveredTransition.status ?? 'open',
+          },
+        )
+      ) {
+        return null;
+      }
+      return existingDecision;
+    }
+
+    if (
+      sourceMessage &&
+      !await this.transitionAiTurn(
+        conversationId,
+        orgId,
+        sourceMessage.id,
+        { aiState: 'thinking' },
+        { status: 'open' },
+      )
+    ) {
+      return null;
+    }
+
+    // If mode is "off", skip processing entirely.
     if (aiMode === 'off') {
+      if (
+        sourceMessage &&
+        !await this.transitionAiTurn(
+          conversationId,
+          orgId,
+          sourceMessage.id,
+          { aiState: 'idle' },
+          { aiState: 'thinking', status: 'open' },
+        )
+      ) {
+        return null;
+      }
       return decisionRecorder.record({
         conversationId,
         organizationId: orgId,
+        messageId: sourceMessage?.id ?? null,
         decisionType: 'respond',
         confidence: 0,
         reasoningSummary: 'AI processing is disabled for this organization',
@@ -101,27 +204,26 @@ export class AiAgentService {
       }, { reason: 'ai_mode_off' });
     }
 
-    // 2. Load conversation and history
-    const conversation = await this.conversationRepo.findById(conversationId);
-    if (!conversation) {
-      throw new Error(`Conversation not found: ${conversationId}`);
+    // Source-bound workers already claimed `thinking` atomically above.
+    if (!sourceMessage) {
+      await this.conversationRepo.update(conversationId, { aiState: 'thinking' });
     }
 
-    // Set ai_state to "thinking"
-    await this.conversationRepo.update(conversationId, { aiState: 'thinking' });
-
-    const messages = await this.messageRepo.listByConversation(
-      conversationId,
-      contextWindowSize,
-    );
+    const messages = sourceMessage
+      ? await this.messageRepo.listByConversationThroughMessage(
+          conversationId,
+          sourceMessage,
+          contextWindowSize,
+        )
+      : await this.messageRepo.listByConversation(conversationId, contextWindowSize);
 
     const latestMessage = messages.length > 0
       ? messages[messages.length - 1].body
       : '';
 
-    const latestMessageRecord = messages.length > 0
-      ? messages[messages.length - 1]
-      : null;
+    const latestMessageRecord = sourceMessage ?? (
+      messages.length > 0 ? messages[messages.length - 1] : null
+    );
 
     // 3. Get matching knowledge chunks
     let knowledgeChunks: Awaited<ReturnType<KnowledgeRepository['matchChunks']>> = [];
@@ -221,10 +323,10 @@ export class AiAgentService {
 
     // 5. If escalation: skip LLM
     if (escalationResult) {
-      await this.conversationRepo.update(conversationId, {
+      if (!await this.transitionAiTurn(conversationId, orgId, sourceMessage?.id, {
         status: 'escalated',
         aiState: 'needs_human',
-      });
+      }, { aiState: 'thinking', status: 'open' })) return null;
 
       return decisionRecorder.record({
         conversationId,
@@ -261,7 +363,9 @@ export class AiAgentService {
         temperature: 0.3,
       });
     } catch (err) {
-      await this.conversationRepo.update(conversationId, { aiState: 'failed' });
+      if (!await this.transitionAiTurn(conversationId, orgId, sourceMessage?.id, {
+        aiState: 'failed',
+      }, { aiState: 'thinking', status: 'open' })) return null;
 
       const errorMessage = err instanceof Error ? err.message : String(err);
       return decisionRecorder.record({
@@ -282,7 +386,9 @@ export class AiAgentService {
 
     if (!parseResult.success) {
       // LLM returned invalid JSON — set ai_state to "failed"
-      await this.conversationRepo.update(conversationId, { aiState: 'failed' });
+      if (!await this.transitionAiTurn(conversationId, orgId, sourceMessage?.id, {
+        aiState: 'failed',
+      }, { aiState: 'thinking', status: 'open' })) return null;
 
       return decisionRecorder.record({
         conversationId,
@@ -313,10 +419,10 @@ export class AiAgentService {
       parsed.decision_type !== 'clarify'
     ) {
       // Low confidence — escalate
-      await this.conversationRepo.update(conversationId, {
+      if (!await this.transitionAiTurn(conversationId, orgId, sourceMessage?.id, {
         status: 'escalated',
         aiState: 'needs_human',
-      });
+      }, { aiState: 'thinking', status: 'open' })) return null;
 
       return decisionRecorder.record({
         conversationId,
@@ -335,10 +441,10 @@ export class AiAgentService {
     // 7. Handle mode gating
     if (parsed.requires_human || parsed.decision_type === 'escalate') {
       // LLM itself says escalation needed
-      await this.conversationRepo.update(conversationId, {
+      if (!await this.transitionAiTurn(conversationId, orgId, sourceMessage?.id, {
         status: 'escalated',
         aiState: 'needs_human',
-      });
+      }, { aiState: 'thinking', status: 'open' })) return null;
 
       return decisionRecorder.record({
         conversationId,
@@ -356,7 +462,9 @@ export class AiAgentService {
 
     if (aiMode === 'draft_only') {
       // Store draft, don't send
-      await this.conversationRepo.update(conversationId, { aiState: 'drafted' });
+      if (!await this.transitionAiTurn(conversationId, orgId, sourceMessage?.id, {
+        aiState: 'drafted',
+      }, { aiState: 'thinking', status: 'open' })) return null;
 
       return decisionRecorder.record({
         conversationId,
@@ -375,8 +483,11 @@ export class AiAgentService {
     if (aiMode === 'auto_reply') {
       // Auto-send if confidence ≥ threshold and requires_human is false
       if (parsed.confidence >= confidenceThreshold && !parsed.requires_human) {
-        // Auto-reply: enqueue outbound message job
-        await this.conversationRepo.update(conversationId, { aiState: 'auto_replied' });
+        // The successful final source CAS is the durable reply-intent ordering
+        // point. The worker may dispatch only after this transition succeeds.
+        if (!await this.transitionAiTurn(conversationId, orgId, sourceMessage?.id, {
+          aiState: 'auto_replied',
+        }, { aiState: 'thinking', status: 'open' })) return null;
 
         return decisionRecorder.record({
           conversationId,
@@ -392,7 +503,9 @@ export class AiAgentService {
         }, { decisionType: parsed.decision_type, mode: 'auto_reply', autoSent: true });
       } else {
         // Confidence below threshold in auto_reply mode — store as draft
-        await this.conversationRepo.update(conversationId, { aiState: 'drafted' });
+        if (!await this.transitionAiTurn(conversationId, orgId, sourceMessage?.id, {
+          aiState: 'drafted',
+        }, { aiState: 'thinking', status: 'open' })) return null;
 
         return decisionRecorder.record({
           conversationId,
@@ -415,7 +528,9 @@ export class AiAgentService {
     }
 
     // Fallback: store as draft
-    await this.conversationRepo.update(conversationId, { aiState: 'drafted' });
+    if (!await this.transitionAiTurn(conversationId, orgId, sourceMessage?.id, {
+      aiState: 'drafted',
+    }, { aiState: 'thinking', status: 'open' })) return null;
 
     return decisionRecorder.record({
       conversationId,
@@ -429,6 +544,31 @@ export class AiAgentService {
       requiresHuman: false,
       rawResponse: parsed as unknown as Record<string, unknown>,
     }, { decisionType: parsed.decision_type });
+  }
+
+  private async transitionAiTurn(
+    conversationId: string,
+    organizationId: string,
+    sourceMessageId: string | undefined,
+    transition: AiTurnTransition,
+    expected?: { aiState?: AiState; status?: ConversationStatus },
+  ): Promise<boolean> {
+    if (!sourceMessageId) {
+      await this.conversationRepo.update(conversationId, {
+        aiState: transition.aiState,
+        ...(transition.status ? { status: transition.status } : {}),
+      });
+      return true;
+    }
+
+    return this.conversationRepo.transitionAiSourceTurn(
+      conversationId,
+      organizationId,
+      sourceMessageId,
+      transition.aiState,
+      transition.status,
+      expected,
+    );
   }
 
 }

@@ -58,6 +58,21 @@ function toMessage(row: MessageRow): Message {
 export class MessageRepository {
   constructor(private db: DatabaseClient) {}
 
+  /** Find a message by its immutable ID. */
+  async findById(id: string): Promise<Message | null> {
+    const { data, error } = await this.db
+      .from('messages')
+      .select('*')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (error) {
+      throw new Error(`MessageRepository.findById failed: ${error.message}`);
+    }
+
+    return data ? toMessage(data as MessageRow) : null;
+  }
+
   /**
    * Find a message by provider and external message ID.
    * Critical for message deduplication — queries by both provider AND external_message_id.
@@ -162,5 +177,60 @@ export class MessageRepository {
 
     const rows = (data ?? []) as MessageRow[];
     return rows.map(toMessage);
+  }
+
+  /** Return the latest persisted message for supersession checks. */
+  async findLatestByConversation(conversationId: string): Promise<Message | null> {
+    const { data, error } = await this.db
+      .from('messages')
+      .select('*')
+      .eq('conversation_id', conversationId)
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error) {
+      throw new Error(`MessageRepository.findLatestByConversation failed: ${error.message}`);
+    }
+
+    return data ? toMessage(data as MessageRow) : null;
+  }
+
+  /**
+   * Return chronological context ending at an immutable source message.
+   * Rows are trimmed in memory so a same-timestamp message cannot move the
+   * context boundary past the exact source ID.
+   */
+  async listByConversationThroughMessage(
+    conversationId: string,
+    sourceMessage: Pick<Message, 'id' | 'createdAt'>,
+    limit?: number,
+  ): Promise<Message[]> {
+    const { data, error } = await this.db
+      .from('messages')
+      .select('*')
+      .eq('conversation_id', conversationId)
+      .lte('created_at', sourceMessage.createdAt.toISOString())
+      .order('created_at', { ascending: true })
+      .order('id', { ascending: true });
+
+    if (error) {
+      throw new Error(
+        `MessageRepository.listByConversationThroughMessage failed: ${error.message}`,
+      );
+    }
+
+    const messages = ((data ?? []) as MessageRow[]).map(toMessage);
+    const sourceIndex = messages.findIndex(({ id }) => id === sourceMessage.id);
+    if (sourceIndex === -1) {
+      throw new Error(
+        `MessageRepository.listByConversationThroughMessage source not found: ${sourceMessage.id}`,
+      );
+    }
+
+    const end = sourceIndex + 1;
+    const start = limit === undefined ? 0 : Math.max(0, end - limit);
+    return messages.slice(start, end);
   }
 }

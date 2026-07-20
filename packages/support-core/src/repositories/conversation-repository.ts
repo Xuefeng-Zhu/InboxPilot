@@ -76,6 +76,38 @@ export class ConversationRepository {
   constructor(private db: DatabaseClient) {}
 
   /**
+   * Atomically transition AI work only if its inbound source is still the
+   * conversation's latest persisted turn. A false result means a newer
+   * customer, human, or AI message won the database race.
+   */
+  async transitionAiSourceTurn(
+    conversationId: string,
+    organizationId: string,
+    sourceMessageId: string,
+    aiState: AiState,
+    status?: ConversationStatus,
+    expected?: { aiState?: AiState; status?: ConversationStatus },
+  ): Promise<boolean> {
+    const { data, error } = await this.db.rpc('transition_ai_source_turn', {
+      p_conversation_id: conversationId,
+      p_organization_id: organizationId,
+      p_source_message_id: sourceMessageId,
+      p_ai_state: aiState,
+      p_status: status ?? null,
+      p_expected_ai_state: expected?.aiState ?? null,
+      p_expected_status: expected?.status ?? null,
+    });
+
+    if (error) {
+      throw new Error(
+        `ConversationRepository.transitionAiSourceTurn failed: ${error.message}`,
+      );
+    }
+
+    return data === true || (Array.isArray(data) && data[0] === true);
+  }
+
+  /**
    * Find a conversation by its ID.
    * Returns null if no conversation exists with the given ID.
    */

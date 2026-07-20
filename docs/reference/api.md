@@ -409,9 +409,9 @@ Regenerates an AI draft by enqueuing a new `process_ai_message` job.
 { "status": "queued" }
 ```
 
-**Behaviour**: Loads the conversation's `organization_id`. Durably inserts an idempotent `support_jobs` row with `job_type = 'process_ai_message'`, `payload = { conversationId }`, then best-effort sets `conversations.ai_state = 'thinking'`; the worker repeats that transition after it claims the job. The route then POSTs to the InsForge `process-jobs` function with a 1.5-second timeout; state/trigger failures leave the queued job for the scheduler and are returned or logged as non-retryable warnings. **No audit log entry** (an `ai_draft_regenerated` action would be a useful follow-up; tracked in [`../plans/refactor.md`](../plans/refactor.md)).
+**Behaviour**: Loads the conversation's `organization_id` and latest inbound contact message. Durably inserts an idempotent `support_jobs` row with `job_type = 'process_ai_message'`, `payload = { conversationId, messageId }`, then atomically sets `conversations.ai_state = 'thinking'` only if that source is still the latest persisted turn; the worker repeats the guarded transition after it claims the job. The route then POSTs to the InsForge `process-jobs` function with a 1.5-second timeout; state/trigger failures leave the queued job for the scheduler and are returned or logged as non-retryable warnings. **No audit log entry** (an `ai_draft_regenerated` action would be a useful follow-up; tracked in [`../plans/refactor.md`](../plans/refactor.md)).
 
-**Errors**: `400`, `401`, `404` (conversation not found), `500`.
+**Errors**: `400`, `401`, `404` (conversation not found), `409` (no inbound source message is available), `500`.
 
 ### POST /api/functions/escalate-conversation
 

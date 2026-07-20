@@ -19,7 +19,12 @@ import { createOpenRouterAiClient } from '../_shared/openrouter-ai-client.ts';
 import { shouldAutoSendDecision } from '../_shared/auto-reply-policy.ts';
 import { enqueueAutoReplyFallback } from '../_shared/auto-reply-fallback.ts';
 import { createAutoReplySender } from '../_shared/auto-reply-sender.ts';
-import { runClaimedJob, type ClaimedJobResult } from '../_shared/run-claimed-job.ts';
+import { dispatchQueuedAutoReply } from '../_shared/queued-auto-reply-dispatch.ts';
+import {
+  NonRetryableJobError,
+  runClaimedJob,
+  type ClaimedJobResult,
+} from '../_shared/run-claimed-job.ts';
 import { isAuthorizedProcessJobsRequest } from '../_shared/process-jobs-auth.ts';
 import { PostgresJobQueue } from '../../../packages/support-core/src/services/postgres-job-queue.ts';
 import { ConversationRepository } from '../../../packages/support-core/src/repositories/conversation-repository.ts';
@@ -90,7 +95,13 @@ function buildJobHandlers(
   return {
     async process_ai_message(job: Job) {
       const conversationId = (job.payload.conversationId ?? job.payload.conversation_id) as string;
+      const sourceMessageId = (job.payload.messageId ?? job.payload.message_id) as string;
       const orgId = job.organizationId;
+      if (!conversationId || !sourceMessageId) {
+        throw new NonRetryableJobError(
+          'process_ai_message: missing conversation or source message ID',
+        );
+      }
 
       const conversationRepo = new ConversationRepository(db);
       const messageRepo = new MessageRepository(db);
@@ -110,11 +121,14 @@ function buildJobHandlers(
       const decision = await aiAgentService.processMessage(
         conversationId,
         orgId,
-        { sourceJobId: job.id },
+        { sourceJobId: job.id, sourceMessageId },
       );
+      if (!decision) return;
 
       // Inline auto-reply send: if the AI auto-replied, send immediately
-      // instead of waiting for a separate process-jobs cycle.
+      // instead of waiting for a separate process-jobs cycle. AiAgentService's
+      // successful final source CAS is the reply-intent ordering point; a
+      // second read here would recreate a read-then-send race.
       if (shouldAutoSendDecision(decision)) {
         try {
           await sendAutoReply(conversationId, decision.responseText, decision.id);
@@ -129,6 +143,7 @@ function buildJobHandlers(
             error: err,
             jobQueue,
             conversationId,
+            sourceMessageId,
             responseText: decision.responseText,
             aiDecisionId: decision.id,
             organizationId: orgId,
@@ -186,11 +201,26 @@ function buildJobHandlers(
       const aiDecisionId = (
         job.payload.aiDecisionId ?? job.payload.ai_decision_id
       ) as string | null;
+      const sourceMessageId = (
+        job.payload.sourceMessageId ?? job.payload.source_message_id
+      ) as string | undefined;
       if (!conversationId || !body) {
         throw new Error('send_outbound_message: missing conversation_id or body');
       }
 
-      await sendAutoReply(conversationId, body, aiDecisionId);
+      const conversationRepo = new ConversationRepository(db);
+      await dispatchQueuedAutoReply({
+        sourceMessageId,
+        claimSourceTurn: (claimedSourceMessageId) => conversationRepo.transitionAiSourceTurn(
+          conversationId,
+          job.organizationId,
+          claimedSourceMessageId,
+          'auto_replied',
+          undefined,
+          { aiState: 'auto_replied', status: 'open' },
+        ),
+        send: () => sendAutoReply(conversationId, body, aiDecisionId),
+      });
     },
 
     async process_delivery_status(_job: Job) {

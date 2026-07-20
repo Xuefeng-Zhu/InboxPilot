@@ -60,6 +60,104 @@ const SAMPLE_ROW = {
 };
 
 describe('ConversationRepository', () => {
+  describe('transitionAiSourceTurn', () => {
+    it('uses the server-only atomic source transition RPC', async () => {
+      const builder = createMockQueryBuilder({ data: null, error: null });
+      const db = createMockDb(builder);
+      vi.mocked(db.rpc).mockResolvedValue({ data: true, error: null });
+      const repo = new ConversationRepository(db);
+
+      await expect(repo.transitionAiSourceTurn(
+        'conv1',
+        'org1',
+        'message1',
+        'needs_human',
+        'escalated',
+      )).resolves.toBe(true);
+
+      expect(db.rpc).toHaveBeenCalledWith('transition_ai_source_turn', {
+        p_conversation_id: 'conv1',
+        p_organization_id: 'org1',
+        p_source_message_id: 'message1',
+        p_ai_state: 'needs_human',
+        p_status: 'escalated',
+        p_expected_ai_state: null,
+        p_expected_status: null,
+      });
+    });
+
+    it('passes expected state and status guards into the atomic transition', async () => {
+      const builder = createMockQueryBuilder({ data: null, error: null });
+      const db = createMockDb(builder);
+      vi.mocked(db.rpc).mockResolvedValue({ data: false, error: null });
+      const repo = new ConversationRepository(db);
+
+      await repo.transitionAiSourceTurn(
+        'conv1',
+        'org1',
+        'message1',
+        'drafted',
+        undefined,
+        { aiState: 'thinking', status: 'open' },
+      );
+
+      expect(db.rpc).toHaveBeenCalledWith(
+        'transition_ai_source_turn',
+        expect.objectContaining({
+          p_expected_ai_state: 'thinking',
+          p_expected_status: 'open',
+        }),
+      );
+    });
+
+    it('returns false when a newer message won the source-turn race', async () => {
+      const builder = createMockQueryBuilder({ data: null, error: null });
+      const db = createMockDb(builder);
+      vi.mocked(db.rpc).mockResolvedValue({ data: false, error: null });
+      const repo = new ConversationRepository(db);
+
+      await expect(repo.transitionAiSourceTurn(
+        'conv1',
+        'org1',
+        'message1',
+        'thinking',
+      )).resolves.toBe(false);
+    });
+
+    it('accepts the single-row boolean shape returned by older adapters', async () => {
+      const builder = createMockQueryBuilder({ data: null, error: null });
+      const db = createMockDb(builder);
+      vi.mocked(db.rpc).mockResolvedValue({ data: [true], error: null });
+      const repo = new ConversationRepository(db);
+
+      await expect(repo.transitionAiSourceTurn(
+        'conv1',
+        'org1',
+        'message1',
+        'thinking',
+      )).resolves.toBe(true);
+    });
+
+    it('surfaces atomic transition failures', async () => {
+      const builder = createMockQueryBuilder({ data: null, error: null });
+      const db = createMockDb(builder);
+      vi.mocked(db.rpc).mockResolvedValue({
+        data: null,
+        error: { message: 'database unavailable' },
+      });
+      const repo = new ConversationRepository(db);
+
+      await expect(repo.transitionAiSourceTurn(
+        'conv1',
+        'org1',
+        'message1',
+        'thinking',
+      )).rejects.toThrow(
+        'ConversationRepository.transitionAiSourceTurn failed: database unavailable',
+      );
+    });
+  });
+
   describe('findOpenByContactAndChannel', () => {
     it('returns a Conversation when a matching open conversation exists', async () => {
       const builder = createMockQueryBuilder({ data: SAMPLE_ROW, error: null });

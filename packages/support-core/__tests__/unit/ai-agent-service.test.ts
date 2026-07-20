@@ -131,15 +131,19 @@ function createMockConversationRepo(): ConversationRepository {
     findOpenByContactAndChannel: vi.fn(),
     create: vi.fn(),
     update: vi.fn().mockResolvedValue(SAMPLE_CONVERSATION),
+    transitionAiSourceTurn: vi.fn().mockResolvedValue(true),
     listByOrg: vi.fn(),
   } as unknown as ConversationRepository;
 }
 
 function createMockMessageRepo(): MessageRepository {
   return {
+    findById: vi.fn().mockResolvedValue(SAMPLE_MESSAGE),
     findByExternalId: vi.fn(),
+    findLatestByConversation: vi.fn().mockResolvedValue(SAMPLE_MESSAGE),
     create: vi.fn(),
     listByConversation: vi.fn().mockResolvedValue([SAMPLE_MESSAGE]),
+    listByConversationThroughMessage: vi.fn().mockResolvedValue([SAMPLE_MESSAGE]),
   } as unknown as MessageRepository;
 }
 
@@ -255,6 +259,141 @@ describe('AiAgentService', () => {
     escalationEngine = new EscalationEngine();
   });
 
+  describe('source message binding', () => {
+    it('suppresses work when a newer inbound wins before the initial atomic claim', async () => {
+      vi.mocked(conversationRepo.transitionAiSourceTurn).mockResolvedValueOnce(false);
+      const service = createService();
+
+      await expect(service.processMessage(CONV_ID, ORG_ID, {
+        sourceJobId: 'job-old',
+        sourceMessageId: SAMPLE_MESSAGE.id,
+      })).resolves.toBeNull();
+
+      expect(messageRepo.findById).toHaveBeenCalledWith(SAMPLE_MESSAGE.id);
+      expect(messageRepo.listByConversationThroughMessage).not.toHaveBeenCalled();
+      expect(conversationRepo.update).not.toHaveBeenCalled();
+      expect(conversationRepo.transitionAiSourceTurn).toHaveBeenCalledWith(
+        CONV_ID,
+        ORG_ID,
+        SAMPLE_MESSAGE.id,
+        'thinking',
+        undefined,
+        { status: 'open' },
+      );
+      expect(aiClient.createEmbedding).not.toHaveBeenCalled();
+      expect(aiClient.chatCompletion).not.toHaveBeenCalled();
+      expect(aiDecisionRepo.create).not.toHaveBeenCalled();
+    });
+
+    it('builds context through the immutable source and records that message ID', async () => {
+      const service = createService();
+
+      const result = await service.processMessage(CONV_ID, ORG_ID, {
+        sourceJobId: 'job-current',
+        sourceMessageId: SAMPLE_MESSAGE.id,
+      });
+
+      expect(messageRepo.listByConversationThroughMessage).toHaveBeenCalledWith(
+        CONV_ID,
+        SAMPLE_MESSAGE,
+        SAMPLE_AI_SETTINGS.contextWindowSize,
+      );
+      expect(messageRepo.listByConversation).not.toHaveBeenCalled();
+      expect(result?.messageId).toBe(SAMPLE_MESSAGE.id);
+      expect(aiDecisionRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({ messageId: SAMPLE_MESSAGE.id }),
+      );
+      expect(conversationRepo.transitionAiSourceTurn).toHaveBeenNthCalledWith(
+        1,
+        CONV_ID,
+        ORG_ID,
+        SAMPLE_MESSAGE.id,
+        'thinking',
+        undefined,
+        { status: 'open' },
+      );
+      expect(conversationRepo.transitionAiSourceTurn).toHaveBeenNthCalledWith(
+        2,
+        CONV_ID,
+        ORG_ID,
+        SAMPLE_MESSAGE.id,
+        'drafted',
+        undefined,
+        { aiState: 'thinking', status: 'open' },
+      );
+    });
+
+    it.each([
+      { manualStatus: 'resolved', manualAiState: 'idle' },
+      { manualStatus: 'escalated', manualAiState: 'needs_human' },
+    ] as const)(
+      'does not overwrite a manual $manualStatus action during generation',
+      async ({ manualAiState }) => {
+        let simulatedAiState: 'idle' | 'thinking' | 'needs_human' = 'idle';
+        vi.mocked(conversationRepo.transitionAiSourceTurn)
+          .mockImplementationOnce(async () => {
+            simulatedAiState = 'thinking';
+            return true;
+          })
+          .mockImplementationOnce(async () => {
+            // Manual resolve/escalate changes the expected state/status before
+            // the stale final CAS is evaluated.
+            simulatedAiState = manualAiState;
+            return false;
+          });
+        const service = createService();
+
+        await expect(service.processMessage(CONV_ID, ORG_ID, {
+          sourceJobId: 'job-raced',
+          sourceMessageId: SAMPLE_MESSAGE.id,
+        })).resolves.toBeNull();
+
+        expect(aiClient.createEmbedding).toHaveBeenCalledOnce();
+        expect(aiClient.chatCompletion).toHaveBeenCalledOnce();
+        expect(aiDecisionRepo.create).not.toHaveBeenCalled();
+        expect(conversationRepo.update).not.toHaveBeenCalled();
+        expect(conversationRepo.transitionAiSourceTurn).toHaveBeenNthCalledWith(
+          2,
+          CONV_ID,
+          ORG_ID,
+          SAMPLE_MESSAGE.id,
+          'drafted',
+          undefined,
+          { aiState: 'thinking', status: 'open' },
+        );
+        expect(simulatedAiState).toBe(manualAiState);
+      },
+    );
+
+    it('does not persist a stale auto-reply when a new inbound wins the reply-intent claim', async () => {
+      aiSettingsRepo = createMockAiSettingsRepo({
+        ...SAMPLE_AI_SETTINGS,
+        aiMode: 'auto_reply',
+        confidenceThreshold: 0.8,
+      });
+      vi.mocked(conversationRepo.transitionAiSourceTurn)
+        .mockResolvedValueOnce(true)
+        .mockResolvedValueOnce(false);
+      const service = createService();
+
+      await expect(service.processMessage(CONV_ID, ORG_ID, {
+        sourceJobId: 'job-raced-auto-reply',
+        sourceMessageId: SAMPLE_MESSAGE.id,
+      })).resolves.toBeNull();
+
+      expect(conversationRepo.transitionAiSourceTurn).toHaveBeenNthCalledWith(
+        2,
+        CONV_ID,
+        ORG_ID,
+        SAMPLE_MESSAGE.id,
+        'auto_replied',
+        undefined,
+        { aiState: 'thinking', status: 'open' },
+      );
+      expect(aiDecisionRepo.create).not.toHaveBeenCalled();
+    });
+  });
+
   describe('AI mode gating', () => {
     it('skips all processing when AI mode is "off"', async () => {
       aiSettingsRepo = createMockAiSettingsRepo({
@@ -267,8 +406,9 @@ describe('AiAgentService', () => {
 
       // Should NOT call LLM
       expect(aiClient.chatCompletion).not.toHaveBeenCalled();
-      // Should NOT load conversation or messages
-      expect(conversationRepo.findById).not.toHaveBeenCalled();
+      // Loads the conversation only to enforce the tenant boundary.
+      expect(conversationRepo.findById).toHaveBeenCalledWith(CONV_ID);
+      expect(messageRepo.listByConversation).not.toHaveBeenCalled();
       // Should create a skip decision
       expect(aiDecisionRepo.create).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -328,9 +468,9 @@ describe('AiAgentService', () => {
         expect.objectContaining({ aiState: 'auto_replied' }),
       );
       // Should return a decision with responseText (the caller sends it inline)
-      expect(result.responseText).toBe('Here is your answer.');
-      expect(result.requiresHuman).toBe(false);
-      expect(result.rawResponse).toMatchObject({ _shouldAutoSend: true });
+      expect(result?.responseText).toBe('Here is your answer.');
+      expect(result?.requiresHuman).toBe(false);
+      expect(result?.rawResponse).toMatchObject({ _shouldAutoSend: true });
     });
   });
 

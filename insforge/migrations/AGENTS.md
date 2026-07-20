@@ -1,9 +1,9 @@
 # insforge/migrations/ — SQL Migrations
 
 ## OVERVIEW
-**19 SQL files.** Apply numbered migrations in order while preserving the two timestamped job-trigger migrations in their documented position. Append-only — never edit a past migration.
+**20 SQL files.** Apply numbered migrations in order while preserving the two timestamped job-trigger migrations in their documented position. Append-only — never edit a past migration.
 
-## THE 19 MIGRATIONS
+## THE 20 MIGRATIONS
 | # | File | Purpose |
 |---|---|---|
 | 001 | `001_initial_schema.sql` | 17 core tables + indexes + constraints (enables `pgcrypto`, `vector`) |
@@ -24,12 +24,13 @@
 | 014 | `014_role_aware_rls_and_knowledge_storage.sql` | Adds role-aware RLS, safe grants, file keys, and organization-scoped storage policies |
 | 015 | `015_bind_knowledge_jobs_to_documents.sql` | Binds browser-enqueued knowledge jobs to documents in the same organization |
 | 016 | `016_job_and_ai_decision_idempotency.sql` | Adds retry-safe job/decision, claim-lease, knowledge-revision, and audit-repair guards |
-| 017 | `017_lock_down_legacy_webchat_access.sql` | Removes permissive legacy webchat policies/grants and the untracked auth-debug helper |
+| 017 | `017_lock_down_legacy_webchat_access.sql` | Removes orphan public webchat policies/grants and the legacy auth-debug helper |
+| 018 | `018_atomic_ai_source_turns.sql` | Adds transactionally maintained latest-turn markers and source-bound AI transitions |
 
 ## THE 20 APPLICATION TABLES
 1. `organizations` 2. `organization_members` 3. `contacts` 4. `conversations` 5. `messages` 6. `sms_provider_accounts` 7. `sms_phone_numbers` 8. `sms_delivery_events` 9. `email_provider_accounts` 10. `email_addresses` 11. `email_delivery_events` 12. `ai_settings` 13. `ai_decisions` 14. `knowledge_documents` 15. `knowledge_chunks` 16. `support_jobs` 17. `audit_logs` 18. `webchat_widgets` 19. `webchat_threads` 20. `ai_decision_chunks`
 
-## RPC FUNCTIONS (10 total; 8 application-callable)
+## RPC FUNCTIONS (11 total; 9 application-callable)
 | RPC | Defined in | Called by |
 |---|---|---|
 | `public.user_org_ids()` | 003 | Inside RLS policies (helper, not client-facing) |
@@ -42,6 +43,7 @@
 | `publish_realtime_message(...)` | 013 | Trusted server routes/functions (realtime broadcast) |
 | `replace_knowledge_chunks_if_revision(...)` | 016 | `KnowledgeRepository` (revision-guarded atomic chunk replacement) |
 | `ensure_message_received_audit(...)` | 016 | `AuditLogRepository` (concurrency-safe inbound audit repair) |
+| `transition_ai_source_turn(...)` | 018 | `ConversationRepository` and regeneration/worker dispatch guards |
 
 ## RLS PATTERN
 - **Policy naming: `{table}_{action}`** where action ∈ {`select`, `insert`, `update`, `delete`}.
@@ -72,7 +74,7 @@
 - Removing `audit_logs` policies or adding UPDATE/DELETE on it (breaks the append-only contract).
 
 ## UNIQUE
-- **Migration count is 19.** This includes `001` through `017` plus two timestamped job-trigger migrations.
+- **Migration count is 20.** This includes `001` through `018` plus two timestamped job-trigger migrations.
 - **Table count is 20, not 19** — the 20th is `ai_decision_chunks` (007). `docs/reference/database.md` is stale.
 - **Claim RPC compatibility is handled in code.** Migration 016 replaces the integer signature with the current `claim_limit` implementation; `PostgresJobQueue` still retries the historical `max_count` named argument for older deployed databases.
 - **`user_org_ids()` is `STABLE SECURITY DEFINER`** — the canonical tenant-isolation primitive.

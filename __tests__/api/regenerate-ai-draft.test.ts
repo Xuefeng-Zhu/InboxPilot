@@ -6,11 +6,11 @@ const mocks = vi.hoisted(() => ({
   getUserFromToken: vi.fn(),
   userHasOrgPermission: vi.fn(),
   fetch: vi.fn(),
-  update: vi.fn(),
+  rpc: vi.fn(),
 }));
 
 vi.mock('@/lib/insforge-admin', () => ({
-  insforgeAdmin: { database: { from: mocks.from } },
+  insforgeAdmin: { database: { from: mocks.from, rpc: mocks.rpc } },
 }));
 vi.mock('@/app/api/functions/_auth', () => ({
   getUserFromToken: mocks.getUserFromToken,
@@ -30,41 +30,33 @@ function makeRequest(): NextRequest {
 function createBuilder(
   table: string,
   enqueueError: string | null,
-  stateUpdateError: string | null,
-  stateUpdateReject: string | null,
   insertedJobs: unknown[],
 ) {
-  let operation: 'select' | 'insert' | 'update' = 'select';
+  let operation: 'select' | 'insert' = 'select';
   const builder = {
     select: vi.fn(),
     eq: vi.fn(),
+    order: vi.fn(),
     limit: vi.fn(),
     insert: vi.fn(),
-    update: mocks.update,
     then: vi.fn(),
   };
   builder.select.mockReturnValue(builder);
   builder.eq.mockReturnValue(builder);
+  builder.order.mockReturnValue(builder);
   builder.limit.mockReturnValue(builder);
   builder.insert.mockImplementation((value: unknown) => {
     operation = 'insert';
     insertedJobs.push(value);
     return builder;
   });
-  builder.update.mockImplementation(() => {
-    operation = 'update';
-    return builder;
-  });
   builder.then.mockImplementation((onfulfilled, onrejected) => {
-    if (operation === 'update' && stateUpdateReject) {
-      return Promise.reject(new Error(stateUpdateReject)).then(onfulfilled, onrejected);
-    }
     const result = operation === 'select' && table === 'conversations'
       ? { data: [{ organization_id: 'org-1' }], error: null }
+      : operation === 'select' && table === 'messages'
+        ? { data: [{ id: 'message-1' }], error: null }
       : operation === 'insert' && enqueueError
         ? { data: null, error: { message: enqueueError } }
-        : operation === 'update' && stateUpdateError
-          ? { data: null, error: { message: stateUpdateError } }
         : { data: null, error: null };
     return Promise.resolve(result).then(onfulfilled, onrejected);
   });
@@ -75,25 +67,20 @@ describe('regenerate-ai-draft route', () => {
   const originalFunctionsUrl = process.env.NEXT_PUBLIC_INSFORGE_FUNCTIONS_URL;
   const originalProcessJobsSecret = process.env.PROCESS_JOBS_SECRET;
   let enqueueError: string | null;
-  let stateUpdateError: string | null;
-  let stateUpdateReject: string | null;
   let insertedJobs: unknown[];
 
   beforeEach(() => {
     vi.clearAllMocks();
     enqueueError = null;
-    stateUpdateError = null;
-    stateUpdateReject = null;
     insertedJobs = [];
     mocks.from.mockImplementation((table: string) => (
       createBuilder(
         table,
         enqueueError,
-        stateUpdateError,
-        stateUpdateReject,
         insertedJobs,
       )
     ));
+    mocks.rpc.mockResolvedValue({ data: true, error: null });
     mocks.getUserFromToken.mockResolvedValue({ id: 'user-1' });
     mocks.userHasOrgPermission.mockResolvedValue(true);
     vi.stubGlobal('fetch', mocks.fetch);
@@ -125,7 +112,7 @@ describe('regenerate-ai-draft route', () => {
     await expect(response.json()).resolves.toEqual({
       error: 'regenerate-ai-draft failed to enqueue job: job queue unavailable',
     });
-    expect(mocks.update).not.toHaveBeenCalled();
+    expect(mocks.rpc).not.toHaveBeenCalled();
   });
 
   it('returns once the durable job is queued even when the direct trigger times out', async () => {
@@ -147,6 +134,14 @@ describe('regenerate-ai-draft route', () => {
     expect(response.status).toBe(202);
     await expect(response.json()).resolves.toEqual({ status: 'queued' });
     expect(insertedJobs).toHaveLength(1);
+    expect(insertedJobs[0]).toEqual([
+      expect.objectContaining({
+        payload: {
+          conversationId: 'conversation-1',
+          messageId: 'message-1',
+        },
+      }),
+    ]);
     expect(mocks.fetch).toHaveBeenCalledOnce();
     expect(mocks.fetch).toHaveBeenCalledWith(
       'https://functions.example.test/process-jobs',
@@ -158,11 +153,22 @@ describe('regenerate-ai-draft route', () => {
         },
       }),
     );
-    expect(mocks.update).toHaveBeenCalledWith({ ai_state: 'thinking' });
+    expect(mocks.rpc).toHaveBeenCalledWith('transition_ai_source_turn', {
+      p_conversation_id: 'conversation-1',
+      p_organization_id: 'org-1',
+      p_source_message_id: 'message-1',
+      p_ai_state: 'thinking',
+      p_status: null,
+      p_expected_ai_state: null,
+      p_expected_status: 'open',
+    });
   });
 
   it('returns an accepted warning when state display fails after enqueue', async () => {
-    stateUpdateError = 'conversation update unavailable';
+    mocks.rpc.mockResolvedValue({
+      data: null,
+      error: { message: 'conversation update unavailable' },
+    });
     delete process.env.NEXT_PUBLIC_INSFORGE_FUNCTIONS_URL;
     delete process.env.PROCESS_JOBS_SECRET;
 
@@ -177,7 +183,7 @@ describe('regenerate-ai-draft route', () => {
   });
 
   it('returns an accepted warning when the state update promise rejects', async () => {
-    stateUpdateReject = 'state update network failure';
+    mocks.rpc.mockRejectedValue(new Error('state update network failure'));
     delete process.env.NEXT_PUBLIC_INSFORGE_FUNCTIONS_URL;
     delete process.env.PROCESS_JOBS_SECRET;
 
@@ -187,6 +193,20 @@ describe('regenerate-ai-draft route', () => {
     await expect(response.json()).resolves.toEqual({
       status: 'queued',
       warning: 'Draft regeneration was queued, but the thinking state could not be updated: state update network failure',
+    });
+  });
+
+  it('does not overwrite a newer turn with a stale thinking state', async () => {
+    mocks.rpc.mockResolvedValue({ data: false, error: null });
+    delete process.env.NEXT_PUBLIC_INSFORGE_FUNCTIONS_URL;
+    delete process.env.PROCESS_JOBS_SECRET;
+
+    const response = await POST(makeRequest());
+
+    expect(response.status).toBe(202);
+    await expect(response.json()).resolves.toEqual({
+      status: 'queued',
+      warning: 'Draft regeneration was queued, but a newer conversation turn superseded it',
     });
   });
 });

@@ -51,7 +51,7 @@ Source: `IDEMPOTENCY_KEYS` in `postgres-job-queue.ts`.
 
 | `job_type` | Enqueued by | Handler | Payload |
 |---|---|---|---|
-| `process_ai_message` | `InboundMessageService.processInbound` (SMS, email, webchat) and `app/api/functions/regenerate-ai-draft/route.ts` | `process-jobs` → `AiAgentService.processMessage(conversationId, orgId, { sourceJobId })` | Inbound: `{ conversationId, messageId }`; regenerate: `{ conversationId }` |
+| `process_ai_message` | `InboundMessageService.processInbound` (SMS, email, webchat) and `app/api/functions/regenerate-ai-draft/route.ts` | `process-jobs` → `AiAgentService.processMessage(conversationId, orgId, { sourceJobId, sourceMessageId })` | `{ conversationId, messageId }` |
 | `process_knowledge_document` | Frontend when a knowledge doc is uploaded, edited, or reprocessed | `process-jobs` → `KnowledgeIngestionService.processDocument(documentId, revision)` | `{ documentId, revision }` |
 | `send_outbound_message` | `process-jobs` when an inline AI auto-reply send fails | `process-jobs` → `OutboundMessageService.sendReply(...)` | `{ conversationId, body, senderType, aiDecisionId }` |
 | `process_delivery_status` | (not currently enqueued) | **Stub** — delivery status is processed synchronously in the webhook handlers | `{ externalMessageId, ... }` |
@@ -62,6 +62,9 @@ See `JobType` in `packages/support-core/src/types/index.ts`.
 ## Handler implementation
 
 Handlers live in `insforge/functions/process-jobs/index.ts` (`buildJobHandlers`). The function claims up to 10 jobs per invocation and dispatches each to the registered handler by `job_type`.
+AI handlers build context ending at the immutable `messageId`, suppress work if
+a newer customer or human turn exists, and recheck the source immediately
+before an automatic provider send.
 
 | Status | Outcome |
 |---|---|

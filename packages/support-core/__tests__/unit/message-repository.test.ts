@@ -63,6 +63,20 @@ const SAMPLE_ROW = {
 };
 
 describe('MessageRepository', () => {
+  describe('findById', () => {
+    it('loads an immutable source message by ID', async () => {
+      const builder = createMockQueryBuilder({ data: SAMPLE_ROW, error: null });
+      const db = createMockDb(builder);
+      const repo = new MessageRepository(db);
+
+      const result = await repo.findById('msg1');
+
+      expect(builder.eq).toHaveBeenCalledWith('id', 'msg1');
+      expect(builder.maybeSingle).toHaveBeenCalled();
+      expect(result?.id).toBe('msg1');
+    });
+  });
+
   describe('findByExternalId', () => {
     it('returns a Message when a matching row exists', async () => {
       const builder = createMockQueryBuilder({ data: SAMPLE_ROW, error: null });
@@ -331,6 +345,60 @@ describe('MessageRepository', () => {
 
       await expect(repo.listByConversation('conv1')).rejects.toThrow(
         'MessageRepository.listByConversation failed: timeout',
+      );
+    });
+  });
+
+  describe('source-bound conversation history', () => {
+    it('loads the latest message with deterministic descending order', async () => {
+      const builder = createMockQueryBuilder({ data: SAMPLE_ROW, error: null });
+      const db = createMockDb(builder);
+      const repo = new MessageRepository(db);
+
+      const result = await repo.findLatestByConversation('conv1');
+
+      expect(builder.eq).toHaveBeenCalledWith('conversation_id', 'conv1');
+      expect(builder.order).toHaveBeenNthCalledWith(1, 'created_at', { ascending: false });
+      expect(builder.order).toHaveBeenNthCalledWith(2, 'id', { ascending: false });
+      expect(builder.limit).toHaveBeenCalledWith(1);
+      expect(result?.id).toBe('msg1');
+    });
+
+    it('returns chronological context ending at the exact source message', async () => {
+      const sourceRow = {
+        ...SAMPLE_ROW,
+        id: 'msg2',
+        created_at: '2024-01-15T10:35:00.000Z',
+      };
+      const sameTimestampAfterSource = { ...sourceRow, id: 'msg3' };
+      const builder = createMockQueryBuilder({
+        data: [SAMPLE_ROW, sourceRow, sameTimestampAfterSource],
+        error: null,
+      });
+      const db = createMockDb(builder);
+      const repo = new MessageRepository(db);
+
+      const result = await repo.listByConversationThroughMessage(
+        'conv1',
+        { id: 'msg2', createdAt: new Date(sourceRow.created_at) },
+        2,
+      );
+
+      expect(builder.lte).toHaveBeenCalledWith('created_at', sourceRow.created_at);
+      expect(result.map(({ id }) => id)).toEqual(['msg1', 'msg2']);
+    });
+
+    it('fails when the immutable source is absent from the bounded history', async () => {
+      const builder = createMockQueryBuilder({ data: [SAMPLE_ROW], error: null });
+      const db = createMockDb(builder);
+      const repo = new MessageRepository(db);
+
+      await expect(repo.listByConversationThroughMessage(
+        'conv1',
+        { id: 'missing', createdAt: new Date(SAMPLE_ROW.created_at) },
+        20,
+      )).rejects.toThrow(
+        'MessageRepository.listByConversationThroughMessage source not found: missing',
       );
     });
   });

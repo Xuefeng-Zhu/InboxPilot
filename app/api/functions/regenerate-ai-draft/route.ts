@@ -73,15 +73,38 @@ export async function POST(req: NextRequest) {
     );
     if (!allowed) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
+    const sourceMessageResult = await insforge.database
+      .from('messages')
+      .select('id')
+      .eq('conversation_id', conversationId)
+      .eq('direction', 'inbound')
+      .eq('sender_type', 'contact')
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: false })
+      .limit(1);
+    assertInsforgeSuccess(
+      sourceMessageResult,
+      'regenerate-ai-draft failed to load source message',
+    );
+    const sourceRows = sourceMessageResult.data;
+    const sourceMessage = Array.isArray(sourceRows) ? sourceRows[0] : sourceRows;
+    if (!sourceMessage?.id) {
+      return NextResponse.json(
+        { error: 'No inbound message is available to regenerate' },
+        { status: 409 },
+      );
+    }
+
     // The job is the durable source of truth. The worker transitions ai_state
     // to `thinking` when processing begins; updating state before this insert
     // could otherwise strand the conversation if enqueueing failed.
     const enqueueResult = await insforge.database.from('support_jobs').insert([{
       organization_id: conversation.organization_id,
       job_type: 'process_ai_message',
-      payload: { conversationId },
+      payload: { conversationId, messageId: sourceMessage.id },
       idempotency_key: JSON.stringify([
         ['conversationId', conversationId],
+        ['messageId', sourceMessage.id],
         ['operation', 'regenerate_ai_draft'],
       ]),
       status: 'pending',
@@ -93,17 +116,28 @@ export async function POST(req: NextRequest) {
       assertInsforgeSuccess(enqueueResult, 'regenerate-ai-draft failed to enqueue job');
     }
 
-    // The durable job now exists, so it is safe to expose the thinking state.
-    // A state-write failure must not turn the accepted job into a retryable
-    // client error; the worker performs the same transition when it claims it.
+    // The durable job now exists, so atomically expose `thinking` only while
+    // this source is still the latest conversation turn. A newer message that
+    // commits first makes the RPC return false and cannot be overwritten by a
+    // stale route-level state update.
     let stateWarning: string | null = null;
     try {
-      const stateResult = await insforge.database
-        .from('conversations')
-        .update({ ai_state: 'thinking' })
-        .eq('id', conversationId);
+      const stateResult = await insforge.database.rpc('transition_ai_source_turn', {
+        p_conversation_id: conversationId,
+        p_organization_id: conversation.organization_id,
+        p_source_message_id: sourceMessage.id,
+        p_ai_state: 'thinking',
+        p_status: null,
+        p_expected_ai_state: null,
+        p_expected_status: 'open',
+      });
       if (stateResult.error) {
         stateWarning = `Draft regeneration was queued, but the thinking state could not be updated: ${stateResult.error.message}`;
+      } else if (!(
+        stateResult.data === true ||
+        (Array.isArray(stateResult.data) && stateResult.data[0] === true)
+      )) {
+        stateWarning = 'Draft regeneration was queued, but a newer conversation turn superseded it';
       }
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);

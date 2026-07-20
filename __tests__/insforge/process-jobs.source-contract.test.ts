@@ -33,6 +33,18 @@ describe('process-jobs source wiring contracts', () => {
     expect(source).toContain("if (outcome === 'superseded') return");
   });
 
+  it('binds AI work and auto-send eligibility to the immutable source message', () => {
+    expect(source).toContain('const sourceMessageId =');
+    expect(source).toContain('{ sourceJobId: job.id, sourceMessageId }');
+    expect(source).toContain('if (!decision) return');
+    expect(source).toContain('successful final source CAS is the reply-intent ordering point');
+    expect(source).not.toContain('latestMessage?.id !== sourceMessageId');
+    expect(source).toContain('sourceMessageId,');
+    expect(source).toContain('dispatchQueuedAutoReply({');
+    expect(source).toContain('conversationRepo.transitionAiSourceTurn(');
+    expect(source).toContain("{ aiState: 'auto_replied', status: 'open' }");
+  });
+
   it('fails unsupported delivery-status retry jobs instead of completing them as no-ops', () => {
     expect(source).toContain("throw new Error('process_delivery_status retry handler is not implemented')");
   });

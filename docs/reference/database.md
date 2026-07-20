@@ -1,6 +1,6 @@
 # Database Reference
 
-> PostgreSQL schema reference. 20 application tables, 18 migration files, 8 application-callable RPCs, and role-aware RLS on tenant-scoped data.
+> PostgreSQL schema reference. 20 application tables, 20 migration files, 9 application-callable RPCs, and role-aware RLS on tenant-scoped data.
 
 ## Migration files
 
@@ -26,8 +26,10 @@ Apply pending files in the order shown. Do not replay the whole set against an i
 | `insforge/migrations/014_role_aware_rls_and_knowledge_storage.sql` | Adds role-aware settings/knowledge/job policies, secret-safe client grants, file keys, and organization-scoped storage policies |
 | `insforge/migrations/015_bind_knowledge_jobs_to_documents.sql` | Binds browser-enqueued knowledge jobs to documents owned by the same organization |
 | `insforge/migrations/016_job_and_ai_decision_idempotency.sql` | Adds retry-safe job/decision, stale-claim, knowledge-revision, and inbound-audit guards |
+| `insforge/migrations/017_lock_down_legacy_webchat_access.sql` | Drops orphan unconditional webchat policies/grants and the legacy `debug_auth_info()` helper |
+| `insforge/migrations/018_atomic_ai_source_turns.sql` | Tracks the latest conversation turn transactionally and adds source-bound AI transition claims |
 
-Apply via the InsForge SQL editor or migrations API. Migration `014` cannot change bucket configuration: after applying it, mark the existing `knowledge-files` bucket **private** in the InsForge dashboard. Then apply `015` for knowledge-job tenant binding and `016` for job/decision idempotency, claim leases, revision-safe knowledge re-indexing, and atomic inbound-audit repair. Storage object keys must use `<organization-id>/documents/...` so its policies can derive the tenant from the first path segment.
+Apply via the InsForge SQL editor or migrations API. Migration `014` cannot change bucket configuration: after applying it, mark the existing `knowledge-files` bucket **private** in the InsForge dashboard. Then apply `015` for knowledge-job tenant binding, `016` for job/decision idempotency and revision safety, `017` for legacy webchat lockdown, and `018` for atomic AI source turns. Pause scheduled job processing and let active invocations finish before `018`; deploy the source-bound worker/routes before resuming. Storage object keys must use `<organization-id>/documents/...` so its policies can derive the tenant from the first path segment.
 
 ---
 
@@ -128,6 +130,7 @@ Notes:
 | `subject` | `text` | nullable | Email subject line |
 | `assigned_to` | `uuid` | nullable, FK → `organization_members` | |
 | `last_message_at` | `timestamptz` | nullable | |
+| `latest_message_id` | `uuid` | nullable, FK → `messages` (SET NULL) | Deterministic latest-turn marker maintained on message insert (since 018) |
 | `metadata` | `jsonb` | NOT NULL, default `'{}'` | |
 | `created_at` | `timestamptz` | NOT NULL | |
 | `updated_at` | `timestamptz` | NOT NULL | |
@@ -394,6 +397,12 @@ Identical structure to `sms_delivery_events`.
 ---
 
 ## RPC functions
+
+### `transition_ai_source_turn(p_conversation_id uuid, p_organization_id uuid, p_source_message_id uuid, p_ai_state text, p_status text DEFAULT NULL, p_expected_ai_state text DEFAULT NULL, p_expected_status text DEFAULT NULL)`
+
+Service-only atomic transition for AI work. It updates state/status only when the supplied inbound contact message is still `conversations.latest_message_id` for the same organization and optional expected state/status preconditions still hold. The message-insert trigger shares the conversation-row lock, resets superseded in-flight work, and makes the transition result the ordering point before an auto-reply dispatch. Expected-state guards prevent a worker or delayed fallback from overwriting manual resolve/escalate actions. Returns `false` when a newer turn or manual action won the race. Execute is restricted to `project_admin`.
+
+Migration `018` also revokes browser-role mutation privileges on `conversations` and `messages`; authenticated clients retain tenant-scoped reads, while JWT-authorized routes and functions mutate them through `project_admin`. This prevents clients from forging the server-maintained turn boundary.
 
 ### `match_knowledge_chunks(query_embedding vector(1536), match_org_id uuid, match_limit int DEFAULT 5, match_threshold float DEFAULT 0.7)`
 

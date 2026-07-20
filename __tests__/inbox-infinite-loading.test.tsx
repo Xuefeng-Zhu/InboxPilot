@@ -352,4 +352,30 @@ describe('Inbox infinite loading', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Back to conversations' }));
     expect(onBack).toHaveBeenCalledOnce();
   });
+
+  it('keeps the mobile recovery path available while a deep link is loading', () => {
+    const onBack = vi.fn();
+    mocks.useConversation.mockReturnValue({
+      data: null,
+      isLoading: true,
+      error: null,
+    });
+    mocks.useInfiniteMessages.mockReturnValue({
+      items: [],
+      isInitialLoading: true,
+      isFetchingNextPage: false,
+      isFetchNextPageError: false,
+      hasNextPage: false,
+      fetchNextPage: vi.fn(),
+      error: null,
+    });
+
+    renderWithQueryClient(
+      <MessageThread conversationId="slow-conversation" onBack={onBack} />,
+    );
+
+    expect(screen.getByText('Loading messages…')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Back to conversations' }));
+    expect(onBack).toHaveBeenCalledOnce();
+  });
 });

@@ -30,6 +30,22 @@ interface MessageThreadProps {
   onToggleRightPanel?: () => void;
 }
 
+function MobileThreadBackButton({ onBack }: { onBack?: () => void }) {
+  if (!onBack) return null;
+
+  return (
+    <button
+      type="button"
+      onClick={onBack}
+      className="inline-flex items-center gap-2 rounded border border-[var(--m03-line)] bg-white px-3 py-2 text-[13px] font-medium text-[var(--m03-fg-2)] hover:bg-[var(--m03-line-2)] lg:hidden"
+      aria-label="Back to conversations"
+    >
+      <span aria-hidden="true">←</span>
+      Back to conversations
+    </button>
+  );
+}
+
 function ThreadUnavailable({
   message,
   onBack,
@@ -40,17 +56,7 @@ function ThreadUnavailable({
   return (
     <div className="flex flex-1 items-center justify-center p-8">
       <div className="flex flex-col items-center gap-3">
-        {onBack ? (
-          <button
-            type="button"
-            onClick={onBack}
-            className="inline-flex items-center gap-2 rounded border border-[var(--m03-line)] bg-white px-3 py-2 text-[13px] font-medium text-[var(--m03-fg-2)] hover:bg-[var(--m03-line-2)] lg:hidden"
-            aria-label="Back to conversations"
-          >
-            <span aria-hidden="true">←</span>
-            Back to conversations
-          </button>
-        ) : null}
+        <MobileThreadBackButton onBack={onBack} />
         <div
           role="alert"
           className="rounded bg-[var(--m03-red-fill)] p-4 text-[13px] text-[var(--m03-red)]"
@@ -223,12 +229,15 @@ export function MessageThread({
   if (isLoading) {
     return (
       <div className="flex flex-1 items-center justify-center p-8">
-        <div className="flex items-center gap-2 text-[13px] text-[var(--m03-fg-2)]">
-          <svg className="h-4 w-4 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" aria-hidden="true">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-          </svg>
-          Loading messages…
+        <div className="flex flex-col items-center gap-3">
+          <MobileThreadBackButton onBack={onBack} />
+          <div className="flex items-center gap-2 text-[13px] text-[var(--m03-fg-2)]">
+            <svg className="h-4 w-4 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            </svg>
+            Loading messages…
+          </div>
         </div>
       </div>
     );

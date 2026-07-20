@@ -13,6 +13,13 @@ const knowledgeJobBindingMigration = readFileSync(
   ),
   'utf8',
 );
+const legacyAccessCleanupMigration = readFileSync(
+  new URL(
+    '../../insforge/migrations/017_lock_down_legacy_webchat_access.sql',
+    import.meta.url,
+  ),
+  'utf8',
+);
 const knowledgeListPage = readFileSync(
   new URL('../../app/knowledge/page.tsx', import.meta.url),
   'utf8',
@@ -153,6 +160,24 @@ describe('role-aware RLS and knowledge storage migration', () => {
     const grantSection = migration.slice(migration.indexOf('-- F. Secret-safe client SELECT grants'));
     expect(grantSection).not.toMatch(/GRANT SELECT \([^;]*credentials_secret_id/);
     expect(grantSection).not.toMatch(/GRANT SELECT \([^;]*hmac_secret/);
+  });
+
+  it('removes legacy public webchat policies and direct thread access', () => {
+    expect(legacyAccessCleanupMigration).toContain(
+      'DROP POLICY IF EXISTS webchat_widgets_service_select ON public.webchat_widgets',
+    );
+    expect(legacyAccessCleanupMigration).toContain(
+      'DROP POLICY IF EXISTS webchat_threads_service_all ON public.webchat_threads',
+    );
+    expect(legacyAccessCleanupMigration).toContain(
+      'REVOKE ALL PRIVILEGES ON TABLE public.webchat_threads FROM PUBLIC, anon, authenticated',
+    );
+    expect(legacyAccessCleanupMigration).not.toMatch(
+      /CREATE POLICY\s+webchat_threads_/,
+    );
+    expect(legacyAccessCleanupMigration).toContain(
+      'DROP FUNCTION IF EXISTS public.debug_auth_info()',
+    );
   });
 
   it('adds file keys and scopes storage objects to organization-prefixed paths', () => {

@@ -91,6 +91,7 @@ export function AiDraftPanel({ conversationId, aiState, onPrefillComposer }: AiD
     try {
       await invalidateConversationMutationCaches(queryClient, conversationId, {
         preserveAiDecisions: true,
+        throwOnConversationError: true,
       });
       setSupersededDecisionId(null);
       setRegenerationRecoveryError(null);

@@ -1,5 +1,5 @@
-import { QueryClient } from '@tanstack/react-query';
-import { describe, expect, it } from 'vitest';
+import { QueryClient, QueryObserver } from '@tanstack/react-query';
+import { describe, expect, it, vi } from 'vitest';
 import { invalidateConversationMutationCaches } from '@/lib/queries/invalidation';
 import { queryKeys } from '@/lib/queries/keys';
 
@@ -54,5 +54,44 @@ describe('invalidateConversationMutationCaches', () => {
     expect(queryClient.getQueryState(conversationKey)?.isInvalidated).toBe(true);
     expect(queryClient.getQueryState(decisionKey)?.isInvalidated).toBe(false);
     expect(queryClient.getQueryState(decisionHistoryKey)?.isInvalidated).toBe(false);
+  });
+
+  it('surfaces an active conversation refresh failure while invalidating derived views', async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const conversationId = 'conversation-1';
+    const conversationKey = queryKeys.conversation(conversationId);
+    const derivedKey = queryKeys.conversations('org-1');
+    let failRefresh = false;
+    const queryFn = vi.fn(async () => {
+      if (failRefresh) throw new Error('conversation lookup unavailable');
+      return { ai_state: 'thinking' };
+    });
+    const observer = new QueryObserver(queryClient, {
+      queryKey: conversationKey,
+      queryFn,
+    });
+    const unsubscribe = observer.subscribe(() => undefined);
+
+    try {
+      await observer.refetch();
+      queryClient.setQueryData(derivedKey, { cached: true });
+      failRefresh = true;
+
+      await expect(
+        invalidateConversationMutationCaches(queryClient, conversationId, {
+          preserveAiDecisions: true,
+          throwOnConversationError: true,
+        }),
+      ).rejects.toThrow('conversation lookup unavailable');
+
+      expect(queryClient.getQueryState(derivedKey)?.isInvalidated).toBe(true);
+      expect(queryClient.getQueryData(conversationKey)).toEqual({
+        ai_state: 'thinking',
+      });
+    } finally {
+      unsubscribe();
+    }
   });
 });

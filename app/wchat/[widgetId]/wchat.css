@@ -14,6 +14,9 @@
 .wchat-composer button { background: var(--wchat-color); color: white; border: none; border-radius: 6px; width: 36px; height: 36px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
 .wchat-composer button:disabled { opacity: 0.5; cursor: not-allowed; }
 .wchat-error { padding: 8px 16px; background: var(--m03-bg); color: var(--m03-red); border-bottom: 1px solid var(--m03-red-line); font-size: 12px; text-align: center; }
+.wchat-send-error { display: flex; align-items: center; justify-content: center; gap: 8px; }
+.wchat-error-dismiss { border: 0; padding: 2px; background: transparent; color: inherit; font: inherit; font-weight: 600; text-decoration: underline; cursor: pointer; }
+.wchat-error-dismiss:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
 .wchat-prechat-form { display: flex; flex-direction: column; gap: 12px; padding: 24px 16px; flex: 1; justify-content: center; }
 .wchat-prechat-title { font-size: 14px; font-weight: 500; color: var(--m03-fg-2); text-align: center; margin-bottom: 4px; }
 .wchat-prechat-input { border: 1px solid var(--m03-line); border-radius: 6px; padding: 10px 14px; font-size: 14px; outline: none; }

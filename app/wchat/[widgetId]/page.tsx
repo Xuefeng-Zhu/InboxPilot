@@ -68,6 +68,7 @@ function WidgetChatContent() {
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [sendError, setSendError] = useState<string | null>(null);
   const [color, setColor] = useState('#2563eb');
   const [showPreChat, setShowPreChat] = useState(false);
   const [identifying, setIdentifying] = useState(false);
@@ -263,7 +264,7 @@ function WidgetChatContent() {
     if (!text || sending) return;
 
     setSending(true);
-    setError(null);
+    setSendError(null);
 
     // Optimistic update
     const optimisticMsg: ChatMessage = {
@@ -275,6 +276,13 @@ function WidgetChatContent() {
     messageIdsRef.current.add(optimisticMsg.id);
     setMessages((prev) => [...prev, optimisticMsg]);
     setInput('');
+
+    const restoreFailedMessage = (message: string) => {
+      messageIdsRef.current.delete(optimisticMsg.id);
+      setMessages((prev) => prev.filter((item) => item.id !== optimisticMsg.id));
+      setInput((current) => current || text);
+      setSendError(message);
+    };
 
     try {
       let pageUrl: string | undefined;
@@ -291,20 +299,19 @@ function WidgetChatContent() {
       });
 
       if (res.status === 401) {
+        restoreFailedMessage('Your chat session expired. Reconnecting…');
         window.parent.postMessage({ type: 'inboxpilot:auth_expired' }, '*');
         return;
       }
 
       if (!res.ok) {
         const errBody = await readResponseJsonObject(res, 'webchat-inbound error');
-        setError(typeof errBody.error === 'string' ? errBody.error : 'Send failed');
-        messageIdsRef.current.delete(optimisticMsg.id);
-        setMessages((prev) => prev.filter((m) => m.id !== optimisticMsg.id));
+        restoreFailedMessage(
+          typeof errBody.error === 'string' ? errBody.error : 'Send failed',
+        );
       }
     } catch {
-      setError('Network error');
-      messageIdsRef.current.delete(optimisticMsg.id);
-      setMessages((prev) => prev.filter((m) => m.id !== optimisticMsg.id));
+      restoreFailedMessage('Network error while sending. Please try again.');
     } finally {
       setSending(false);
     }
@@ -345,7 +352,21 @@ function WidgetChatContent() {
               <div ref={messagesEndRef} />
             </div>
 
-            {error && <div className="wchat-error">{error}</div>}
+            {error && <div className="wchat-error" role="alert">{error}</div>}
+
+            {sendError && (
+              <div className="wchat-error wchat-send-error" role="alert">
+                <span>{sendError}</span>
+                <button
+                  type="button"
+                  className="wchat-error-dismiss"
+                  aria-label="Dismiss send error"
+                  onClick={() => setSendError(null)}
+                >
+                  Dismiss
+                </button>
+              </div>
+            )}
 
             <div className="wchat-composer">
               <input

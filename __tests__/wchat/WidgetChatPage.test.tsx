@@ -25,7 +25,7 @@ function jsonResponse(body: unknown, status = 200) {
   });
 }
 
-describe('WidgetChatPage pre-chat identification', () => {
+describe('WidgetChatPage', () => {
   beforeEach(() => {
     Object.defineProperty(Element.prototype, 'scrollIntoView', {
       configurable: true,
@@ -97,5 +97,70 @@ describe('WidgetChatPage pre-chat identification', () => {
     });
     expect(identifyCalls).toBe(2);
     expect(screen.getByLabelText('Message input')).not.toBeNull();
+  });
+
+  it('restores a failed message and allows the visitor to dismiss or retry', async () => {
+    let sendCalls = 0;
+    const fetchMock = vi.fn(
+      (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+        const url = String(input);
+        if (url.includes('webchat-session-info')) {
+          return Promise.resolve(
+            jsonResponse({
+              data: {
+                history: [
+                  {
+                    id: 'welcome-message',
+                    body: 'How can we help?',
+                    sender_type: 'system',
+                    created_at: '2026-07-20T00:00:00.000Z',
+                  },
+                ],
+              },
+            }),
+          );
+        }
+        if (url.includes('webchat-inbound') && init?.method === 'POST') {
+          sendCalls += 1;
+          if (sendCalls === 1) {
+            return Promise.resolve(
+              jsonResponse({ error: 'Message delivery is temporarily unavailable.' }, 503),
+            );
+          }
+          return Promise.resolve(jsonResponse({ data: { accepted: true } }));
+        }
+        return Promise.reject(new Error(`Unexpected fetch: ${url}`));
+      },
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<WidgetChatPage />);
+
+    const input = await screen.findByLabelText('Message input');
+    fireEvent.change(input, { target: { value: 'Please retry this message' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toContain(
+      'Message delivery is temporarily unavailable.',
+    );
+    expect((input as HTMLInputElement).value).toBe('Please retry this message');
+    expect((input as HTMLInputElement).disabled).toBe(false);
+    expect(
+      (screen.getByRole('button', { name: 'Send message' }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(false);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss send error' }));
+    expect(screen.queryByRole('alert')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
+
+    await waitFor(() => {
+      expect(sendCalls).toBe(2);
+      expect((input as HTMLInputElement).value).toBe('');
+    });
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.getByText('Please retry this message')).not.toBeNull();
   });
 });

@@ -1,6 +1,6 @@
 # Database Reference
 
-> PostgreSQL schema reference. 20 application tables, 24 migration files, 15 application-callable RPCs, and role-aware RLS on tenant-scoped data.
+> PostgreSQL schema reference. 20 application tables, 25 migration files, 15 application-callable RPCs, and role-aware RLS on tenant-scoped data.
 
 ## Migration files
 
@@ -32,6 +32,7 @@ Apply pending files in the order shown. Do not replay the whole set against an i
 | `insforge/migrations/020_bind_pending_ai_drafts.sql` | Binds approval/regeneration to an immutable pending decision and source turn |
 | `insforge/migrations/021_monotonic_delivery_status.sql` | Atomically advances delivery snapshots and makes the status column non-null |
 | `insforge/migrations/022_atomic_ai_decision_finalization.sql` | Atomically inserts each AI decision and publishes its guarded terminal conversation state |
+| `insforge/migrations/023_secure_realtime_channels.sql` | Enforces organization/widget subscription isolation and denies browser realtime publishing |
 
 Apply via the InsForge SQL editor or migrations API. Migration `014` cannot change bucket configuration: after applying it, mark the existing `knowledge-files` bucket **private** in the InsForge dashboard. Then apply `015` for knowledge-job tenant binding, `016` for job/decision idempotency, `017` for legacy webchat lockdown, `018` for atomic AI source turns, `019` for the server-only AI-decision write boundary, `020` for pending-draft ownership, `021` for monotonic delivery snapshots, and `022` for atomic decision finalization. Pause scheduled job processing and let active invocations finish before `018`; deploy the source-bound worker/routes before resuming. Apply `020` before its approval/regeneration route changes and `021` before its status-handler changes. For an existing deployment, pause every scheduled or manual worker trigger and wait until no `process_ai_message` job remains `claimed`; migration `022` aborts otherwise. Apply `022`, deploy the atomic-finalization worker, and only then resume. Storage object keys must use `<organization-id>/documents/...` so its policies can derive the tenant from the first path segment.
 
@@ -503,6 +504,8 @@ Conversation/message and AI-decision browser writes are denied; authenticated cl
 Migration `014` first revokes broad table SELECT, then grants authenticated users only explicit safe columns. `sms_provider_accounts.credentials_secret_id`, `email_provider_accounts.credentials_secret_id`, and `webchat_widgets.hmac_secret` are therefore not exposed through client PostgREST reads. A column-level REVOKE alone would not override a pre-existing table-level grant.
 
 Migration `017` removes orphan unconditional policies left by earlier deployments, revokes direct `webchat_threads` access from public browser roles, removes public/anonymous widget-table access, preserves authenticated widget management established by `014`, and drops the legacy `debug_auth_info()` function.
+
+Migration `023` enables RLS on `realtime.channels`. Authenticated organization subscriptions must match `public.user_org_ids()`, while anonymous widget subscriptions must match an existing widget/thread visitor JTI. Browser roles retain subscription access but cannot insert, update, or delete channel/message rows; trusted publishers continue through `publish_realtime_message`.
 
 ### Knowledge storage
 

@@ -34,7 +34,11 @@ export {
 
 export { useInfiniteMessages, useMessages } from './hooks/useMessages';
 
-export { useContact, useContacts } from './hooks/useContacts';
+export {
+  useContact,
+  useContacts,
+  useCustomerSelectorOptions,
+} from './hooks/useContacts';
 
 export { useKnowledgeDoc, useKnowledgeDocs } from './hooks/useKnowledge';
 

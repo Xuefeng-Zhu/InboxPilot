@@ -30,6 +30,40 @@ export function useContacts(filters?: { search?: string; channel?: string }) {
   });
 }
 
+export function useCustomerSelectorOptions(search: string, enabled: boolean) {
+  const authReady = useAuthReady();
+  const { user } = useAuth();
+  const { data: orgId } = useOrgMembership(user?.id);
+  const normalizedSearch = search.trim();
+
+  return useQuery({
+    queryKey: queryKeys.customerSelectorOptions(orgId ?? '', normalizedSearch),
+    queryFn: async () => {
+      let query = insforge.database
+        .from('contacts')
+        .select('id,name,email,phone')
+        .eq('organization_id', orgId!)
+        .limit(20);
+
+      if (normalizedSearch) {
+        query = query.ilike('name', `%${normalizedSearch}%`);
+      }
+
+      const { data, error } = await query;
+      if (error) throw new Error(error.message);
+      return Array.isArray(data)
+        ? data as Array<{
+          id: string;
+          name: string | null;
+          email: string | null;
+          phone: string | null;
+        }>
+        : [];
+    },
+    enabled: authReady && !!orgId && enabled,
+  });
+}
+
 export function useContact(contactId: string | null) {
   const authReady = useAuthReady();
   const { user } = useAuth();

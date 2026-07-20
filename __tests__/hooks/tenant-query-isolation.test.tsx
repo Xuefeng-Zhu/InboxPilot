@@ -7,7 +7,10 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useAuditLogs } from '@/lib/queries/hooks/useAuditLogs';
-import { useContacts } from '@/lib/queries/hooks/useContacts';
+import {
+  useContacts,
+  useCustomerSelectorOptions,
+} from '@/lib/queries/hooks/useContacts';
 import { useKnowledgeDocs } from '@/lib/queries/hooks/useKnowledge';
 import { useTeamMembers } from '@/lib/queries/hooks/useTeamMembers';
 
@@ -82,6 +85,7 @@ function createWrapper(queryClient: QueryClient) {
 function useTenantQueries() {
   return [
     useContacts({ search: 'Ada' }),
+    useCustomerSelectorOptions('Ada', true),
     useKnowledgeDocs(),
     useTeamMembers(),
     useAuditLogs({ actorType: 'user' }),
@@ -117,7 +121,7 @@ describe('tenant-scoped query isolation', () => {
         mocks.eqCalls.filter(
           ({ column, value }) => column === 'organization_id' && value === 'org-2',
         ),
-      ).toHaveLength(4);
+      ).toHaveLength(5);
     });
 
     const keys = queryClient
@@ -127,6 +131,7 @@ describe('tenant-scoped query isolation', () => {
 
     for (const orgId of ['org-1', 'org-2']) {
       expect(keys).toContainEqual(['contacts', orgId, { search: 'Ada' }]);
+      expect(keys).toContainEqual(['customer-selector-options', orgId, 'Ada']);
       expect(keys).toContainEqual(['knowledge-documents', orgId]);
       expect(keys).toContainEqual(['team-members', orgId]);
       expect(keys).toContainEqual(['audit-logs', orgId, { actorType: 'user' }]);

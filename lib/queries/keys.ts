@@ -41,6 +41,8 @@ export const queryKeys = {
   contacts: (orgId: string, filters?: Record<string, unknown>) =>
     ['contacts', orgId, filters] as const,
   contact: (orgId: string, id: string) => ['contact', orgId, id] as const,
+  customerSelectorOptions: (orgId: string, search: string) =>
+    ['customer-selector-options', orgId, search] as const,
   knowledgeDocs: (orgId: string) => ['knowledge-documents', orgId] as const,
   knowledgeDoc: (orgId: string, id: string) =>
     ['knowledge-document', orgId, id] as const,

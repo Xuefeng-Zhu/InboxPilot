@@ -1,9 +1,7 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { insforge } from '@/lib/insforge';
-import { useContact } from '@/lib/queries';
+import { useContact, useCustomerSelectorOptions } from '@/lib/queries';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -45,23 +43,7 @@ export function CustomerSelector({ selectedId, onSelect, onClear }: CustomerSele
   const { data: selectedContact } = useContact(selectedId);
 
   // Fetch dropdown options
-  const { data: options = [], isLoading } = useQuery({
-    queryKey: ['customer-selector-options', query],
-    queryFn: async () => {
-      let q = insforge.database
-        .from('contacts')
-        .select('id,name,email,phone')
-        .limit(20);
-
-      if (query.trim()) {
-        q = q.ilike('name', `%${query.trim()}%`);
-      }
-
-      const { data } = await q;
-      return Array.isArray(data) ? (data as CustomerOption[]) : [];
-    },
-    enabled: open,
-  });
+  const { data: options = [], isLoading } = useCustomerSelectorOptions(query, open);
 
   // Selected state — show chip
   if (selectedId) {

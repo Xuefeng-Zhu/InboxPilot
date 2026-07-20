@@ -5,6 +5,10 @@ import { assertInsforgeSuccess } from '@/lib/insforge-result';
 
 const PROCESS_JOBS_TRIGGER_TIMEOUT_MS = 1_500;
 
+function rpcReturnedTrue(data: unknown): boolean {
+  return data === true || (Array.isArray(data) && data[0] === true);
+}
+
 async function triggerProcessJobs(): Promise<void> {
   const functionsUrl = process.env.NEXT_PUBLIC_INSFORGE_FUNCTIONS_URL;
   const processJobsSecret = process.env.PROCESS_JOBS_SECRET;
@@ -57,7 +61,10 @@ export async function POST(req: NextRequest) {
     if (!conversationId) return NextResponse.json({ error: 'Missing conversationId' }, { status: 400 });
 
     const conversationResult = await insforge.database
-      .from('conversations').select('organization_id').eq('id', conversationId).limit(1);
+      .from('conversations')
+      .select('organization_id,status,ai_state,latest_message_id,pending_ai_decision_id')
+      .eq('id', conversationId)
+      .limit(1);
     assertInsforgeSuccess(
       conversationResult,
       'regenerate-ai-draft failed to load conversation',
@@ -73,77 +80,34 @@ export async function POST(req: NextRequest) {
     );
     if (!allowed) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
-    const sourceMessageResult = await insforge.database
-      .from('messages')
-      .select('id')
-      .eq('conversation_id', conversationId)
-      .eq('direction', 'inbound')
-      .eq('sender_type', 'contact')
-      .order('created_at', { ascending: false })
-      .order('id', { ascending: false })
-      .limit(1);
-    assertInsforgeSuccess(
-      sourceMessageResult,
-      'regenerate-ai-draft failed to load source message',
-    );
-    const sourceRows = sourceMessageResult.data;
-    const sourceMessage = Array.isArray(sourceRows) ? sourceRows[0] : sourceRows;
-    if (!sourceMessage?.id) {
+    if (
+      conversation.status !== 'open' ||
+      conversation.ai_state !== 'drafted' ||
+      typeof conversation.latest_message_id !== 'string' ||
+      typeof conversation.pending_ai_decision_id !== 'string'
+    ) {
       return NextResponse.json(
-        { error: 'No inbound message is available to regenerate' },
+        { error: 'Draft is already being processed or is no longer pending' },
         { status: 409 },
       );
     }
 
-    // The job is the durable source of truth. The worker transitions ai_state
-    // to `thinking` when processing begins; updating state before this insert
-    // could otherwise strand the conversation if enqueueing failed.
-    const enqueueResult = await insforge.database.from('support_jobs').insert([{
-      organization_id: conversation.organization_id,
-      job_type: 'process_ai_message',
-      payload: { conversationId, messageId: sourceMessage.id },
-      idempotency_key: JSON.stringify([
-        ['conversationId', conversationId],
-        ['messageId', sourceMessage.id],
-        ['operation', 'regenerate_ai_draft'],
-      ]),
-      status: 'pending',
-      attempts: 0,
-      max_attempts: 5,
-      run_after: new Date().toISOString(),
-    }]);
-    if (enqueueResult.error?.code !== '23505') {
-      assertInsforgeSuccess(enqueueResult, 'regenerate-ai-draft failed to enqueue job');
+    // Claim the exact pending decision and enqueue its source-bound job in one
+    // database transaction. Approval and regeneration race on the same row;
+    // the loser returns a conflict without leaving runnable work behind.
+    const enqueueResult = await insforge.database.rpc('enqueue_regenerate_ai_draft', {
+      p_conversation_id: conversationId,
+      p_organization_id: conversation.organization_id,
+      p_source_message_id: conversation.latest_message_id,
+      p_pending_ai_decision_id: conversation.pending_ai_decision_id,
+    });
+    assertInsforgeSuccess(enqueueResult, 'regenerate-ai-draft failed to enqueue job');
+    if (!rpcReturnedTrue(enqueueResult.data)) {
+      return NextResponse.json(
+        { error: 'Draft is already being processed or is no longer pending' },
+        { status: 409 },
+      );
     }
-
-    // The durable job now exists, so atomically expose `thinking` only while
-    // this source is still the latest conversation turn. A newer message that
-    // commits first makes the RPC return false and cannot be overwritten by a
-    // stale route-level state update.
-    let stateWarning: string | null = null;
-    try {
-      const stateResult = await insforge.database.rpc('transition_ai_source_turn', {
-        p_conversation_id: conversationId,
-        p_organization_id: conversation.organization_id,
-        p_source_message_id: sourceMessage.id,
-        p_ai_state: 'thinking',
-        p_status: null,
-        p_expected_ai_state: null,
-        p_expected_status: 'open',
-      });
-      if (stateResult.error) {
-        stateWarning = `Draft regeneration was queued, but the thinking state could not be updated: ${stateResult.error.message}`;
-      } else if (!(
-        stateResult.data === true ||
-        (Array.isArray(stateResult.data) && stateResult.data[0] === true)
-      )) {
-        stateWarning = 'Draft regeneration was queued, but a newer conversation turn superseded it';
-      }
-    } catch (error) {
-      const detail = error instanceof Error ? error.message : String(error);
-      stateWarning = `Draft regeneration was queued, but the thinking state could not be updated: ${detail}`;
-    }
-    if (stateWarning) console.warn('regenerate-ai-draft:', stateWarning);
 
     // Trigger process-jobs server-side. The job is already durable, so trigger
     // failures are logged and left for the scheduler to pick up.
@@ -151,7 +115,6 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       status: 'queued',
-      ...(stateWarning ? { warning: stateWarning } : {}),
     }, { status: 202 });
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : 'Internal server error' }, { status: 500 });

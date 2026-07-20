@@ -51,7 +51,7 @@ Source: `IDEMPOTENCY_KEYS` in `postgres-job-queue.ts`.
 
 | `job_type` | Enqueued by | Handler | Payload |
 |---|---|---|---|
-| `process_ai_message` | `InboundMessageService.processInbound` (SMS, email, webchat) and `app/api/functions/regenerate-ai-draft/route.ts` | `process-jobs` → `AiAgentService.processMessage(conversationId, orgId, { sourceJobId, sourceMessageId })` | `{ conversationId, messageId }` |
+| `process_ai_message` | `InboundMessageService.processInbound` (SMS, email, webchat) and `app/api/functions/regenerate-ai-draft/route.ts` | `process-jobs` → `AiAgentService.processMessage(conversationId, orgId, { sourceJobId, sourceMessageId })` | `{ conversationId, messageId }`; manual regeneration also records `pendingAiDecisionId` for generation-specific idempotency |
 | `process_knowledge_document` | Frontend when a knowledge doc is uploaded, edited, or reprocessed | `process-jobs` → `KnowledgeIngestionService.processDocument(documentId, revision)` | `{ documentId, revision }` |
 | `send_outbound_message` | `process-jobs` when an inline AI auto-reply send fails | `process-jobs` → `OutboundMessageService.sendReply(...)` | `{ conversationId, body, senderType, aiDecisionId }` |
 | `process_delivery_status` | (not currently enqueued) | **Stub** — delivery status is processed synchronously in the webhook handlers | `{ externalMessageId, ... }` |

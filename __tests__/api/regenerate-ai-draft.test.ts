@@ -27,59 +27,45 @@ function makeRequest(): NextRequest {
   }) as NextRequest;
 }
 
-function createBuilder(
-  table: string,
-  enqueueError: string | null,
-  insertedJobs: unknown[],
-) {
-  let operation: 'select' | 'insert' = 'select';
+interface ConversationRow {
+  organization_id: string;
+  status: string;
+  ai_state: string;
+  latest_message_id: string | null;
+  pending_ai_decision_id: string | null;
+}
+
+function createBuilder(conversation: ConversationRow) {
   const builder = {
     select: vi.fn(),
     eq: vi.fn(),
-    order: vi.fn(),
     limit: vi.fn(),
-    insert: vi.fn(),
     then: vi.fn(),
   };
   builder.select.mockReturnValue(builder);
   builder.eq.mockReturnValue(builder);
-  builder.order.mockReturnValue(builder);
   builder.limit.mockReturnValue(builder);
-  builder.insert.mockImplementation((value: unknown) => {
-    operation = 'insert';
-    insertedJobs.push(value);
-    return builder;
-  });
-  builder.then.mockImplementation((onfulfilled, onrejected) => {
-    const result = operation === 'select' && table === 'conversations'
-      ? { data: [{ organization_id: 'org-1' }], error: null }
-      : operation === 'select' && table === 'messages'
-        ? { data: [{ id: 'message-1' }], error: null }
-      : operation === 'insert' && enqueueError
-        ? { data: null, error: { message: enqueueError } }
-        : { data: null, error: null };
-    return Promise.resolve(result).then(onfulfilled, onrejected);
-  });
+  builder.then.mockImplementation((onfulfilled, onrejected) => (
+    Promise.resolve({ data: [conversation], error: null }).then(onfulfilled, onrejected)
+  ));
   return builder;
 }
 
 describe('regenerate-ai-draft route', () => {
   const originalFunctionsUrl = process.env.NEXT_PUBLIC_INSFORGE_FUNCTIONS_URL;
   const originalProcessJobsSecret = process.env.PROCESS_JOBS_SECRET;
-  let enqueueError: string | null;
-  let insertedJobs: unknown[];
+  let conversation: ConversationRow;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    enqueueError = null;
-    insertedJobs = [];
-    mocks.from.mockImplementation((table: string) => (
-      createBuilder(
-        table,
-        enqueueError,
-        insertedJobs,
-      )
-    ));
+    conversation = {
+      organization_id: 'org-1',
+      status: 'open',
+      ai_state: 'drafted',
+      latest_message_id: 'message-1',
+      pending_ai_decision_id: 'decision-1',
+    };
+    mocks.from.mockImplementation(() => createBuilder(conversation));
     mocks.rpc.mockResolvedValue({ data: true, error: null });
     mocks.getUserFromToken.mockResolvedValue({ id: 'user-1' });
     mocks.userHasOrgPermission.mockResolvedValue(true);
@@ -101,8 +87,27 @@ describe('regenerate-ai-draft route', () => {
     vi.unstubAllGlobals();
   });
 
-  it('does not change conversation state before the durable job insert succeeds', async () => {
-    enqueueError = 'job queue unavailable';
+  it('atomically claims the exact pending decision and enqueues its source turn', async () => {
+    delete process.env.NEXT_PUBLIC_INSFORGE_FUNCTIONS_URL;
+    delete process.env.PROCESS_JOBS_SECRET;
+
+    const response = await POST(makeRequest());
+
+    expect(response.status).toBe(202);
+    await expect(response.json()).resolves.toEqual({ status: 'queued' });
+    expect(mocks.rpc).toHaveBeenCalledWith('enqueue_regenerate_ai_draft', {
+      p_conversation_id: 'conversation-1',
+      p_organization_id: 'org-1',
+      p_source_message_id: 'message-1',
+      p_pending_ai_decision_id: 'decision-1',
+    });
+  });
+
+  it('does not expose thinking or queue work when the transactional enqueue fails', async () => {
+    mocks.rpc.mockResolvedValue({
+      data: null,
+      error: { message: 'job queue unavailable' },
+    });
     delete process.env.NEXT_PUBLIC_INSFORGE_FUNCTIONS_URL;
     delete process.env.PROCESS_JOBS_SECRET;
 
@@ -112,7 +117,45 @@ describe('regenerate-ai-draft route', () => {
     await expect(response.json()).resolves.toEqual({
       error: 'regenerate-ai-draft failed to enqueue job: job queue unavailable',
     });
+    expect(mocks.fetch).not.toHaveBeenCalled();
+  });
+
+  it('returns a conflict when approval or a newer turn wins the atomic claim', async () => {
+    mocks.rpc.mockResolvedValue({ data: false, error: null });
+    process.env.NEXT_PUBLIC_INSFORGE_FUNCTIONS_URL = 'https://functions.example.test';
+    process.env.PROCESS_JOBS_SECRET = 'worker-secret';
+
+    const response = await POST(makeRequest());
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toEqual({
+      error: 'Draft is already being processed or is no longer pending',
+    });
+    expect(mocks.fetch).not.toHaveBeenCalled();
+  });
+
+  it('rejects a stale route snapshot before attempting an enqueue', async () => {
+    conversation.pending_ai_decision_id = null;
+
+    const response = await POST(makeRequest());
+
+    expect(response.status).toBe(409);
     expect(mocks.rpc).not.toHaveBeenCalled();
+    expect(mocks.fetch).not.toHaveBeenCalled();
+  });
+
+  it('surfaces a rejected transactional enqueue without triggering the worker', async () => {
+    mocks.rpc.mockRejectedValue(new Error('database connection closed'));
+    process.env.NEXT_PUBLIC_INSFORGE_FUNCTIONS_URL = 'https://functions.example.test';
+    process.env.PROCESS_JOBS_SECRET = 'worker-secret';
+
+    const response = await POST(makeRequest());
+
+    expect(response.status).toBe(500);
+    await expect(response.json()).resolves.toEqual({
+      error: 'database connection closed',
+    });
+    expect(mocks.fetch).not.toHaveBeenCalled();
   });
 
   it('returns once the durable job is queued even when the direct trigger times out', async () => {
@@ -133,15 +176,6 @@ describe('regenerate-ai-draft route', () => {
 
     expect(response.status).toBe(202);
     await expect(response.json()).resolves.toEqual({ status: 'queued' });
-    expect(insertedJobs).toHaveLength(1);
-    expect(insertedJobs[0]).toEqual([
-      expect.objectContaining({
-        payload: {
-          conversationId: 'conversation-1',
-          messageId: 'message-1',
-        },
-      }),
-    ]);
     expect(mocks.fetch).toHaveBeenCalledOnce();
     expect(mocks.fetch).toHaveBeenCalledWith(
       'https://functions.example.test/process-jobs',
@@ -153,60 +187,5 @@ describe('regenerate-ai-draft route', () => {
         },
       }),
     );
-    expect(mocks.rpc).toHaveBeenCalledWith('transition_ai_source_turn', {
-      p_conversation_id: 'conversation-1',
-      p_organization_id: 'org-1',
-      p_source_message_id: 'message-1',
-      p_ai_state: 'thinking',
-      p_status: null,
-      p_expected_ai_state: null,
-      p_expected_status: 'open',
-    });
-  });
-
-  it('returns an accepted warning when state display fails after enqueue', async () => {
-    mocks.rpc.mockResolvedValue({
-      data: null,
-      error: { message: 'conversation update unavailable' },
-    });
-    delete process.env.NEXT_PUBLIC_INSFORGE_FUNCTIONS_URL;
-    delete process.env.PROCESS_JOBS_SECRET;
-
-    const response = await POST(makeRequest());
-
-    expect(response.status).toBe(202);
-    await expect(response.json()).resolves.toEqual({
-      status: 'queued',
-      warning: 'Draft regeneration was queued, but the thinking state could not be updated: conversation update unavailable',
-    });
-    expect(insertedJobs).toHaveLength(1);
-  });
-
-  it('returns an accepted warning when the state update promise rejects', async () => {
-    mocks.rpc.mockRejectedValue(new Error('state update network failure'));
-    delete process.env.NEXT_PUBLIC_INSFORGE_FUNCTIONS_URL;
-    delete process.env.PROCESS_JOBS_SECRET;
-
-    const response = await POST(makeRequest());
-
-    expect(response.status).toBe(202);
-    await expect(response.json()).resolves.toEqual({
-      status: 'queued',
-      warning: 'Draft regeneration was queued, but the thinking state could not be updated: state update network failure',
-    });
-  });
-
-  it('does not overwrite a newer turn with a stale thinking state', async () => {
-    mocks.rpc.mockResolvedValue({ data: false, error: null });
-    delete process.env.NEXT_PUBLIC_INSFORGE_FUNCTIONS_URL;
-    delete process.env.PROCESS_JOBS_SECRET;
-
-    const response = await POST(makeRequest());
-
-    expect(response.status).toBe(202);
-    await expect(response.json()).resolves.toEqual({
-      status: 'queued',
-      warning: 'Draft regeneration was queued, but a newer conversation turn superseded it',
-    });
   });
 });

@@ -97,8 +97,9 @@ Apply the SQL migration files in order to your InsForge PostgreSQL database:
 | `insforge/migrations/017_lock_down_legacy_webchat_access.sql` | Removes legacy public webchat policies/grants and the obsolete auth-debug helper |
 | `insforge/migrations/018_atomic_ai_source_turns.sql` | Adds atomic latest-turn tracking and source-bound AI state/dispatch claims |
 | `insforge/migrations/019_restrict_ai_decision_writes.sql` | Makes AI decisions browser-read-only and reserves mutations for trusted server paths |
+| `insforge/migrations/020_bind_pending_ai_drafts.sql` | Binds approval/regeneration to one pending AI decision with owner-guarded dispatch claims |
 
-Apply all 21 files via the InsForge SQL editor or migrations API in the order shown above. Migration `014` intentionally does not change bucket visibility: after applying it, mark the existing `knowledge-files` bucket **private** in the InsForge dashboard. Keep knowledge object keys under `<organization-id>/documents/...`; the migration's storage policies depend on that prefix. Pause scheduled `process-jobs` invocations and let any active invocation finish before applying `018`; deploy the source-bound routes/functions before resuming the schedule. Migration `019` removes direct browser mutation access to server-produced AI decisions.
+Apply all 22 files via the InsForge SQL editor or migrations API in the order shown above. Migration `014` intentionally does not change bucket visibility: after applying it, mark the existing `knowledge-files` bucket **private** in the InsForge dashboard. Keep knowledge object keys under `<organization-id>/documents/...`; the migration's storage policies depend on that prefix. Pause scheduled `process-jobs` invocations and let any active invocation finish before applying `018`; deploy the source-bound routes/functions before resuming the schedule. Migration `019` removes direct browser mutation access to server-produced AI decisions. Apply `020` before deploying the owner-bound approval/regeneration routes that call its RPCs.
 
 ### Seed Data
 

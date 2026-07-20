@@ -385,13 +385,13 @@ Approves and sends an AI-drafted response.
 { "status": "ok", "data": { "message": { /* outbound message row */ } } }
 ```
 
-**Behaviour**: Loads the matching `ai_decision`; an optional non-empty `body` overrides the generated text for edit-before-send. It dispatches through `OutboundMessageService` with AI actor attribution. Only after provider delivery and message persistence succeed does it clear `conversation.ai_state`; a provider failure leaves the draft available to retry. Webchat replies publish on the visitor's realtime channel. Writes `audit_logs` row (`action: 'ai_draft_approved'`).
+**Behaviour**: Loads the matching `ai_decision`; an optional non-empty `body` overrides the generated text for edit-before-send. It atomically claims only the conversation's exact `pending_ai_decision_id`, then dispatches through `OutboundMessageService` with AI actor attribution. Provider failures restore only that decision when its source turn is still current. Provider-accepted cleanup is owner-bound, so it cannot reset a newer worker that entered the shared `thinking` state. Webchat replies publish on the visitor's realtime channel. Writes `audit_logs` row (`action: 'ai_draft_approved'`).
 
 Post-dispatch finalization failures and unknown provider outcomes clear the
 claimed draft, return `202 accepted`, and write reconciliation metadata rather
 than exposing a retryable response.
 
-**Errors**: `400`, `401`, `404` (decision missing or no response text), `500`.
+**Errors**: `400`, `401`, `404` (decision missing or no response text), `409` (decision is no longer the pending draft), `500`.
 
 ### POST /api/functions/regenerate-ai-draft
 
@@ -409,9 +409,9 @@ Regenerates an AI draft by enqueuing a new `process_ai_message` job.
 { "status": "queued" }
 ```
 
-**Behaviour**: Loads the conversation's `organization_id` and latest inbound contact message. Durably inserts an idempotent `support_jobs` row with `job_type = 'process_ai_message'`, `payload = { conversationId, messageId }`, then atomically sets `conversations.ai_state = 'thinking'` only if that source is still the latest persisted turn; the worker repeats the guarded transition after it claims the job. The route then POSTs to the InsForge `process-jobs` function with a 1.5-second timeout; state/trigger failures leave the queued job for the scheduler and are returned or logged as non-retryable warnings. **No audit log entry** (an `ai_draft_regenerated` action would be a useful follow-up; tracked in [`../plans/refactor.md`](../plans/refactor.md)).
+**Behaviour**: Atomically claims the exact pending AI decision, enters `thinking`, and inserts an idempotent source-bound `process_ai_message` job in one server-only RPC. Approval and regeneration serialize on the conversation row; the loser returns `409` without provider dispatch or runnable work. The route then POSTs to the InsForge `process-jobs` function with a 1.5-second timeout; trigger failures leave the durable job for the scheduler. **No audit log entry** (an `ai_draft_regenerated` action would be a useful follow-up; tracked in [`../plans/refactor.md`](../plans/refactor.md)).
 
-**Errors**: `400`, `401`, `404` (conversation not found), `409` (no inbound source message is available), `500`.
+**Errors**: `400`, `401`, `404` (conversation not found), `409` (draft is already processing or no longer pending), `500`.
 
 ### POST /api/functions/escalate-conversation
 

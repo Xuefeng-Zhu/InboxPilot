@@ -24,6 +24,7 @@ const mocks = vi.hoisted(() => ({
     }
   },
   from: vi.fn(),
+  rpc: vi.fn(),
   getSecret: vi.fn(),
   resolveProviderConfig: vi.fn(),
   getUserFromToken: vi.fn(),
@@ -35,7 +36,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('@/lib/insforge-admin', () => ({
-  insforgeAdmin: { database: { from: mocks.from } },
+  insforgeAdmin: { database: { from: mocks.from, rpc: mocks.rpc } },
 }));
 vi.mock('@/lib/insforge-secrets', () => ({ getSecret: mocks.getSecret }));
 vi.mock('@support-core/services/outbound-provider-config', () => ({
@@ -70,7 +71,10 @@ interface Scenario {
   updates: Array<{ table: string; values: Record<string, unknown> }>;
   inserts: Array<{ table: string; values: unknown }>;
   claimAvailable: boolean;
-  idleUpdateFailuresRemaining: number;
+  restoreAvailable: boolean;
+  finishAvailable: boolean;
+  restoreRejectionsRemaining: number;
+  finishRejectionsRemaining: number;
   operationRejections: Record<string, string>;
   operationRejectionsRemaining: Record<string, number>;
 }
@@ -123,17 +127,9 @@ function createBuilder(table: string) {
           return Promise.reject(new Error(rejection)).then(onfulfilled, onrejected);
         }
       }
-      const idleUpdateFailed = operation === 'update'
-        && latestUpdate?.values.ai_state === 'idle'
-        && scenario.idleUpdateFailuresRemaining > 0;
-      if (idleUpdateFailed) scenario.idleUpdateFailuresRemaining -= 1;
       const result = operation === 'select'
         ? { data: scenario.tableData[table] ?? null, error: null }
-        : idleUpdateFailed
-          ? { data: null, error: { message: 'transient conversation update failure' } }
-        : operation === 'update' && latestUpdate?.values.ai_state === 'thinking'
-          ? { data: scenario.claimAvailable ? [{ id: 'conversation-1' }] : [], error: null }
-          : { data: null, error: null };
+        : { data: null, error: null };
       return Promise.resolve(result).then(onfulfilled, onrejected);
     });
 
@@ -157,12 +153,18 @@ function configureScenario(channel: Scenario['channel']): void {
         id: 'conversation-1',
         organization_id: 'org-1',
         channel,
+        status: 'open',
+        ai_state: 'drafted',
+        pending_ai_decision_id: 'decision-1',
       }],
     },
     updates: [],
     inserts: [],
     claimAvailable: true,
-    idleUpdateFailuresRemaining: 0,
+    restoreAvailable: true,
+    finishAvailable: true,
+    restoreRejectionsRemaining: 0,
+    finishRejectionsRemaining: 0,
     operationRejections: {},
     operationRejectionsRemaining: {},
   };
@@ -203,6 +205,26 @@ describe('approve-ai-draft route', () => {
     vi.clearAllMocks();
     configureScenario('sms');
     mocks.from.mockImplementation((table: string) => createBuilder(table));
+    mocks.rpc.mockImplementation(async (name: string) => {
+      if (name === 'claim_pending_ai_draft') {
+        return { data: scenario.claimAvailable, error: null };
+      }
+      if (name === 'restore_pending_ai_draft') {
+        if (scenario.restoreRejectionsRemaining > 0) {
+          scenario.restoreRejectionsRemaining -= 1;
+          throw new Error('transient network rejection');
+        }
+        return { data: scenario.restoreAvailable, error: null };
+      }
+      if (name === 'finish_pending_ai_draft') {
+        if (scenario.finishRejectionsRemaining > 0) {
+          scenario.finishRejectionsRemaining -= 1;
+          throw new Error('transient network rejection');
+        }
+        return { data: scenario.finishAvailable, error: null };
+      }
+      throw new Error(`Unexpected RPC: ${name}`);
+    });
     mocks.getUserFromToken.mockResolvedValue({ id: 'user-1' });
     mocks.userHasOrgPermission.mockResolvedValue(true);
     mocks.getSecret.mockResolvedValue({ accountSid: 'AC123', authToken: 'secret' });
@@ -235,13 +257,15 @@ describe('approve-ai-draft route', () => {
       { accountSid: 'AC123', authToken: 'secret' },
       { writeAuditLog: false },
     );
-    expect(scenario.updates).toContainEqual({
-      table: 'conversations',
-      values: { ai_state: 'idle' },
+    expect(mocks.rpc).toHaveBeenCalledWith('finish_pending_ai_draft', {
+      p_conversation_id: 'conversation-1',
+      p_organization_id: 'org-1',
+      p_ai_decision_id: 'decision-1',
     });
-    expect(scenario.updates).toContainEqual({
-      table: 'conversations',
-      values: { ai_state: 'thinking' },
+    expect(mocks.rpc).toHaveBeenCalledWith('claim_pending_ai_draft', {
+      p_conversation_id: 'conversation-1',
+      p_organization_id: 'org-1',
+      p_ai_decision_id: 'decision-1',
     });
   });
 
@@ -279,9 +303,10 @@ describe('approve-ai-draft route', () => {
 
     expect(response.status).toBe(500);
     await expect(response.json()).resolves.toEqual({ error: 'Twilio rejected the message' });
-    expect(scenario.updates).toContainEqual({
-      table: 'conversations',
-      values: { ai_state: 'drafted' },
+    expect(mocks.rpc).toHaveBeenCalledWith('restore_pending_ai_draft', {
+      p_conversation_id: 'conversation-1',
+      p_organization_id: 'org-1',
+      p_ai_decision_id: 'decision-1',
     });
     expect(scenario.inserts).not.toContainEqual(
       expect.objectContaining({ table: 'audit_logs' }),
@@ -303,9 +328,10 @@ describe('approve-ai-draft route', () => {
       status: 'accepted',
       data: { message: null },
     });
-    expect(scenario.updates).toContainEqual({
-      table: 'conversations',
-      values: { ai_state: 'idle' },
+    expect(mocks.rpc).toHaveBeenCalledWith('finish_pending_ai_draft', {
+      p_conversation_id: 'conversation-1',
+      p_organization_id: 'org-1',
+      p_ai_decision_id: 'decision-1',
     });
     expect(scenario.updates).not.toContainEqual({
       table: 'conversations',
@@ -322,7 +348,7 @@ describe('approve-ai-draft route', () => {
   });
 
   it('retries the final state transition after delivery instead of stranding the claim', async () => {
-    scenario.idleUpdateFailuresRemaining = 1;
+    scenario.finishRejectionsRemaining = 1;
 
     const response = await POST(makeRequest({
       conversationId: 'conversation-1',
@@ -330,15 +356,14 @@ describe('approve-ai-draft route', () => {
     }));
 
     expect(response.status).toBe(200);
-    expect(scenario.updates.filter(
-      ({ values }) => values.ai_state === 'idle',
+    expect(mocks.rpc.mock.calls.filter(
+      ([name]) => name === 'finish_pending_ai_draft',
     )).toHaveLength(2);
   });
 
   it('retries a rejected state-transition promise before surfacing provider failure', async () => {
     mocks.sendReply.mockRejectedValue(new Error('Twilio rejected the message'));
-    scenario.operationRejections['conversations:update:drafted'] = 'transient network rejection';
-    scenario.operationRejectionsRemaining['conversations:update:drafted'] = 1;
+    scenario.restoreRejectionsRemaining = 1;
 
     const response = await POST(makeRequest({
       conversationId: 'conversation-1',
@@ -346,8 +371,8 @@ describe('approve-ai-draft route', () => {
     }));
 
     expect(response.status).toBe(500);
-    expect(scenario.updates.filter(
-      ({ values }) => values.ai_state === 'drafted',
+    expect(mocks.rpc.mock.calls.filter(
+      ([name]) => name === 'restore_pending_ai_draft',
     )).toHaveLength(2);
   });
 
@@ -397,9 +422,10 @@ describe('approve-ai-draft route', () => {
       status: 'accepted',
       warning: expect.stringContaining('outcome is unknown'),
     });
-    expect(scenario.updates).toContainEqual({
-      table: 'conversations',
-      values: { ai_state: 'idle' },
+    expect(mocks.rpc).toHaveBeenCalledWith('finish_pending_ai_draft', {
+      p_conversation_id: 'conversation-1',
+      p_organization_id: 'org-1',
+      p_ai_decision_id: 'decision-1',
     });
     expect(scenario.inserts).toContainEqual({
       table: 'audit_logs',
@@ -445,6 +471,62 @@ describe('approve-ai-draft route', () => {
 
     expect(response.status).toBe(409);
     expect(mocks.sendReply).not.toHaveBeenCalled();
+  });
+
+  it('rejects an older decision after regeneration publishes a newer pending draft', async () => {
+    const conversations = scenario.tableData.conversations;
+    if (!Array.isArray(conversations)) throw new Error('Conversation fixture must be an array');
+    conversations[0] = {
+      ...conversations[0],
+      pending_ai_decision_id: 'decision-2',
+    };
+
+    const response = await POST(makeRequest({
+      conversationId: 'conversation-1',
+      aiDecisionId: 'decision-1',
+    }));
+
+    expect(response.status).toBe(409);
+    expect(mocks.resolveProviderConfig).not.toHaveBeenCalled();
+    expect(mocks.rpc).not.toHaveBeenCalled();
+    expect(mocks.sendReply).not.toHaveBeenCalled();
+  });
+
+  it('does not clear a newer source-turn worker when it starts during provider dispatch', async () => {
+    // A false owner-bound finish models M2 resetting the D1 claim and then
+    // entering `thinking` before the old provider request returns.
+    scenario.finishAvailable = false;
+
+    const response = await POST(makeRequest({
+      conversationId: 'conversation-1',
+      aiDecisionId: 'decision-1',
+    }));
+
+    expect(response.status).toBe(200);
+    expect(mocks.rpc).toHaveBeenCalledWith('finish_pending_ai_draft', {
+      p_conversation_id: 'conversation-1',
+      p_organization_id: 'org-1',
+      p_ai_decision_id: 'decision-1',
+    });
+    expect(scenario.updates.filter(({ table }) => table === 'conversations')).toHaveLength(0);
+  });
+
+  it('does not restore an old draft over a newer source-turn worker after provider failure', async () => {
+    scenario.restoreAvailable = false;
+    mocks.sendReply.mockRejectedValue(new Error('Twilio rejected the message'));
+
+    const response = await POST(makeRequest({
+      conversationId: 'conversation-1',
+      aiDecisionId: 'decision-1',
+    }));
+
+    expect(response.status).toBe(500);
+    expect(mocks.rpc).toHaveBeenCalledWith('restore_pending_ai_draft', {
+      p_conversation_id: 'conversation-1',
+      p_organization_id: 'org-1',
+      p_ai_decision_id: 'decision-1',
+    });
+    expect(scenario.updates.filter(({ table }) => table === 'conversations')).toHaveLength(0);
   });
 
   it('returns accepted when the post-send approval audit rejects', async () => {

@@ -1,6 +1,6 @@
 # Database Reference
 
-> PostgreSQL schema reference. 20 application tables, 21 migration files, 9 application-callable RPCs, and role-aware RLS on tenant-scoped data.
+> PostgreSQL schema reference. 20 application tables, 22 migration files, 13 application-callable RPCs, and role-aware RLS on tenant-scoped data.
 
 ## Migration files
 
@@ -29,8 +29,9 @@ Apply pending files in the order shown. Do not replay the whole set against an i
 | `insforge/migrations/017_lock_down_legacy_webchat_access.sql` | Drops orphan unconditional webchat policies/grants and the legacy `debug_auth_info()` helper |
 | `insforge/migrations/018_atomic_ai_source_turns.sql` | Tracks the latest conversation turn transactionally and adds source-bound AI transition claims |
 | `insforge/migrations/019_restrict_ai_decision_writes.sql` | Removes browser mutation privileges from server-produced AI decisions |
+| `insforge/migrations/020_bind_pending_ai_drafts.sql` | Binds approval/regeneration to an immutable pending decision and source turn |
 
-Apply via the InsForge SQL editor or migrations API. Migration `014` cannot change bucket configuration: after applying it, mark the existing `knowledge-files` bucket **private** in the InsForge dashboard. Then apply `015` for knowledge-job tenant binding, `016` for job/decision idempotency, `017` for legacy webchat lockdown, `018` for atomic AI source turns, and `019` for the server-only AI-decision write boundary. Pause scheduled job processing and let active invocations finish before `018`; deploy the source-bound worker/routes before resuming. Storage object keys must use `<organization-id>/documents/...` so its policies can derive the tenant from the first path segment.
+Apply via the InsForge SQL editor or migrations API. Migration `014` cannot change bucket configuration: after applying it, mark the existing `knowledge-files` bucket **private** in the InsForge dashboard. Then apply `015` for knowledge-job tenant binding, `016` for job/decision idempotency, `017` for legacy webchat lockdown, `018` for atomic AI source turns, `019` for the server-only AI-decision write boundary, and `020` for pending-draft ownership. Pause scheduled job processing and let active invocations finish before `018`; deploy the source-bound worker/routes before resuming. Apply `020` before its approval/regeneration route changes. Storage object keys must use `<organization-id>/documents/...` so its policies can derive the tenant from the first path segment.
 
 ---
 
@@ -132,11 +133,13 @@ Notes:
 | `assigned_to` | `uuid` | nullable, FK → `organization_members` | |
 | `last_message_at` | `timestamptz` | nullable | |
 | `latest_message_id` | `uuid` | nullable, FK → `messages` (SET NULL) | Deterministic latest-turn marker maintained on message insert (since 018) |
+| `pending_ai_decision_id` | `uuid` | nullable, FK → `ai_decisions` (SET NULL) | Exact sendable draft currently exposed for approval (since 020) |
+| `sending_ai_decision_id` | `uuid` | nullable, FK → `ai_decisions` (SET NULL) | Owner of an in-flight approved-draft dispatch (since 020) |
 | `metadata` | `jsonb` | NOT NULL, default `'{}'` | |
 | `created_at` | `timestamptz` | NOT NULL | |
 | `updated_at` | `timestamptz` | NOT NULL | |
 
-**Indexes:** `idx_conversations_org_status`, `idx_conversations_contact_id`, `idx_conversations_org_last_message` (DESC on `last_message_at`).
+**Indexes:** `idx_conversations_org_status`, `idx_conversations_contact_id`, `idx_conversations_org_last_message` (DESC on `last_message_at`), plus partial indexes for non-null `latest_message_id`, `pending_ai_decision_id`, and `sending_ai_decision_id`.
 
 **Status state machine** (see [`architecture.md`](architecture.md#conversation-status-state-machine)):
 
@@ -404,6 +407,22 @@ Identical structure to `sms_delivery_events`.
 Service-only atomic transition for AI work. It updates state/status only when the supplied inbound contact message is still `conversations.latest_message_id` for the same organization and optional expected state/status preconditions still hold. The message-insert trigger shares the conversation-row lock, resets superseded in-flight work, and makes the transition result the ordering point before an auto-reply dispatch. Expected-state guards prevent a worker or delayed fallback from overwriting manual resolve/escalate actions. Returns `false` when a newer turn or manual action won the race. Execute is restricted to `project_admin`.
 
 Migration `018` also revokes browser-role mutation privileges on `conversations` and `messages`; authenticated clients retain tenant-scoped reads, while JWT-authorized routes and functions mutate them through `project_admin`. This prevents clients from forging the server-maintained turn boundary.
+
+### `claim_pending_ai_draft(p_conversation_id uuid, p_organization_id uuid, p_ai_decision_id uuid)`
+
+Atomically moves the exact current, sendable draft from `pending_ai_decision_id` to `sending_ai_decision_id` and enters `thinking`. Approval requests that lost to another approval, regeneration, a newer turn, or a manual state change return `false` before provider dispatch. Execute is restricted to `project_admin`.
+
+### `restore_pending_ai_draft(p_conversation_id uuid, p_organization_id uuid, p_ai_decision_id uuid)`
+
+Restores a retry-safe provider failure only when the same decision still owns the dispatch, its inbound source remains the latest turn, and no newer decision exists. A newer turn clears ownership, making stale cleanup a no-op. Execute is restricted to `project_admin`.
+
+### `finish_pending_ai_draft(p_conversation_id uuid, p_organization_id uuid, p_ai_decision_id uuid)`
+
+Clears only the same decision's in-flight dispatch claim. Provider-accepted cleanup therefore cannot reset a newer source-turn worker that has subsequently entered `thinking`. Execute is restricted to `project_admin`.
+
+### `enqueue_regenerate_ai_draft(p_conversation_id uuid, p_organization_id uuid, p_source_message_id uuid, p_pending_ai_decision_id uuid)`
+
+Atomically claims the exact pending decision for regeneration and inserts a source-bound `process_ai_message` job. Approval and regeneration serialize on the conversation row, and a lost race cannot leave runnable regeneration work behind. Execute is restricted to `project_admin`.
 
 ### `match_knowledge_chunks(query_embedding vector(1536), match_org_id uuid, match_limit int DEFAULT 5, match_threshold float DEFAULT 0.7)`
 

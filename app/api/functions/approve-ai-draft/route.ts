@@ -13,9 +13,10 @@ import {
   writeDispatchReconciliationAudit,
 } from '../_outbound-service';
 
-async function transitionClaimedDraft(
+async function finishClaimedDraft(
   conversationId: string,
-  aiState: 'drafted' | 'idle',
+  organizationId: string,
+  aiDecisionId: string,
   context: string,
 ): Promise<void> {
   // A provider send may already have succeeded when the state transition is
@@ -23,14 +24,40 @@ async function transitionClaimedDraft(
   // not remain stranded in the internal `thinking` claim state.
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
-      const result = await insforge.database
-        .from('conversations')
-        .update({ ai_state: aiState })
-        .eq('id', conversationId)
-        .eq('ai_state', 'thinking');
+      const result = await insforge.database.rpc('finish_pending_ai_draft', {
+        p_conversation_id: conversationId,
+        p_organization_id: organizationId,
+        p_ai_decision_id: aiDecisionId,
+      });
       if (!result.error) return;
       if (attempt === 1) {
         assertInsforgeSuccess(result, context);
+      }
+    } catch (error) {
+      if (attempt === 1) throw error;
+    }
+  }
+}
+
+function rpcReturnedTrue(data: unknown): boolean {
+  return data === true || (Array.isArray(data) && data[0] === true);
+}
+
+async function restoreClaimedDraft(
+  conversationId: string,
+  organizationId: string,
+  aiDecisionId: string,
+): Promise<void> {
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const result = await insforge.database.rpc('restore_pending_ai_draft', {
+        p_conversation_id: conversationId,
+        p_organization_id: organizationId,
+        p_ai_decision_id: aiDecisionId,
+      });
+      if (!result.error) return;
+      if (attempt === 1) {
+        assertInsforgeSuccess(result, 'approve-ai-draft failed to restore draft');
       }
     } catch (error) {
       if (attempt === 1) throw error;
@@ -96,6 +123,17 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
+    if (
+      conversation.status !== 'open' ||
+      conversation.ai_state !== 'drafted' ||
+      conversation.pending_ai_decision_id !== aiDecisionId
+    ) {
+      return NextResponse.json(
+        { error: 'Draft is already being sent or is no longer pending' },
+        { status: 409 },
+      );
+    }
+
     const approvedBody = bodyOverride ?? decision.response_text;
     const providerConfig = await resolveOutboundProviderConfig(
       conversation.organization_id as string,
@@ -105,19 +143,13 @@ export async function POST(req: NextRequest) {
     // Atomically claim the draft before contacting an external provider. Two
     // approval requests can otherwise both send the same SMS/email before
     // either request clears the draft.
-    const claimResult = await insforge.database
-      .from('conversations')
-      .update({ ai_state: 'thinking' })
-      .eq('id', conversationId)
-      .eq('ai_state', 'drafted')
-      .select('id');
+    const claimResult = await insforge.database.rpc('claim_pending_ai_draft', {
+      p_conversation_id: conversationId,
+      p_organization_id: conversation.organization_id,
+      p_ai_decision_id: aiDecisionId,
+    });
     assertInsforgeSuccess(claimResult, 'approve-ai-draft failed to claim draft');
-    const claimedRows = Array.isArray(claimResult.data)
-      ? claimResult.data
-      : claimResult.data
-        ? [claimResult.data]
-        : [];
-    if (claimedRows.length === 0) {
+    if (!rpcReturnedTrue(claimResult.data)) {
       return NextResponse.json(
         { error: 'Draft is already being sent or is no longer pending' },
         { status: 409 },
@@ -146,13 +178,20 @@ export async function POST(req: NextRequest) {
       const providerOutcomeUnknown = sendError instanceof ProviderSendOutcomeUnknownError;
       const retryUnsafe = providerAccepted || providerOutcomeUnknown;
       try {
-        await transitionClaimedDraft(
-          conversationId,
-          retryUnsafe ? 'idle' : 'drafted',
-          retryUnsafe
-            ? 'approve-ai-draft failed to clear draft after post-dispatch failure'
-            : 'approve-ai-draft failed to restore draft after provider failure',
-        );
+        if (retryUnsafe) {
+          await finishClaimedDraft(
+            conversationId,
+            conversation.organization_id,
+            aiDecisionId,
+            'approve-ai-draft failed to clear draft after post-dispatch failure',
+          );
+        } else {
+          await restoreClaimedDraft(
+            conversationId,
+            conversation.organization_id,
+            aiDecisionId,
+          );
+        }
       } catch (transitionError) {
         if (retryUnsafe) {
           const detail = transitionError instanceof Error
@@ -237,9 +276,10 @@ export async function POST(req: NextRequest) {
 
     // Clear the draft only after provider delivery and message persistence.
     try {
-      await transitionClaimedDraft(
+      await finishClaimedDraft(
         conversationId,
-        'idle',
+        conversation.organization_id,
+        aiDecisionId,
         'approve-ai-draft failed to update conversation',
       );
     } catch (transitionError) {

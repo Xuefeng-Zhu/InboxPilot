@@ -9,8 +9,8 @@
 | Route | InsForge tables touched | Audit log | Notes |
 |---|---|---|---|
 | `POST /api/functions/send-reply` | `conversations` (read), `messages` (insert outbound), `webchat_threads` (read for broadcast) | — | Permission: `reply_conversations` |
-| `POST /api/functions/approve-ai-draft` | `ai_decisions` (read), `conversations` (update `ai_state=idle`), `messages` (insert ai-sender), `webchat_threads` (read), `audit_logs` (insert) | `ai_draft_approved` | Permission: `reply_conversations` |
-| `POST /api/functions/regenerate-ai-draft` | `conversations` (read, then atomic source-bound `ai_state=thinking` after enqueue), `support_jobs` (idempotent insert of `process_ai_message`); triggers `${FUNCTIONS_URL}/process-jobs` with a 1.5s bound | — | Permission: `reply_conversations`; worker repeats the guarded transition |
+| `POST /api/functions/approve-ai-draft` | `ai_decisions` (read), `conversations` (owner-bound claim/restore/finish RPCs), `messages` (insert ai-sender), `webchat_threads` (read), `audit_logs` (insert) | `ai_draft_approved` | Permission: `reply_conversations`; only the exact pending decision can dispatch |
+| `POST /api/functions/regenerate-ai-draft` | `conversations` + `support_jobs` through one atomic pending-decision claim/enqueue RPC; triggers `${FUNCTIONS_URL}/process-jobs` with a 1.5s bound | — | Permission: `reply_conversations`; approval/regeneration races return `409` to the loser |
 | `POST /api/functions/escalate-conversation` | `conversations` (update `status=escalated, ai_state=needs_human`) | — | Permission: `reply_conversations` |
 | `POST /api/functions/resolve-conversation` | `conversations` (update `status=resolved, ai_state=idle`) | — | Permission: `reply_conversations` |
 | `POST /api/functions/reopen-conversation` | `conversations` (update `status=open, ai_state=idle`) | — | Permission: `reply_conversations` |

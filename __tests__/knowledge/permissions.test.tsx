@@ -2,12 +2,17 @@
  * @vitest-environment jsdom
  */
 import type { ReactNode } from 'react';
-import { cleanup, render, screen } from '@testing-library/react';
+import { act, cleanup, render, screen } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   role: 'viewer' as 'owner' | 'admin' | 'agent' | 'viewer',
+  realtimeOptions: null as {
+    messageChannel?: string;
+    enabled?: boolean;
+    onKnowledgeDocumentUpdated?: (payload: Record<string, unknown>) => void;
+  } | null,
 }));
 
 vi.mock('@/lib/auth-context', () => ({
@@ -27,6 +32,12 @@ vi.mock('@/lib/queries', () => ({
 
 vi.mock('@/lib/insforge', () => ({
   insforge: { database: { from: vi.fn() } },
+}));
+
+vi.mock('@/lib/use-realtime', () => ({
+  useRealtime: (options: typeof mocks.realtimeOptions) => {
+    mocks.realtimeOptions = options;
+  },
 }));
 
 vi.mock('@/components/layout', () => ({
@@ -54,17 +65,19 @@ function renderPage() {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
-  return render(
+  const view = render(
     <QueryClientProvider client={queryClient}>
       <KnowledgePage />
     </QueryClientProvider>,
   );
+  return { ...view, queryClient };
 }
 
 describe('knowledge management permissions', () => {
   afterEach(() => {
     cleanup();
     mocks.role = 'viewer';
+    mocks.realtimeOptions = null;
   });
 
   it.each(['agent', 'viewer'] as const)('keeps the %s knowledge view read-only', (role) => {
@@ -79,5 +92,22 @@ describe('knowledge management permissions', () => {
     renderPage();
 
     expect(screen.getByRole('button', { name: /new article/i })).toBeTruthy();
+  });
+
+  it('invalidates the organization document list on a completion event', () => {
+    const { queryClient } = renderPage();
+    const documentListKey = ['knowledge-documents', 'org-1'] as const;
+    queryClient.setQueryData(documentListKey, [{ id: 'doc-1', status: 'processing' }]);
+
+    expect(mocks.realtimeOptions?.messageChannel).toBe('org:org-1');
+    expect(mocks.realtimeOptions?.enabled).toBe(true);
+    act(() => {
+      mocks.realtimeOptions?.onKnowledgeDocumentUpdated?.({
+        documentId: 'doc-1',
+        status: 'ready',
+      });
+    });
+
+    expect(queryClient.getQueryState(documentListKey)?.isInvalidated).toBe(true);
   });
 });

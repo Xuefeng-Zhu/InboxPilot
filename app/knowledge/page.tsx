@@ -6,6 +6,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth-context';
 import { useCurrentMembership, useKnowledgeDocs, queryKeys } from '@/lib/queries';
 import { insforge } from '@/lib/insforge';
+import { useRealtime } from '@/lib/use-realtime';
 import { AppShell } from '@/components/layout';
 import { Pill, Tag } from '@/components/ui';
 import {
@@ -50,6 +51,7 @@ export default function KnowledgePage() {
     data: membership,
     error: membershipError,
   } = useCurrentMembership(user?.id);
+  const organizationId = membership?.organizationId;
   const canManageKnowledge = membership?.role === 'owner' || membership?.role === 'admin';
 
   const { data: documents = [], isLoading: loading, error: queryError } = useKnowledgeDocs();
@@ -64,6 +66,17 @@ export default function KnowledgePage() {
 
   const [chunkCounts, setChunkCounts] = useState<Record<string, number>>({});
 
+  useRealtime({
+    messageChannel: organizationId ? `org:${organizationId}` : undefined,
+    enabled: !!organizationId,
+    onKnowledgeDocumentUpdated: () => {
+      if (!organizationId) return;
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.knowledgeDocs(organizationId),
+      });
+    },
+  });
+
   useEffect(() => {
     const mutationWarning = takeKnowledgeMutationWarning();
     if (mutationWarning) {
@@ -72,7 +85,7 @@ export default function KnowledgePage() {
   }, []);
 
   const refetchDocs = () => queryClient.invalidateQueries({
-    queryKey: queryKeys.knowledgeDocs(membership?.organizationId ?? ''),
+    queryKey: queryKeys.knowledgeDocs(organizationId ?? ''),
   });
 
   useEffect(() => {

@@ -7,6 +7,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth-context';
 import { useCurrentMembership, useKnowledgeDoc, queryKeys } from '@/lib/queries';
 import { insforge } from '@/lib/insforge';
+import { useRealtime } from '@/lib/use-realtime';
 import { AppShell } from '@/components/layout';
 import { Tag, Select } from '@/components/ui';
 import { MarkdownEditor } from '@/components/knowledge/MarkdownEditor';
@@ -28,9 +29,26 @@ export default function KnowledgeDetailPage({ params }: { params: Promise<{ id: 
     data: membership,
     error: membershipError,
   } = useCurrentMembership(user?.id);
+  const organizationId = membership?.organizationId;
   const canManageKnowledge = membership?.role === 'owner' || membership?.role === 'admin';
 
   const { data: doc, isLoading, error } = useKnowledgeDoc(id);
+
+  useRealtime({
+    messageChannel: organizationId ? `org:${organizationId}` : undefined,
+    enabled: !!organizationId,
+    onKnowledgeDocumentUpdated: (payload) => {
+      if (!organizationId || payload.documentId !== id) return;
+      void Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.knowledgeDoc(organizationId, id),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.knowledgeDocs(organizationId),
+        }),
+      ]);
+    },
+  });
 
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState('');

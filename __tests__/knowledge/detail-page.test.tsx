@@ -2,13 +2,19 @@
  * @vitest-environment jsdom
  */
 import { Suspense, type ReactNode } from 'react';
-import { cleanup, render, screen } from '@testing-library/react';
+import { act, cleanup, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   linksData: [] as unknown[],
   linksError: null as { message: string } | null,
   linkSelection: '',
+  invalidateQueries: vi.fn(),
+  realtimeOptions: null as {
+    messageChannel?: string;
+    enabled?: boolean;
+    onKnowledgeDocumentUpdated?: (payload: Record<string, unknown>) => void;
+  } | null,
 }));
 
 vi.mock('next/navigation', () => ({
@@ -22,7 +28,7 @@ vi.mock('next/link', () => ({
 }));
 
 vi.mock('@tanstack/react-query', () => ({
-  useQueryClient: () => ({ invalidateQueries: vi.fn() }),
+  useQueryClient: () => ({ invalidateQueries: mocks.invalidateQueries }),
 }));
 
 vi.mock('@/lib/auth-context', () => ({
@@ -49,8 +55,14 @@ vi.mock('@/lib/queries', () => ({
     error: null,
   }),
   queryKeys: {
-    knowledgeDoc: (orgId: string, id: string) => ['knowledge-doc', orgId, id],
+    knowledgeDoc: (orgId: string, id: string) => ['knowledge-document', orgId, id],
     knowledgeDocs: (orgId: string) => ['knowledge-documents', orgId],
+  },
+}));
+
+vi.mock('@/lib/use-realtime', () => ({
+  useRealtime: (options: typeof mocks.realtimeOptions) => {
+    mocks.realtimeOptions = options;
   },
 }));
 
@@ -149,6 +161,8 @@ describe('knowledge document linked conversations', () => {
     mocks.linksData = [];
     mocks.linksError = null;
     mocks.linkSelection = '';
+    mocks.invalidateQueries.mockReset();
+    mocks.realtimeOptions = null;
     Object.defineProperty(Element.prototype, 'scrollIntoView', {
       configurable: true,
       value: vi.fn(),
@@ -201,5 +215,34 @@ describe('knowledge document linked conversations', () => {
       'Linked knowledge conversations could not be loaded:',
       'column lookup failed',
     );
+  });
+
+  it('invalidates only this document and its list on a matching completion event', async () => {
+    renderPage();
+    await screen.findByText('None yet');
+
+    expect(mocks.realtimeOptions?.messageChannel).toBe('org:org-1');
+    expect(mocks.realtimeOptions?.enabled).toBe(true);
+
+    act(() => {
+      mocks.realtimeOptions?.onKnowledgeDocumentUpdated?.({
+        documentId: 'doc-other',
+        status: 'ready',
+      });
+    });
+    expect(mocks.invalidateQueries).not.toHaveBeenCalled();
+
+    act(() => {
+      mocks.realtimeOptions?.onKnowledgeDocumentUpdated?.({
+        documentId: 'doc-1',
+        status: 'ready',
+      });
+    });
+    expect(mocks.invalidateQueries).toHaveBeenCalledWith({
+      queryKey: ['knowledge-document', 'org-1', 'doc-1'],
+    });
+    expect(mocks.invalidateQueries).toHaveBeenCalledWith({
+      queryKey: ['knowledge-documents', 'org-1'],
+    });
   });
 });

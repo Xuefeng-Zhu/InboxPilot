@@ -12,13 +12,10 @@
  *   2. preview (1-line clamp): body → subject → 'No messages yet'
  *   3. channel pill: SMS / EMAIL / WEB with channel-specific color
  *
- * WHY `<div role="button" tabIndex={0}>` (not `<button>`):
- *   The AI-drafted lane renders a nested `Review` `<button>` for the
- *   approve-draft affordance. Putting a `<button>` inside a `<button>`
- *   is invalid HTML and breaks the keyboard focus chain in some
- *   screen readers. A `role="button"` `<div>` with `onKeyDown` for
- *   Enter/Space is the standard React workaround and matches the
- *   kanban card pattern used by Trello/Linear.
+ * WHY the row and `Review` controls are sibling buttons:
+ *   Both actions remain native keyboard controls without nesting one
+ *   interactive element inside another. The row button fills the card,
+ *   while the review action is positioned above it at the top-right.
  *
  * WHY click+keyboard live in the row, but the drawer is opened by the
  *   parent: the row never imports the drawer. The parent owns
@@ -35,7 +32,6 @@
  *   render — same pattern as `SlaChip`'s `tierClasses` (T6).
  */
 
-import { type KeyboardEvent } from 'react';
 import { cn } from '@/components/ui/cn';
 import type { ConversationListItem } from '@/lib/queries/keys';
 import { SlaChip } from './SlaChip';
@@ -91,69 +87,66 @@ export function KanbanRow({
   showReviewButton,
   dataLaneId,
 }: KanbanRowProps) {
-  const handleKeyDown = (e: KeyboardEvent<HTMLDivElement>): void => {
-    if (e.key === 'Enter' || e.key === ' ') {
-      e.preventDefault();
-      onClick();
-    }
-  };
-
   return (
     <div
-      role="button"
-      tabIndex={0}
       data-testid="kanban-row"
       data-lane-id={dataLaneId}
-      onClick={onClick}
-      onKeyDown={handleKeyDown}
       className={cn(
-        'cursor-pointer border-l-2 border-l-transparent px-2.5 py-2 text-left transition-colors',
+        'relative border-l-2 border-l-transparent text-left transition-colors',
         'hover:bg-[var(--m03-line-2)]',
-        'focus:outline-none focus-visible:bg-[var(--m03-line-2)]',
         isSelected && 'border-l-[var(--m03-fg)] bg-[var(--m03-line-2)]',
       )}
     >
-      {/* Row 1: contact name + (optional Review badge) + SLA chip */}
-      <div className="mb-0.5 flex items-center gap-2">
-        <span className="min-w-0 flex-1 truncate text-sm font-semibold text-[var(--m03-fg)]">
-          {getContactDisplayName(conversation)}
-        </span>
-        <div className="flex shrink-0 items-center gap-1.5">
-          {showReviewButton ? (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onReview?.();
-              }}
-              className="rounded bg-violet-100 px-1.5 py-0.5 text-[10px] font-semibold text-violet-700"
-            >
-              Review
-            </button>
-          ) : null}
-          <SlaChip
-            lastMessageAt={conversation.last_message_at}
-            now={now}
-            thresholds={thresholds}
-          />
-        </div>
-      </div>
-
-      {/* Row 2: preview, 1-line clamp */}
-      <p className="mb-1 line-clamp-1 text-xs leading-[1.4] text-[var(--m03-fg-2)]">
-        {getPreviewText(conversation)}
-      </p>
-
-      {/* Row 3: channel pill */}
-      <div>
-        <span
+      <button
+        type="button"
+        onClick={onClick}
+        className="block w-full px-2.5 py-2 text-left focus:outline-none focus-visible:bg-[var(--m03-line-2)] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--m03-fg)]"
+      >
+        {/* Row 1: contact name; controls are overlaid as sibling elements. */}
+        <div
           className={cn(
-            'text-[10px] uppercase tracking-[0.04em]',
-            getChannelClass(conversation.channel),
+            'mb-0.5 flex items-center',
+            showReviewButton ? 'pr-24' : 'pr-10',
           )}
         >
-          {channelLabel(conversation.channel)}
-        </span>
+          <span className="min-w-0 flex-1 truncate text-sm font-semibold text-[var(--m03-fg)]">
+            {getContactDisplayName(conversation)}
+          </span>
+        </div>
+
+        {/* Row 2: preview, 1-line clamp */}
+        <p className="mb-1 line-clamp-1 text-xs leading-[1.4] text-[var(--m03-fg-2)]">
+          {getPreviewText(conversation)}
+        </p>
+
+        {/* Row 3: channel pill */}
+        <div>
+          <span
+            className={cn(
+              'text-[10px] uppercase tracking-[0.04em]',
+              getChannelClass(conversation.channel),
+            )}
+          >
+            {channelLabel(conversation.channel)}
+          </span>
+        </div>
+      </button>
+
+      <div className="absolute right-2.5 top-2 flex items-center gap-1.5">
+        {showReviewButton ? (
+          <button
+            type="button"
+            onClick={onReview}
+            className="rounded bg-violet-100 px-1.5 py-0.5 text-[10px] font-semibold text-violet-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-700 focus-visible:ring-offset-1"
+          >
+            Review
+          </button>
+        ) : null}
+        <SlaChip
+          lastMessageAt={conversation.last_message_at}
+          now={now}
+          thresholds={thresholds}
+        />
       </div>
     </div>
   );

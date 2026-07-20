@@ -143,4 +143,32 @@ describe('KanbanRow', () => {
     expect(onReview).toHaveBeenCalledOnce();
     expect(onClick).not.toHaveBeenCalled();
   });
+
+  it.each(['Enter', ' '])(
+    'keeps the %s key on Review from activating the row',
+    (key) => {
+      const onClick = vi.fn();
+      const onReview = vi.fn();
+      const { getByRole, getByTestId } = render(
+        <KanbanRow
+          conversation={makeConversation({ ai_state: 'drafted' })}
+          isSelected={false}
+          onClick={onClick}
+          onReview={onReview}
+          thresholds={DEFAULT_SLA_THRESHOLDS}
+          now={NOW}
+          showReviewButton
+        />,
+      );
+      const review = getByRole('button', { name: 'Review' });
+
+      fireEvent.keyDown(review, { key });
+      expect(onClick).not.toHaveBeenCalled();
+
+      fireEvent.click(review);
+      expect(onReview).toHaveBeenCalledOnce();
+      expect(onClick).not.toHaveBeenCalled();
+      expect(getByTestId('kanban-row')).not.toHaveAttribute('role');
+    },
+  );
 });

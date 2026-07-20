@@ -18,6 +18,7 @@ interface RiverExpandedPanelProps {
   editMode: boolean;
   onStartEdit: () => void;
   onCancelEdit: () => void;
+  onAcceptedWarning: (warning: string | null) => void;
   onApproved: () => void;
 }
 
@@ -31,7 +32,8 @@ interface ApiMessage {
 
 interface ApproveResponse {
   status: string;
-  data?: { message?: { id: string } };
+  warning?: string;
+  data?: { message?: { id: string } | null };
 }
 
 /**
@@ -50,6 +52,7 @@ export function RiverExpandedPanel({
   editMode,
   onStartEdit,
   onCancelEdit,
+  onAcceptedWarning,
   onApproved,
 }: RiverExpandedPanelProps) {
   const queryClient = useQueryClient();
@@ -99,7 +102,15 @@ export function RiverExpandedPanel({
       }
       return (await res.json()) as ApproveResponse;
     },
-    onSuccess: () => {
+    onMutate: () => {
+      onAcceptedWarning(null);
+    },
+    onSuccess: (result) => {
+      const warning =
+        typeof result.warning === 'string' && result.warning.trim()
+          ? result.warning.trim()
+          : null;
+      onAcceptedWarning(warning);
       void invalidateConversationMutationCaches(queryClient, conversationId);
       onApproved();
     },
@@ -219,6 +230,7 @@ export function RiverExpandedPanel({
           {approve.error instanceof Error ? approve.error.message : 'Failed to send'}
         </p>
       )}
+
     </div>
   );
 }

@@ -32,6 +32,7 @@ interface RiverCardProps {
   data: RiverCardData;
   isActive: boolean;
   onSelect: (id: string) => void;
+  onAcceptedWarning?: (warning: string | null) => void;
   onApproved?: (id: string) => void;
 }
 
@@ -61,7 +62,13 @@ const PILL_DOT_CLASSES: Record<PillDescriptor['tone'], string> = {
  * design-review/concept-04-symphony.html (lines 142-262) using the M03
  * design tokens defined in app/globals.css.
  */
-export function RiverCard({ data, isActive, onSelect, onApproved }: RiverCardProps) {
+export function RiverCard({
+  data,
+  isActive,
+  onSelect,
+  onAcceptedWarning,
+  onApproved,
+}: RiverCardProps) {
   const [editMode, setEditMode] = useState(false);
 
   const pill = pillForAiState(data.aiState, data.status);
@@ -174,6 +181,7 @@ export function RiverCard({ data, isActive, onSelect, onApproved }: RiverCardPro
           editMode={editMode}
           onStartEdit={() => setEditMode(true)}
           onCancelEdit={() => setEditMode(false)}
+          onAcceptedWarning={(warning) => onAcceptedWarning?.(warning)}
           onApproved={() => {
             setEditMode(false);
             onApproved?.(data.id);

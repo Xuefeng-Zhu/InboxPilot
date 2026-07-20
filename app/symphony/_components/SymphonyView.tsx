@@ -32,11 +32,16 @@ export function SymphonyView({ initialZoom }: SymphonyViewProps) {
   const [zoom, setZoom] = useState<Zoom>(initialZoom);
   const [step, setStep] = useState<number>(0);
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [acceptedWarning, setAcceptedWarning] = useState<string | null>(null);
 
   const { data: conversations } = useSymphonyConversations(orgId ?? undefined, zoom, step);
   const { data: counts } = useSymphonyCounts(orgId ?? undefined, zoom, step);
 
   const windowInfo = useMemo(() => computeSymphonyWindow(zoom, step), [zoom, step]);
+
+  useEffect(() => {
+    setAcceptedWarning(null);
+  }, [orgId]);
 
   // Default the active card to the most-recent conversation in the window
   useEffect(() => {
@@ -142,11 +147,29 @@ export function SymphonyView({ initialZoom }: SymphonyViewProps) {
         {/* Time axis */}
         <TimeAxis zoom={zoom} step={step} />
 
+        {acceptedWarning && (
+          <div
+            className="mx-6 mt-3 flex items-start gap-2 rounded border border-[var(--m03-orange-line)] bg-[var(--m03-orange-fill)] px-3 py-2.5 text-[11px] text-[var(--m03-orange)]"
+            role="alert"
+          >
+            <span className="flex-1">{acceptedWarning}</span>
+            <button
+              type="button"
+              onClick={() => setAcceptedWarning(null)}
+              className="shrink-0 font-semibold underline-offset-2 hover:underline"
+              aria-label="Dismiss approval warning"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
+
         {/* The river */}
         <River
           cards={cards}
           activeId={activeId}
           onSelect={setActiveId}
+          onAcceptedWarning={setAcceptedWarning}
           onApproved={(id) => {
             // After approval, the active card stays put but its pill flips
             // (handled by the query invalidation + River re-render).

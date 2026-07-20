@@ -34,6 +34,10 @@ import { RiverExpandedPanel } from '../../app/symphony/_components/RiverExpanded
 import type { PillDescriptor } from '../../lib/queries/hooks/useSymphony';
 import { queryKeys } from '../../lib/queries/keys';
 
+const lifecycle = vi.hoisted(() => ({
+  events: [] as string[],
+}));
+
 // ---------------------------------------------------------------------------
 // Mock data
 // ---------------------------------------------------------------------------
@@ -64,6 +68,16 @@ vi.mock('@/lib/queries', async () => {
   >('@/lib/queries/invalidation');
   return {
     ...invalidation,
+    invalidateConversationMutationCaches: async (
+      queryClient: QueryClient,
+      conversationId: string,
+    ) => {
+      lifecycle.events.push('invalidate');
+      return invalidation.invalidateConversationMutationCaches(
+        queryClient,
+        conversationId,
+      );
+    },
     useMessages: () => ({ data: mockMessages }),
     useAiDecision: () => ({ data: mockAiDecision }),
   };
@@ -84,6 +98,7 @@ function renderPanel(
 ) {
   const onStartEdit = vi.fn();
   const onCancelEdit = vi.fn();
+  const onAcceptedWarning = vi.fn();
   const onApproved = vi.fn();
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -98,13 +113,21 @@ function renderPanel(
         editMode={true}
         onStartEdit={onStartEdit}
         onCancelEdit={onCancelEdit}
+        onAcceptedWarning={onAcceptedWarning}
         onApproved={onApproved}
         {...props}
       />
     </QueryClientProvider>,
   );
 
-  return { ...utils, client, onStartEdit, onCancelEdit, onApproved };
+  return {
+    ...utils,
+    client,
+    onStartEdit,
+    onCancelEdit,
+    onAcceptedWarning,
+    onApproved,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -115,6 +138,7 @@ describe('RiverExpandedPanel (P1 frontend regression)', () => {
   let fetchMock: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
+    lifecycle.events.length = 0;
     fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({ status: 'ok', data: { message: { id: 'msg-1' } } }),
@@ -186,5 +210,36 @@ describe('RiverExpandedPanel (P1 frontend regression)', () => {
     expect('body' in body).toBe(false);
     expect(client.getQueryState(countKey)?.isInvalidated).toBe(true);
     expect(client.getQueryState(listKey)?.isInvalidated).toBe(true);
+  });
+
+  it('emits an accepted-reply warning before invalidating query-derived cards', async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 202,
+      json: async () => ({
+        status: 'accepted',
+        warning: 'Provider outcome is unknown; retry was suppressed.',
+        data: { message: null },
+      }),
+      text: async () => '',
+    } as unknown as Response);
+    const onAcceptedWarning = vi.fn((warning: string | null) => {
+      lifecycle.events.push(`warning:${warning ?? 'null'}`);
+    });
+    renderPanel({ editMode: false, onAcceptedWarning });
+
+    fireEvent.click(screen.getByRole('button', { name: /approve & send/i }));
+
+    await waitFor(() => expect(lifecycle.events).toContain('invalidate'));
+    expect(onAcceptedWarning).toHaveBeenNthCalledWith(1, null);
+    expect(onAcceptedWarning).toHaveBeenNthCalledWith(
+      2,
+      'Provider outcome is unknown; retry was suppressed.',
+    );
+    expect(lifecycle.events).toEqual([
+      'warning:null',
+      'warning:Provider outcome is unknown; retry was suppressed.',
+      'invalidate',
+    ]);
   });
 });

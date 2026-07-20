@@ -7,6 +7,7 @@ interface RiverProps {
   cards: RiverCardData[];
   activeId: string | null;
   onSelect: (id: string) => void;
+  onAcceptedWarning?: (warning: string | null) => void;
   onApproved?: (id: string) => void;
 }
 
@@ -14,7 +15,13 @@ interface RiverProps {
  * River — horizontal scrollable strip of conversation cards. When the active
  * id changes, scrolls the active card into view.
  */
-export function River({ cards, activeId, onSelect, onApproved }: RiverProps) {
+export function River({
+  cards,
+  activeId,
+  onSelect,
+  onAcceptedWarning,
+  onApproved,
+}: RiverProps) {
   const scrollerRef = useRef<HTMLDivElement | null>(null);
   const cardRefs = useRef<Map<string, HTMLElement>>(new Map());
 
@@ -68,6 +75,7 @@ export function River({ cards, activeId, onSelect, onApproved }: RiverProps) {
               data={card}
               isActive={card.id === activeId}
               onSelect={onSelect}
+              onAcceptedWarning={onAcceptedWarning}
               onApproved={onApproved}
             />
           </div>

@@ -8,6 +8,9 @@ import { fileURLToPath } from 'node:url';
 
 const defaultProjectRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
+export const DEPLOYMENT_PREFLIGHT_NOTICE =
+  'Preflight required before deployment: create the InsForge PROCESS_JOBS_SECRET for the Deno runtime, put the same value in the Next.js server environment, and update any existing process-jobs schedule to POST with X-Process-Jobs-Secret: ${{secrets.PROCESS_JOBS_SECRET}}. See docs/guides/deploying.md.';
+
 export const FUNCTION_DEPLOYMENTS = Object.freeze([
   { slug: 'email-inbound', source: 'insforge/functions/email-inbound/index.ts' },
   { slug: 'email-status', source: 'insforge/functions/email-status/index.ts' },
@@ -29,6 +32,8 @@ export function deployInsforgeFunctions({
   removeBundleDirectory = (directory) =>
     rmSync(directory, { recursive: true, force: true }),
 } = {}) {
+  writeLine(DEPLOYMENT_PREFLIGHT_NOTICE);
+
   const bundleDirectory = createBundleDirectory();
   try {
     const preparedDeployments = FUNCTION_DEPLOYMENTS.map((deployment) => ({

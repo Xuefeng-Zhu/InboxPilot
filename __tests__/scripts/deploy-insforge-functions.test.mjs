@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 
 import {
+  DEPLOYMENT_PREFLIGHT_NOTICE,
   FUNCTION_DEPLOYMENTS,
   deployInsforgeFunctions,
 } from '../../scripts/deploy-insforge-functions.mjs';
@@ -50,7 +51,9 @@ describe('InsForge function deployment manifest', () => {
       removeBundleDirectory,
     });
 
-    expect(events[0]).toBe(
+    expect(events[0]).toBe(`write:${DEPLOYMENT_PREFLIGHT_NOTICE}`);
+    expect(writeLine).toHaveBeenNthCalledWith(1, DEPLOYMENT_PREFLIGHT_NOTICE);
+    expect(events[1]).toBe(
       'write:Bundling email-inbound from insforge/functions/email-inbound/index.ts',
     );
     expect(runCommand).toHaveBeenCalledTimes(FUNCTION_DEPLOYMENTS.length * 2);

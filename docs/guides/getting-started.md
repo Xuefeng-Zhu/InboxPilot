@@ -97,13 +97,37 @@ Open `http://localhost:3000`. Sign up creates a new organization and assigns you
 
 ## 6. (Optional) Deploy serverless functions
 
-The InsForge Deno Functions live in `insforge/functions/`. Deploy them with the checked-in deployment script:
+The InsForge Deno Functions live in `insforge/functions/`. Configure worker auth
+before deploying. The InsForge secret configures the Deno runtime; the identical
+value already placed in `.env.local` in step 2 configures only the local Next.js
+server caller.
+
+```bash
+npx @insforge/cli secrets add PROCESS_JOBS_SECRET '<long-random-secret>'
+```
+
+If this project already has a `process-jobs` schedule, update it before deploying
+the authenticated worker:
+
+```bash
+npx @insforge/cli schedules list
+npx @insforge/cli schedules update <schedule-id> \
+  --method POST \
+  --headers '{"X-Process-Jobs-Secret":"${{secrets.PROCESS_JOBS_SECRET}}"}'
+```
+
+Now deploy with the checked-in deployment script:
 
 ```bash
 npm run deploy:functions
 ```
 
-The checked-in deployment manifest enumerates all 9 Deno functions. See [`../reference/api.md`](../reference/api.md#insforge-deno-functions-9) for the full list and auth requirements.
+The checked-in deployment manifest enumerates all 9 Deno functions. In a new
+project, create the schedule only after `process-jobs` is active. Follow
+[`deploying.md`](deploying.md#4-create-a-new-schedule-after-deployment) for the
+exact create and verification commands. See
+[`../reference/api.md`](../reference/api.md#insforge-deno-functions-9) for the
+full function list and auth requirements.
 
 ## 7. (Optional) Configure providers
 

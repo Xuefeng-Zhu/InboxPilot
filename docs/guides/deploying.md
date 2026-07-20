@@ -37,6 +37,7 @@ The Next.js app is plain App Router. Vercel will auto-detect it.
    - `NEXT_PUBLIC_INSFORGE_URL`
    - `NEXT_PUBLIC_INSFORGE_ANON_KEY`
    - `INSFORGE_SERVICE_ROLE_KEY` (server-side only; do **not** expose to browser)
+   - `PROCESS_JOBS_SECRET` (server-side only; must match the InsForge secret)
    - `NEXT_PUBLIC_INSFORGE_FUNCTIONS_URL` — **see rewrites note below**
 4. Build command: `npm run build` (which runs `build:widget` first).
 5. Output: standard Next.js.
@@ -51,15 +52,25 @@ Any platform that supports Next.js 16 App Router (Netlify, Render, Fly.io, self-
 
 ## Deploying the InsForge Deno functions
 
-Use the checked-in deployment script:
+The `process-jobs` function rejects requests when its dedicated secret is absent
+or incorrect. Configure all three participants before replacing an existing
+worker: the Deno runtime, the Next.js server caller, and the scheduler.
+
+### 1. Configure the Deno and Next.js runtime secrets
+
+Create a long random value and store it in InsForge. This makes it available as
+`PROCESS_JOBS_SECRET` in the Deno function runtime without putting the value in
+the repository or the schedule definition:
 
 ```bash
-npm run deploy:functions
+npx @insforge/cli secrets add PROCESS_JOBS_SECRET '<long-random-secret>'
 ```
 
-The deployment script reads the explicit nine-function source manifest in `scripts/deploy-insforge-functions.mjs`; its test prevents entrypoints from being silently omitted. After deploying, note the functions base URL. It's typically `https://<your-app>.functions.insforge.app`. Set `NEXT_PUBLIC_INSFORGE_FUNCTIONS_URL` in the Next.js app to this value.
-
-### Function secrets
+Put the **same value** in the deployed Next.js host's server environment as
+`PROCESS_JOBS_SECRET`. For local development, put it in `.env.local` instead.
+These are separate settings: `.env.local` does not provision an InsForge secret,
+and the InsForge secret does not configure Vercel or another Next.js host. Never
+prefix this value with `NEXT_PUBLIC_`.
 
 Each function reads from `Deno.env`:
 
@@ -70,7 +81,65 @@ Each function reads from `Deno.env`:
 | `PROCESS_JOBS_SECRET` | yes | `process-jobs`; shared with its scheduler and trusted server callers |
 | `SERVICE_ROLE_KEY` | sometimes (fallback) | `process-jobs` and the shared SMS/email inbound/status webhook runtime |
 
-Set these via the InsForge dashboard or CLI. The functions **must not** be reachable without these set.
+Confirm the other required function runtime values through the InsForge
+dashboard or secrets CLI before deployment.
+
+### 2. Secure an existing schedule before deployment
+
+If the environment already has a `process-jobs` schedule, find its ID and update
+it before deploying the authenticated worker. The header references the InsForge
+secret; it does not embed the raw value:
+
+```bash
+npx @insforge/cli schedules list
+npx @insforge/cli schedules update <schedule-id> \
+  --method POST \
+  --headers '{"X-Process-Jobs-Secret":"${{secrets.PROCESS_JOBS_SECRET}}"}'
+```
+
+If this is a new environment with no schedule, skip this step and create it only
+after the function is active.
+
+### 3. Deploy the functions
+
+Use the checked-in deployment script:
+
+```bash
+npm run deploy:functions
+```
+
+The deployment script reads the explicit nine-function source manifest in `scripts/deploy-insforge-functions.mjs`; its test prevents entrypoints from being silently omitted. After deploying, note the functions base URL. It's typically `https://<your-app>.functions.insforge.app`. Set `NEXT_PUBLIC_INSFORGE_FUNCTIONS_URL` in the Next.js app to this value.
+
+Confirm `process-jobs` is active before creating a new schedule:
+
+```bash
+npx @insforge/cli functions list
+```
+
+### 4. Create a new schedule after deployment
+
+For a new environment, create the authenticated schedule only after
+`process-jobs` appears as active. InboxPilot uses a 10-second interval:
+
+```bash
+npx @insforge/cli schedules create \
+  --name "InboxPilot process jobs" \
+  --cron "10 seconds" \
+  --url "https://<your-app>.<region>.insforge.app/functions/process-jobs" \
+  --method POST \
+  --headers '{"X-Process-Jobs-Secret":"${{secrets.PROCESS_JOBS_SECRET}}"}'
+```
+
+Use the ID returned by `schedules create` to verify the schedule and its first
+runs:
+
+```bash
+npx @insforge/cli schedules get <schedule-id>
+npx @insforge/cli schedules logs <schedule-id> --limit 10
+```
+
+Existing schedules should use the update command in step 2 rather than creating
+a duplicate.
 
 ### Deploy the functions
 
@@ -144,7 +213,9 @@ Variables prefixed `NEXT_PUBLIC_` are exposed to the browser. Only the InsForge 
 
 Configure the `process-jobs` schedule as a `POST` and set
 `X-Process-Jobs-Secret: ${{secrets.PROCESS_JOBS_SECRET}}`. Manual server-side
-triggers must send the same header; unauthenticated calls are rejected.
+triggers must send the same header; unauthenticated calls are rejected. Follow
+the ordered worker-auth setup above so an existing schedule is secured before
+the authenticated function is deployed.
 
 ## Pre-deploy checklist
 
@@ -159,7 +230,8 @@ triggers must send the same header; unauthenticated calls are rejected.
 - [ ] At least one web chat widget configured (if you want to embed the widget).
 - [ ] `NEXT_PUBLIC_DEMO_WIDGET_ID` unset in production (otherwise the landing page shows a demo chat button).
 - [ ] `INSFORGE_SERVICE_ROLE_KEY` not in any browser-bundled env.
-- [ ] `PROCESS_JOBS_SECRET` is configured for Next.js, the Deno function, and the scheduler header.
+- [ ] `PROCESS_JOBS_SECRET` is configured separately for the Next.js server and the InsForge Deno runtime, with the same value.
+- [ ] Existing `process-jobs` schedule updated to authenticated `POST` before function deployment, or new schedule created after the function became active.
 - [ ] `npm run lint` clean.
 - [ ] `npm test` clean.
 - [ ] `npm run build` succeeds.

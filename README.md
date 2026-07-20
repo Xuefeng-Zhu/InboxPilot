@@ -134,11 +134,36 @@ The Next.js development server starts at `http://localhost:3000`.
 
 ### Function Deployment
 
-Deploy all 9 InsForge Deno function entrypoints from the checked-in source manifest:
+The `process-jobs` function fails closed unless its scheduler and trusted server
+callers share a dedicated secret. Complete this preflight before deploying:
+
+1. Create the secret in InsForge so it is available to the Deno function runtime:
+
+```bash
+npx @insforge/cli secrets add PROCESS_JOBS_SECRET '<long-random-secret>'
+```
+
+2. Put that exact value in the Next.js **server** environment as
+   `PROCESS_JOBS_SECRET` (`.env.local` only configures the local Next.js server;
+   it does not configure the Deno runtime).
+3. If a `process-jobs` schedule already exists, secure it before deploying:
+
+```bash
+npx @insforge/cli schedules list
+npx @insforge/cli schedules update <schedule-id> \
+  --method POST \
+  --headers '{"X-Process-Jobs-Secret":"${{secrets.PROCESS_JOBS_SECRET}}"}'
+```
+
+Then deploy all 9 InsForge Deno function entrypoints from the checked-in source
+manifest:
 
 ```bash
 npm run deploy:functions
 ```
+
+For a new environment, create the schedule only after `process-jobs` is active;
+see [the deployment guide](docs/guides/deploying.md#4-create-a-new-schedule-after-deployment).
 
 | Function | Trigger | Purpose |
 |----------|---------|---------|

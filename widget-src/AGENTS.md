@@ -10,7 +10,7 @@ Standalone Vite project that builds a single-file IIFE bundle to `public/widget.
 widget-src/
 ├── package.json        vite ^5.3.0, terser ^5.31.0 (no deps, only devDeps)
 ├── tsconfig.json       ES2020, strict, DOM lib
-├── vite.config.ts      Vite library mode, IIFE format, output to ../public/widget.js, minified
+├── vite.config.mts     ESM Vite library config, IIFE output to ../public/widget.js, minified
 └── widget.ts           The actual embeddable snippet (246 LOC, vanilla TS)
 ```
 
@@ -51,7 +51,7 @@ What it does on load:
 4. **No external runtime deps** — vanilla TS only. CSP-friendly.
 
 ## CONVENTIONS
-- **Single IIFE output** (`vite.config.ts` sets `formats: ['iife']`, `emptyOutDir: false`, terser minify).
+- **Single IIFE output** (`vite.config.mts` sets `formats: ['iife']`, `emptyOutDir: false`, terser minify).
 - **No polyfills** — relies on `fetch`, `URL`, `localStorage`, `postMessage` (all universally available in modern browsers).
 - **Console output is `console.warn` only** (and only for misconfig like missing `data-widget-id`). No `console.log`.
 - **Origin-checked `postMessage`** — every message handler verifies `event.origin` against the inferred app origin.

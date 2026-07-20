@@ -161,7 +161,7 @@ npm run build:widget
 The build:
 - Entry: `widget-src/widget.ts`
 - Output: `public/widget.js` (IIFE, minified via terser, dynamic imports inlined)
-- Build config: `widget-src/vite.config.ts`
+- Build config: `widget-src/vite.config.mts`
 
 `public/widget.js` is served by the Next.js app (it's a static file) at `/widget.js`.
 

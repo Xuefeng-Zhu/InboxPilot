@@ -3,9 +3,11 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "postinstall": "npm run install:widget",
+    "install:widget": "npm --prefix widget-src ci --include=dev",
     "dev": "next dev",
     "build": "npm run build:widget && next build",
-    "build:widget": "cd widget-src && npm run build",
+    "build:widget": "npm --prefix widget-src run build",
     "start": "next start",
     "lint": "tsc --noEmit && npm run lint:deno",
     "lint:deno": "node scripts/check-deno-safety.mjs && deno check insforge/functions/*/index.ts",

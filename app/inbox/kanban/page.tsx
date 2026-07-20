@@ -40,7 +40,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth-context';
 import {
   queryKeys,
-  useOrgMembership,
+  useCurrentMembership,
   useOrganization,
 } from '@/lib/queries';
 import { useKanbanLane } from '@/lib/queries/hooks/useKanbanLane';
@@ -68,14 +68,10 @@ export default function KanbanPage() {
 
 function KanbanContent() {
   const { user } = useAuth();
-  // `useOrgMembership`'s `data` is `string | null | undefined` (a found
-  // membership → string; no row → null; not yet resolved → undefined).
-  // `?? undefined` coerces the `null` branch to `undefined` so the
-  // downstream hooks (which take `string | undefined`) compile. This
-  // matches the established pattern in `app/analytics/page.tsx:165` and
-  // `app/settings/page.tsx:124`.
-  const { data: rawOrgId } = useOrgMembership(user?.id);
+  const { data: membership } = useCurrentMembership(user?.id);
+  const rawOrgId = membership?.organizationId;
   const orgId = rawOrgId ?? undefined;
+  const memberId = membership?.id;
   const { data: organization } = useOrganization(orgId);
   const [now] = useState(() => new Date());
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(
@@ -91,7 +87,7 @@ function KanbanContent() {
       if (debounceRef.current) clearTimeout(debounceRef.current);
       debounceRef.current = setTimeout(() => {
         queryClient.invalidateQueries({
-          queryKey: queryKeys.kanbanLanes(orgId ?? '', user?.id ?? ''),
+          queryKey: queryKeys.kanbanLanes(orgId ?? '', memberId ?? ''),
         });
       }, 250);
     },
@@ -99,7 +95,7 @@ function KanbanContent() {
       if (debounceRef.current) clearTimeout(debounceRef.current);
       debounceRef.current = setTimeout(() => {
         queryClient.invalidateQueries({
-          queryKey: queryKeys.kanbanLanes(orgId ?? '', user?.id ?? ''),
+          queryKey: queryKeys.kanbanLanes(orgId ?? '', memberId ?? ''),
         });
       }, 250);
     },
@@ -116,18 +112,18 @@ function KanbanContent() {
 
   // 5 sibling hooks, one per lane. The order is locked by the 5-entry
   // KANBAN_LANES constant — adding a 6th lane requires editing both
-  // this block AND the constant. The hook handles `orgId`/`userId` of
+  // this block AND the constant. The hook handles `orgId`/`memberId` of
   // `undefined` via the `enabled` gate, so this is safe to call before
   // the `!rawOrgId` early return below.
-  const mineResult = useKanbanLane(orgId, user?.id, 'mine');
-  const escalatedResult = useKanbanLane(orgId, user?.id, 'escalated');
-  const aiDraftedResult = useKanbanLane(orgId, user?.id, 'ai_drafted');
+  const mineResult = useKanbanLane(orgId, memberId, 'mine');
+  const escalatedResult = useKanbanLane(orgId, memberId, 'escalated');
+  const aiDraftedResult = useKanbanLane(orgId, memberId, 'ai_drafted');
   const awaitingReplyResult = useKanbanLane(
     orgId,
-    user?.id,
+    memberId,
     'awaiting_reply',
   );
-  const unassignedResult = useKanbanLane(orgId, user?.id, 'unassigned');
+  const unassignedResult = useKanbanLane(orgId, memberId, 'unassigned');
 
   const laneResults: Record<LaneId, ReturnType<typeof useKanbanLane>> = {
     mine: mineResult,

@@ -107,12 +107,12 @@ describe('Property 1: Precedence — escalated always wins', () => {
   });
 });
 
-describe('Property 2: One lane only', () => {
-  it('routeToLane returns exactly one of the 5 LaneId values for any input', () => {
+describe('Property 2: At most one lane', () => {
+  it('routeToLane returns one LaneId or null for any input', () => {
     fc.assert(
       fc.property(conversationArb, userIdArb, (c, userId) => {
         const result = routeToLane(c, userId);
-        expect(LANE_IDS).toContain(result);
+        expect(result === null || LANE_IDS.includes(result)).toBe(true);
       }),
       { numRuns: 100 },
     );
@@ -210,6 +210,27 @@ describe('Property 5: Unassigned vs Mine', () => {
             last_message_direction: null,
           });
           expect(routeToLane(nullEdgeConv, concreteUserId)).toBe('unassigned');
+        },
+      ),
+      { numRuns: 100 },
+    );
+  });
+
+  it('active conversations assigned to another member are omitted from both lanes', () => {
+    fc.assert(
+      fc.property(
+        fc.uuid(),
+        fc.uuid(),
+        (currentMemberId, foreignMemberId) => {
+          fc.pre(currentMemberId !== foreignMemberId);
+          const conversation = buildConversation({
+            status: 'open',
+            ai_state: 'idle',
+            assigned_to: foreignMemberId,
+            last_message_direction: 'inbound',
+          });
+
+          expect(routeToLane(conversation, currentMemberId)).toBeNull();
         },
       ),
       { numRuns: 100 },

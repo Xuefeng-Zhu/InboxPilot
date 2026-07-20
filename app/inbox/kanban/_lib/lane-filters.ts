@@ -6,7 +6,7 @@
  *   2. ai_drafted      — ai_state === 'drafted'
  *   3. awaiting_reply  — last_message_direction === 'outbound' AND no inbound since
  *   4. unassigned      — assigned_to IS NULL AND status NOT IN ('resolved','closed')
- *   5. mine            — assigned_to === userId AND status NOT IN ('resolved','closed')
+ *   5. mine            — assigned_to === memberId AND status NOT IN ('resolved','closed')
  *
  * NO React, NO InsForge, NO IO. Pure TypeScript only.
  */
@@ -69,25 +69,25 @@ export const isUnassigned = (
  */
 export const isMineActive = (
   c: ConversationWithDirection,
-  userId: string | null,
-): boolean => c.assigned_to === userId && isActive(c);
+  memberId: string | null,
+): boolean => memberId !== null && c.assigned_to === memberId && isActive(c);
 
 // ─── Router ───────────────────────────────────────────────────────────
 
 /**
  * Route a conversation to exactly one of 5 lanes, in locked precedence order.
- * First predicate match wins. Returns `'unassigned'` as a safe catch-all if
- * no lane matches (e.g. status is `resolved`/`closed` but the row slipped
- * past the page filter).
+ * First predicate match wins. Returns `null` when no lane matches, including
+ * conversations assigned to another member or inactive rows that slipped
+ * past the page filter.
  */
 export function routeToLane(
   conversation: ConversationWithDirection,
-  userId: string | null,
-): LaneId {
+  memberId: string | null,
+): LaneId | null {
   if (isEscalated(conversation)) return 'escalated';
   if (isAiDrafted(conversation)) return 'ai_drafted';
   if (isOutboundAwaiting(conversation)) return 'awaiting_reply';
-  if (isUnassigned(conversation, userId)) return 'unassigned';
-  if (isMineActive(conversation, userId)) return 'mine';
-  return 'unassigned';
+  if (isUnassigned(conversation, memberId)) return 'unassigned';
+  if (isMineActive(conversation, memberId)) return 'mine';
+  return null;
 }

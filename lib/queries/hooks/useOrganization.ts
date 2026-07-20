@@ -11,6 +11,7 @@ export interface Organization {
 }
 
 export interface CurrentMembership {
+  id: string;
   organizationId: string;
   role: 'owner' | 'admin' | 'agent' | 'viewer';
 }
@@ -47,15 +48,23 @@ export function useCurrentMembership(userId: string | undefined) {
     queryFn: async (): Promise<CurrentMembership | null> => {
       const { data, error } = await insforge.database
         .from('organization_members')
-        .select('organization_id,role')
+        .select('id,organization_id,role')
         .eq('user_id', userId!)
         .limit(1);
 
       if (error) throw new Error(error.message);
       const arr = Array.isArray(data) ? data : data ? [data] : [];
       if (arr.length === 0) return null;
-      const row = arr[0] as { organization_id: string; role: CurrentMembership['role'] };
-      return { organizationId: row.organization_id, role: row.role };
+      const row = arr[0] as {
+        id: string;
+        organization_id: string;
+        role: CurrentMembership['role'];
+      };
+      return {
+        id: row.id,
+        organizationId: row.organization_id,
+        role: row.role,
+      };
     },
     enabled: authReady && !!userId,
   });

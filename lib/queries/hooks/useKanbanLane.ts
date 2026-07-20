@@ -63,16 +63,16 @@ async function fetchAllActiveConversations(
  */
 export function useKanbanLane(
   orgId: string | undefined,
-  userId: string | undefined,
+  memberId: string | undefined,
   lane: LaneId,
   pageSize = CONVERSATION_PAGE_SIZE,
 ) {
   const authReady = useAuthReady();
   const query = useQuery({
-    queryKey: queryKeys.kanbanLanes(orgId ?? '', userId ?? ''),
+    queryKey: queryKeys.kanbanLanes(orgId ?? '', memberId ?? ''),
     queryFn: () => fetchAllActiveConversations(orgId!, pageSize),
-    select: (items) => items.filter((conversation) => routeToLane(conversation, userId ?? null) === lane),
-    enabled: authReady && !!orgId && !!userId,
+    select: (items) => items.filter((conversation) => routeToLane(conversation, memberId ?? null) === lane),
+    enabled: authReady && !!orgId && !!memberId,
     staleTime: 30_000,
   });
 

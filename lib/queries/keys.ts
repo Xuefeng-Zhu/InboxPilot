@@ -57,8 +57,8 @@ export const queryKeys = {
     ['symphony-conversations', orgId, zoom] as const,
   symphonyCounts: (orgId: string, zoom: string) =>
     ['symphony-counts', orgId, zoom] as const,
-  kanbanLanes: (orgId: string, userId: string) =>
-    ['kanban-lanes', orgId, userId] as const,
+  kanbanLanes: (orgId: string, memberId: string) =>
+    ['kanban-lanes', orgId, memberId] as const,
   auditLogs: (orgId: string, filters?: Record<string, unknown>) =>
     ['audit-logs', orgId, filters] as const,
 };

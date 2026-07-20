@@ -21,9 +21,10 @@ const INSFORGE_ANON_KEY = process.env.NEXT_PUBLIC_INSFORGE_ANON_KEY ?? '';
  * `_auth.ts`, and the team panel (and any other cookie-authed route) falls
  * back to truncated user IDs.
  *
- * We intercept the `/api/auth/refresh` response and mirror the new access
- * token into the cookie. CSRF cookie is also mirrored (set by InsForge on
- * refresh, read by the SDK on subsequent authed calls).
+ * We intercept both refresh response paths used by the browser and SSR SDK
+ * clients and mirror the new access token into the cookie. CSRF cookies are
+ * also mirrored (set by InsForge on refresh, read by the SDK on subsequent
+ * authenticated calls).
  */
 function withCookieSync(originalFetch: typeof fetch): typeof fetch {
   return async function patchedFetch(
@@ -38,7 +39,9 @@ function withCookieSync(originalFetch: typeof fetch): typeof fetch {
           : input instanceof URL
             ? input.toString()
             : input.url;
-      const isRefresh = url.includes('/api/auth/refresh');
+      const isRefresh =
+        url.includes('/api/auth/refresh') ||
+        url.includes('/api/auth/sessions/current');
       if (isRefresh && response.ok) {
         // Clone before reading — the SDK caller still needs the original.
         const clone = response.clone();

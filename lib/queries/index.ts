@@ -16,6 +16,8 @@ export {
   useAuthReady,
 } from './helpers';
 
+export { invalidateConversationMutationCaches } from './invalidation';
+
 export {
   useOrganization,
   useOrgMembership,

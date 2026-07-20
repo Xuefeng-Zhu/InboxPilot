@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { cn } from '@/components/ui/cn';
 import {
+  invalidateConversationMutationCaches,
   useAiDecision,
   useMessages,
 } from '@/lib/queries';
@@ -99,10 +100,7 @@ export function RiverExpandedPanel({
       return (await res.json()) as ApproveResponse;
     },
     onSuccess: () => {
-      // Invalidate the symphony query, the conversation's messages, and the AI decision
-      queryClient.invalidateQueries({ queryKey: ['symphony-conversations'] });
-      queryClient.invalidateQueries({ queryKey: ['messages', conversationId] });
-      queryClient.invalidateQueries({ queryKey: ['ai-decision', conversationId] });
+      void invalidateConversationMutationCaches(queryClient, conversationId);
       onApproved();
     },
   });

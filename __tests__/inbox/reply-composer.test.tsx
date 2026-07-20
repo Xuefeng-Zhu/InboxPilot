@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ReplyComposer } from '@/components/inbox/ReplyComposer';
+import { queryKeys } from '@/lib/queries/keys';
 
 vi.mock('@/lib/insforge', () => ({
   getAccessToken: () => 'test-access-token',
@@ -15,11 +16,12 @@ function renderComposer() {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
-  return render(
+  const view = render(
     <QueryClientProvider client={queryClient}>
       <ReplyComposer conversationId="conversation-1" />
     </QueryClientProvider>,
   );
+  return { ...view, queryClient };
 }
 
 describe('ReplyComposer', () => {
@@ -64,7 +66,11 @@ describe('ReplyComposer', () => {
         headers: { 'Content-Type': 'application/json' },
       },
     )));
-    renderComposer();
+    const { queryClient } = renderComposer();
+    const listKey = queryKeys.conversationsInfinite('org-1');
+    const countKey = queryKeys.symphonyCounts('org-1', 'day:0');
+    queryClient.setQueryData(listKey, [{ id: 'conversation-1' }]);
+    queryClient.setQueryData(countKey, { drafting: 1 });
 
     fireEvent.change(screen.getByRole('textbox', { name: 'Reply message' }), {
       target: { value: 'Ordinary reply' },
@@ -75,5 +81,7 @@ describe('ReplyComposer', () => {
       expect(screen.getByRole('button', { name: 'Send reply' }).textContent).toBe('Send');
     });
     expect(screen.queryByRole('alert')).toBeNull();
+    expect(queryClient.getQueryState(listKey)?.isInvalidated).toBe(true);
+    expect(queryClient.getQueryState(countKey)?.isInvalidated).toBe(true);
   });
 });

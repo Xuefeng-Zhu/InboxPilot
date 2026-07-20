@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { readResponseJsonObject } from '@/lib/http-json';
 import { getAccessToken } from '@/lib/insforge';
-import { queryKeys, MESSAGE_PAGE_SIZE } from '@/lib/queries/keys';
+import { invalidateConversationMutationCaches } from '@/lib/queries';
 
 // ---------------------------------------------------------------------------
 // Component
@@ -67,21 +67,9 @@ export function ReplyComposer({
           ? result.warning
           : null,
       );
-      // The server transitioned conversations.ai_state to 'idle' so the
-      // AiDraftPanel + DRAFTED header pill need a fresh conversation fetch.
-      // Realtime would normally cover this, but the webchat broadcast goes
-      // to a widget channel that MessageThread's useRealtime does not
-      // subscribe to, and SMS/email publish no realtime event at all — so
-      // we invalidate explicitly.
-      void queryClient.invalidateQueries({
-        queryKey: queryKeys.conversation(conversationId),
-      });
-      void queryClient.invalidateQueries({
-        queryKey: queryKeys.messagesInfinite(conversationId, MESSAGE_PAGE_SIZE),
-      });
-      void queryClient.invalidateQueries({
-        queryKey: queryKeys.aiDecision(conversationId),
-      });
+      // SMS/email publish no org realtime event, so refresh every direct and
+      // derived conversation view explicitly after the server mutation.
+      void invalidateConversationMutationCaches(queryClient, conversationId);
     },
   });
 

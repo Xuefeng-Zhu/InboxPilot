@@ -44,10 +44,14 @@ export default function KnowledgeDetailPage({ params }: { params: Promise<{ id: 
   const [linkedConversations, setLinkedConversations] = useState<
     Array<{ id: string; customer_name: string; updated_at: string }>
   >([]);
+  const [linkedConversationsLoading, setLinkedConversationsLoading] = useState(false);
+  const [linkedConversationsError, setLinkedConversationsError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!doc) return;
     let cancelled = false;
+    setLinkedConversationsLoading(true);
+    setLinkedConversationsError(null);
     (async () => {
       try {
         // Chunk count for the document. The ai_decision_chunks table joins
@@ -78,7 +82,7 @@ export default function KnowledgeDetailPage({ params }: { params: Promise<{ id: 
         // Ordered by most recent first, deduplicated, capped at 5.
         const { data: links, error: linksError } = await insforge.database
           .from('ai_decision_chunks')
-          .select('ai_decisions(id,conversation_id,created_at,conversations(id,customer_name,last_message_at))')
+          .select('ai_decisions(id,conversation_id,created_at,conversations(id,last_message_at,contacts(name)))')
           .in('knowledge_chunk_id', chunkIds)
           .order('created_at', { ascending: false })
           .limit(100);
@@ -90,7 +94,11 @@ export default function KnowledgeDetailPage({ params }: { params: Promise<{ id: 
         for (const row of links as unknown as Array<{
           ai_decisions: {
             id: string;
-            conversations: { id: string; customer_name: string; last_message_at: string } | null;
+            conversations: {
+              id: string;
+              last_message_at: string;
+              contacts: { name: string | null } | null;
+            } | null;
           } | null;
         }>) {
           const conv = row.ai_decisions?.conversations;
@@ -99,17 +107,22 @@ export default function KnowledgeDetailPage({ params }: { params: Promise<{ id: 
           seen.add(conv.id);
           list.push({
             id: conv.id,
-            customer_name: conv.customer_name ?? 'Unknown',
+            customer_name: conv.contacts?.name?.trim() || 'Unknown',
             updated_at: conv.last_message_at,
           });
           if (list.length >= 5) break;
         }
         setLinkedConversations(list);
       } catch (linkError) {
+        if (cancelled) return;
         console.warn(
           'Linked knowledge conversations could not be loaded:',
           linkError instanceof Error ? linkError.message : String(linkError),
         );
+        setLinkedConversations([]);
+        setLinkedConversationsError('Unable to load linked conversations.');
+      } finally {
+        if (!cancelled) setLinkedConversationsLoading(false);
       }
     })();
     return () => {
@@ -394,7 +407,13 @@ export default function KnowledgeDetailPage({ params }: { params: Promise<{ id: 
               <h3 className="m-0 mb-2.5 text-[11px] font-medium uppercase tracking-wider text-[var(--m03-fg-2)]">
                 Linked conversations
               </h3>
-              {linkedConversations.length === 0 ? (
+              {linkedConversationsLoading ? (
+                <p className="text-[12px] text-[var(--m03-fg-3)]">Loading…</p>
+              ) : linkedConversationsError ? (
+                <p className="text-[12px] text-[var(--m03-red)]" role="alert">
+                  {linkedConversationsError}
+                </p>
+              ) : linkedConversations.length === 0 ? (
                 <p className="text-[12px] text-[var(--m03-fg-3)]">None yet</p>
               ) : (
                 <div className="flex flex-col gap-1.5 text-[12px]">

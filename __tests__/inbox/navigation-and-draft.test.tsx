@@ -50,7 +50,16 @@ vi.mock('@/components/layout', () => ({
 }));
 
 vi.mock('@/components/inbox/InboxFilters', () => ({
-  InboxFilters: () => <div>Inbox filters</div>,
+  InboxFilters: ({
+    filters,
+  }: {
+    filters: {
+      status: string;
+      channel: string;
+      search: string;
+      customerId: string | null;
+    };
+  }) => <div data-testid="inbox-filters">{JSON.stringify(filters)}</div>,
 }));
 
 vi.mock('@/components/inbox/ConversationList', () => ({
@@ -126,6 +135,38 @@ describe('inbox navigation and draft isolation', () => {
 
     await waitFor(() => {
       expect(screen.getByTestId('thread-id').textContent).toBe('conversation-later');
+    });
+  });
+
+  it('synchronizes every filter when URL parameters change', async () => {
+    navigation.search = 'status=open&channel=email&q=first&contact=contact-1';
+    const view = renderWithClient(<InboxPage />);
+
+    expect(screen.getByTestId('inbox-filters').textContent).toBe(
+      JSON.stringify({
+        status: 'open',
+        channel: 'email',
+        search: 'first',
+        customerId: 'contact-1',
+      }),
+    );
+
+    navigation.search = 'status=escalated&channel=sms&q=second&contact=contact-2';
+    view.rerender(
+      <QueryClientProvider client={new QueryClient()}>
+        <InboxPage />
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('inbox-filters').textContent).toBe(
+        JSON.stringify({
+          status: 'escalated',
+          channel: 'sms',
+          search: 'second',
+          customerId: 'contact-2',
+        }),
+      );
     });
   });
 

@@ -34,11 +34,16 @@ function InboxContent() {
   const router = useRouter();
   const { user } = useAuth();
 
+  const statusFromUrl = (searchParams.get('status') ?? 'all') as ConversationStatus | 'all';
+  const channelFromUrl = (searchParams.get('channel') ?? 'all') as Channel | 'all';
+  const searchFromUrl = searchParams.get('q') ?? '';
+  const customerFromUrl = searchParams.get('contact');
+
   const [filters, setFilters] = useState<InboxFilterState>({
-    status: (searchParams.get('status') ?? 'all') as ConversationStatus | 'all',
-    channel: (searchParams.get('channel') ?? 'all') as Channel | 'all',
-    search: searchParams.get('q') ?? '',
-    customerId: searchParams.get('contact') ?? null,
+    status: statusFromUrl,
+    channel: channelFromUrl,
+    search: searchFromUrl,
+    customerId: customerFromUrl,
   });
 
   const selectedConversationFromUrl = searchParams.get('conversation');
@@ -92,6 +97,15 @@ function InboxContent() {
     setSelectedConversationId(selectedConversationFromUrl);
     setRightDrawerOpen(false);
   }, [selectedConversationFromUrl]);
+
+  useEffect(() => {
+    setFilters({
+      status: statusFromUrl,
+      channel: channelFromUrl,
+      search: searchFromUrl,
+      customerId: customerFromUrl,
+    });
+  }, [channelFromUrl, customerFromUrl, searchFromUrl, statusFromUrl]);
 
   const syncToUrl = useCallback(
     (state: InboxFilterState, conversationId: string | null) => {

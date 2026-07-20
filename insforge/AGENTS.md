@@ -23,7 +23,7 @@ The committed InsForge backend tree. Contains **9 Deno function entrypoints** (w
 4. **Applied migration files are append-only.** Add the next numbered migration instead of editing a deployed one.
 5. **`audit_logs` is append-only at the RLS level** — only INSERT and SELECT policies exist, no UPDATE or DELETE.
 6. **All realtime publishes go to the `org:${orgId}` channel** with one of 3 event names: `new_message`, `conversation_updated`, `knowledge_document_updated`. Visitor channels use `widget:${widgetId}:${jti}`.
-7. **Deno-safety** — `insforge/functions/**` runs on the Deno serverless runtime. Imports of Node-only modules (`crypto`, `node:*`, `Buffer`) fail at deploy time. The `npm run lint:deno` script (`scripts/check-deno-safety.mjs`) catches this; it is chained into `npm run lint` after `tsc --noEmit`. The Deno registry currently registers 11 adapters (Mock SMS+email + Telnyx SMS + 8 stubs). Twilio + Postmark are blocked on a WebCrypto port — see `insforge/functions/AGENTS.md` for the porting path.
+7. **Deno-safety** — `insforge/functions/**` runs on the Deno serverless runtime. Imports of Node-only modules (`crypto`, `node:*`, `Buffer`) fail at deploy time. The `npm run lint:deno` script (`scripts/check-deno-safety.mjs`) catches this; it is chained into `npm run lint` after `tsc --noEmit`. The Deno registry currently registers 12 adapters (Mock SMS+email + Telnyx SMS + Postmark email + 8 stubs). Twilio remains blocked on a WebCrypto port — see `insforge/functions/AGENTS.md` for the porting path.
 
 ## CONVENTIONS
 - **Deno entrypoint shape:** each `functions/<name>/index.ts` is a `Deno.serve` handler that parses the request, runs JWT verification, builds the support-core service, calls it, and returns JSON.

@@ -39,8 +39,8 @@ _bundled/                    – Build artifacts (do not edit)
 |----------|------|---------|-------------|
 | `sms-inbound` | Provider signature | HTTP POST (Telnyx today; Twilio after WebCrypto port); explicit `x-provider`, trusted receiving route, local-only mock | InboundMessageService |
 | `sms-status` | Provider signature | HTTP POST (provider callback); explicit `x-provider`, trusted outbound account, local-only mock | Raw delivery event + monotonic message status |
-| `email-inbound` | Provider signature | HTTP POST (real Postmark adapter awaits WebCrypto port); explicit `x-provider`, trusted receiving route, local-only mock | InboundMessageService |
-| `email-status` | Provider signature | HTTP POST (real Postmark adapter awaits WebCrypto port); explicit `x-provider`, trusted outbound account, local-only mock | Raw delivery event + monotonic message status |
+| `email-inbound` | Provider signature | HTTP POST (Postmark); explicit `x-provider`, trusted receiving route, local-only mock | InboundMessageService |
+| `email-status` | Provider signature | HTTP POST (Postmark); explicit `x-provider`, trusted outbound account, local-only mock | Raw delivery event + monotonic message status |
 | `process-jobs` | Internal | HTTP POST (cron/manual trigger) | PostgresJobQueue + registered handlers |
 | `webchat-identify` | Visitor JWT | HTTP POST (widget) | WebchatThreadService |
 | `webchat-thread-init` | Visitor JWT | HTTP POST (widget) | WebchatThreadService |
@@ -79,7 +79,7 @@ export default async function (req: Request): Promise<Response> {
 7. `_bundled/` is auto-generated – never edit manually. Re-deploy to regenerate.
 8. No `@insforge/sdk` here – Deno functions use `fetch()` with service role key.
 9. Deno uses explicit relative `.ts` imports; keep support-core dependencies narrow and injected.
-10. **Deno-safety** – The Deno runtime does not expose Node globals (`crypto`, `Buffer`, `process.env`, etc.) by default. `insforge/functions/**` MUST NOT import adapters that depend on those globals. The shared `createProviderRegistry()` registers only Deno-safe adapters: Mock (SMS+email) + Telnyx (SMS) + 8 stubs (11 total). Twilio + Postmark are blocked on a WebCrypto port (see below). The `npm run lint:deno` script (runs `scripts/check-deno-safety.mjs`) catches forbidden patterns.
+10. **Deno-safety** – The Deno runtime does not expose Node globals (`crypto`, `Buffer`, `process.env`, etc.) by default. `insforge/functions/**` MUST NOT import adapters that depend on those globals. The shared `createProviderRegistry()` registers only Deno-safe adapters: Mock (SMS+email) + Telnyx (SMS) + Postmark (email) + 8 stubs (12 total). Twilio remains blocked on a WebCrypto port (see below). The `npm run lint:deno` script (runs `scripts/check-deno-safety.mjs`) catches forbidden patterns.
 
 ## ANTI-PATTERNS
 - Business logic in entrypoints → breaks testability and composition-root pattern.
@@ -90,29 +90,28 @@ export default async function (req: Request): Promise<Response> {
 - Missing `cors()` on widget endpoints → browser fetch fails without CORS.
 - Duplicating code across functions → add to `_shared/` instead.
 - `console.log` in production → use structured error responses.
-- Importing Twilio/Postmark adapters in the Deno registry before they are ported to WebCrypto → fails `npm run lint:deno` and crashes at deploy time.
+- Importing the Twilio adapter in the Deno registry before it is ported to WebCrypto → fails `npm run lint:deno` and crashes at deploy time.
 
 ## Deno-safety / WebCrypto porting path
 
-The Deno registry (`_shared/create-provider-registry.ts`) currently registers 11 providers:
-- **3 real** (Deno-safe): MockSmsAdapter, MockEmailAdapter, TelnyxSmsAdapter
+The Deno registry (`_shared/create-provider-registry.ts`) currently registers 12 providers:
+- **4 real** (Deno-safe): MockSmsAdapter, MockEmailAdapter, TelnyxSmsAdapter, PostmarkEmailAdapter
 - **8 stubs** (throw "not implemented"): Bandwidth, Vonage, Plivo, MessageBird (SMS); Mailgun, Resend, AwsSes, InsForge (email)
 
-TwilioSmsAdapter and PostmarkEmailAdapter are intentionally NOT registered. Both use Node-only imports that fail in Deno:
+TwilioSmsAdapter is intentionally NOT registered because it still uses Node-only imports that fail in Deno:
 
 | Adapter | Node imports | Blocking |
 |---------|-------------|----------|
 | TwilioSmsAdapter | `import { createHmac, timingSafeEqual } from 'crypto'`, `Buffer.from()` | HMAC-SHA1 webhook signature, basic auth encoding, timing-safe token comparison |
-| PostmarkEmailAdapter | `import { timingSafeEqual } from 'crypto'`, `Buffer.from()` | Timing-safe server-token comparison |
 
-Both adapters remain fully functional on the Node side (`lib/provider-registry.ts`).
+Twilio remains fully functional on the Node side (`lib/provider-registry.ts`).
 
-**Upgrade path** (to restore Twilio + Postmark to the Deno registry):
+**Upgrade path** (to restore Twilio to the Deno registry):
 1. Replace `createHmac('sha1', key)` with `crypto.subtle.importKey('raw', ..., { name: 'HMAC', hash: 'SHA-1' })` + `crypto.subtle.sign('HMAC', key, data)`
 2. Replace `Buffer.from(x, encoding)` with `new TextEncoder().encode(x)` (for utf-8) or a `Uint8Array` base64 decoder
 3. Replace `timingSafeEqual(a, b)` with a manual constant-time `Uint8Array` comparison
 4. Replace `buf.toString('base64')` with a manual `btoa` + `String.fromCharCode` chunked encoder or a `toBase64()` helper
-5. Re-add the import + `register*Adapter` call in `_shared/create-provider-registry.ts`
+5. Add the import + `registerSmsAdapter` call in `_shared/create-provider-registry.ts`
 6. Verify: `npm run lint:deno` exits 0 (the check script no longer flags these files)
 7. Verify: all existing adapter unit tests still pass under Node
 

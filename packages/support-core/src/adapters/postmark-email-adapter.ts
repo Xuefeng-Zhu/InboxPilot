@@ -10,7 +10,6 @@
  * boundary because this portable adapter receives only headers/body/token.
  */
 
-import { timingSafeEqual } from 'crypto';
 import type { EmailProviderAdapter } from '../interfaces/email-provider-adapter.js';
 import {
   PROVIDER_SEND_TIMEOUT_MS,
@@ -44,6 +43,24 @@ function mapPostmarkRecordType(recordType: string): DeliveryStatus {
     default:
       return 'pending';
   }
+}
+
+/** Compare secrets without Node-only crypto or an early-exit byte loop. */
+async function timingSafeStringEqual(left: string, right: string): Promise<boolean> {
+  const encoder = new TextEncoder();
+  const [leftDigest, rightDigest] = await Promise.all([
+    globalThis.crypto.subtle.digest('SHA-256', encoder.encode(left)),
+    globalThis.crypto.subtle.digest('SHA-256', encoder.encode(right)),
+  ]);
+  const leftBytes = new Uint8Array(leftDigest);
+  const rightBytes = new Uint8Array(rightDigest);
+  let difference = 0;
+
+  for (let index = 0; index < leftBytes.length; index += 1) {
+    difference |= leftBytes[index] ^ rightBytes[index];
+  }
+
+  return difference === 0;
 }
 
 export class PostmarkEmailAdapter implements EmailProviderAdapter {
@@ -263,16 +280,10 @@ export class PostmarkEmailAdapter implements EmailProviderAdapter {
       return false;
     }
 
-    // Use timing-safe comparison to prevent timing attacks
+    // Hash both inputs to fixed-length byte arrays, then compare every byte.
+    // Web Crypto and TextEncoder are available in both Node and Deno.
     try {
-      const tokenBuf = Buffer.from(token, 'utf-8');
-      const expectedBuf = Buffer.from(expectedToken, 'utf-8');
-
-      if (tokenBuf.length !== expectedBuf.length) {
-        return false;
-      }
-
-      return timingSafeEqual(tokenBuf, expectedBuf);
+      return await timingSafeStringEqual(token, expectedToken);
     } catch {
       return false;
     }

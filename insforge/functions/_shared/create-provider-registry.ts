@@ -8,32 +8,19 @@
  * credentials loaded here (per-call secrets are loaded by
  * `_shared/insforge-secrets.ts`).
  *
- * Per project convention, the 11 Deno-safe provider IDs are registered:
- *   - 3 real:   mock (SMS) / mock (email) / telnyx (SMS)
+ * Per project convention, the 12 Deno-safe provider IDs are registered:
+ *   - 4 real:   mock (SMS) / mock (email) / telnyx (SMS) / postmark (email)
  *   - 8 stubs:  bandwidth / vonage / plivo / messagebird (SMS)
  *               mailgun / resend / aws-ses / insforge (email)
  *
- * Why not 13? TwilioSmsAdapter and PostmarkEmailAdapter are intentionally
- * NOT registered in the Deno registry. Both adapters currently rely on
- * Node-only built-ins (`crypto` for HMAC-SHA1 signature verification on
- * Twilio webhooks, `crypto.createHmac` + `Buffer` for Postmark) which the
- * Deno runtime that hosts these entrypoints does not provide. Pulling them
- * in would crash at deploy / first request, so the safe P1 fix is to drop
- * the imports + `register*Adapter` calls here and document the upgrade
- * path. The two adapters remain fully wired in the Node side at
- * `lib/provider-registry.ts`, so all Next.js Route Handlers under
- * `app/api/functions/*` and any future server-rendered flows continue to
- * use them.
+ * Why not 13? TwilioSmsAdapter is intentionally NOT registered in the Deno
+ * registry because its HMAC-SHA1 verification and Basic auth still depend on
+ * Node-only `crypto` and `Buffer` APIs. Postmark is WebCrypto-based and safe
+ * in both Node and Deno runtimes.
  *
- * Porting path: rewrite the two adapters against WebCrypto
- * (`crypto.subtle.sign` for Twilio's per-request HMAC, `crypto.subtle.digest`
- * for Postmark's payload hash) and replace `Buffer` with `Uint8Array` /
- * `TextEncoder`. Once a port lands, restore the import + `register*Adapter`
- * call here and the entrypoints are immediately re-wired. The full
- * porting checklist lives in `insforge/functions/AGENTS.md` (the
- * "Deno-safety" section documents the rule and the upgrade path; see also
- * the per-adapter notes that future contributors will leave behind in the
- * adapter sources themselves).
+ * Porting path for Twilio: rewrite its HMAC, Base64, and byte comparisons
+ * against WebCrypto/Uint8Array, then register it here. The full checklist
+ * lives in `insforge/functions/AGENTS.md`.
  *
  * The stubs intentionally throw "not implemented" so the type system stays
  * satisfied — they will be replaced with real implementations as they are
@@ -54,6 +41,7 @@ import {
   MessageBirdSmsAdapter,
 } from '../../../packages/support-core/src/adapters/sms-stubs.ts';
 import { MockEmailAdapter } from '../../../packages/support-core/src/adapters/mock-email-adapter.ts';
+import { PostmarkEmailAdapter } from '../../../packages/support-core/src/adapters/postmark-email-adapter.ts';
 import {
   MailgunEmailAdapter,
   ResendEmailAdapter,
@@ -72,8 +60,9 @@ export function createProviderRegistry(): ProviderRegistry {
   registry.registerSmsAdapter('plivo', new PlivoSmsAdapter());
   registry.registerSmsAdapter('messagebird', new MessageBirdSmsAdapter());
 
-  // --- Email adapters (5) ---
+  // --- Email adapters (6) ---
   registry.registerEmailAdapter('mock', new MockEmailAdapter());
+  registry.registerEmailAdapter('postmark', new PostmarkEmailAdapter());
   registry.registerEmailAdapter('mailgun', new MailgunEmailAdapter());
   registry.registerEmailAdapter('resend', new ResendEmailAdapter());
   registry.registerEmailAdapter('aws-ses', new AwsSesEmailAdapter());

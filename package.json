@@ -8,6 +8,7 @@
     "dev": "next dev",
     "build": "npm run build:widget && next build",
     "build:widget": "npm --prefix widget-src run build",
+    "deploy:functions": "node scripts/deploy-insforge-functions.mjs",
     "start": "next start",
     "lint": "tsc --noEmit && npm run lint:deno",
     "lint:deno": "node scripts/check-deno-safety.mjs && deno check insforge/functions/*/index.ts",

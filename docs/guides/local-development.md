@@ -19,20 +19,17 @@ This starts the Next.js dev server at `http://localhost:3000`. Hot reload is ena
 | `npm run build:widget` | Build the embeddable widget JS bundle to `public/widget.js` |
 | `npm run start` | Start a production Next.js server (requires `build` first) |
 | `npm run lint` | `next lint` — runs ESLint on `.ts`/`.tsx` files |
+| `npm run deploy:functions` | Freshly bundle and deploy all 9 function entrypoints from the checked-in manifest |
 
 ## Deploying Deno functions
 
 The InsForge Deno functions live in `insforge/functions/`. To redeploy after a change:
 
 ```bash
-# Deploy all functions
-insforge functions deploy --all
-
-# Deploy a single function
-insforge functions deploy sms-inbound
+npm run deploy:functions
 ```
 
-Functions are deployed as a single Deno module per directory. The bundles in `insforge/functions/_bundled/` are the actual deployed artifacts (built by the InsForge deploy process — don't edit them directly).
+The deployment script at `scripts/deploy-insforge-functions.mjs` enumerates all nine source entrypoints explicitly so a release cannot silently omit a function. It bundles every current entrypoint into a disposable directory before any deployment begins, then deploys the fresh self-contained files and cleans them up. The checked-in bundles in `insforge/functions/_bundled/` are generated artifacts that may be stale — don't edit or deploy them directly.
 
 ### Local function testing
 

@@ -75,6 +75,17 @@ Each function reads from `Deno.env`:
 
 Set these via the InsForge dashboard or CLI. The functions **must not** be reachable without these set.
 
+### Deploy the functions
+
+Use the checked-in deployment script:
+
+```bash
+npm run deploy:functions
+```
+
+The deployment script reads the explicit nine-function source manifest in `scripts/deploy-insforge-functions.mjs`; its test prevents entrypoints from being silently omitted. It first bundles all nine current source entrypoints into a disposable temporary directory, aborts before any remote update if a bundle fails, deploys those fresh self-contained bundles, and removes the temporary directory. It never deploys the potentially stale checked-in `_bundled/` artifacts. After deploying, note the functions base URL. It's typically `https://<your-app>.functions.insforge.app`. Set `NEXT_PUBLIC_INSFORGE_FUNCTIONS_URL` in the Next.js app to this value.
+
+
 ### Verifying a deployment
 
 Do not use the unauthenticated mock adapter to probe a deployment: deployed endpoints reject it even if `INBOXPILOT_ALLOW_LOCAL_MOCK_WEBHOOKS` is set. Verify a real provider integration with a signed webhook sent to a receiving number or address configured for that same provider. A request without `x-provider` should fail closed:

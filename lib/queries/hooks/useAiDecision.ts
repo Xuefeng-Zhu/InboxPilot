@@ -13,6 +13,7 @@ export function useAiDecision(conversationId: string | undefined) {
         .select('*')
         .eq('conversation_id', conversationId!)
         .order('created_at', { ascending: false })
+        .order('id', { ascending: false })
         .limit(1);
 
       if (error) throw new Error(error.message);

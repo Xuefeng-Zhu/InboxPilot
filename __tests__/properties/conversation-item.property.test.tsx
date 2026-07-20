@@ -2,7 +2,7 @@
  * @vitest-environment jsdom
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 import * as fc from 'fast-check';
 import React from 'react';
 import { render } from '@testing-library/react';
@@ -88,10 +88,21 @@ const conversationArb = fc.record({
 
 const isUnreadArb = fc.boolean();
 const isSelectedArb = fc.boolean();
+const CONVERSATION_TIMESTAMP_REGRESSION_SEED = 525_386_877;
+const FIXED_NOW = new Date('2026-07-20T18:21:53.341Z');
 
 // --- Property Tests ---
 
 describe('Feature: stitch-ui-implementation, Property 7: Conversation item information completeness', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(FIXED_NOW);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it('renders a timestamp for any valid conversation', () => {
     fc.assert(
       fc.property(conversationArb, isUnreadArb, isSelectedArb, (conversation, isUnread, isSelected) => {
@@ -105,14 +116,14 @@ describe('Feature: stitch-ui-implementation, Property 7: Conversation item infor
           />,
         );
 
-        // The timestamp should be rendered as text content (e.g., "2m", "3d", or a date like "Jan 5")
-        const textContent = container.textContent ?? '';
+        const timestamp = container.querySelector('time[datetime]');
+        expect(timestamp).not.toBeNull();
         // M03 timestamp patterns: "now", "Xm", "Xh", "Xd", or a date like "Jan 5"
-        const hasTimestamp =
-          /\bnow\b|\b\d+m\b|\b\d+h\b|\b\d+d\b|[A-Z][a-z]{2} \d+/.test(textContent);
-        expect(hasTimestamp).toBe(true);
+        expect(timestamp?.textContent).toMatch(
+          /^(?:now|\d+m|\d+h|\d+d|[A-Z][a-z]{2} \d+)$/,
+        );
       }),
-      { numRuns: 100 },
+      { numRuns: 100, seed: CONVERSATION_TIMESTAMP_REGRESSION_SEED },
     );
   });
 

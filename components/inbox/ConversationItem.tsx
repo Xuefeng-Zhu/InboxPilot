@@ -149,9 +149,12 @@ export function ConversationItem({
         >
           {displayName}
         </span>
-        <span className="ml-auto font-mono text-[10px] text-[var(--m03-fg-3)]">
+        <time
+          dateTime={timestamp ?? undefined}
+          className="ml-auto font-mono text-[10px] text-[var(--m03-fg-3)]"
+        >
           {formatTimestamp(timestamp)}
-        </span>
+        </time>
       </div>
 
       {/* Row 2: Preview (1-line clamp) */}

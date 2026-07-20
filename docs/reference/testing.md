@@ -67,7 +67,6 @@ packages/support-core/__tests__/            # support-core tests (vitest, node e
   │   └── webhook-roundtrip.prop.test.ts
   ├── unit/                                 # Services, repositories, adapters, utilities
   └── integration/                          # Live integration tests and remaining scenario stubs
-      ├── inbound-email-flow.test.ts
       ├── outbound-message-flow.test.ts
       └── seed-idempotency.test.ts
 ```
@@ -133,6 +132,14 @@ npm run test:integration:inbound-sms
 ```
 
 The inbound SMS suite runs `InboundMessageService` against the disposable branch through the production PostgREST adapter and repositories. It verifies phone normalization, open-conversation reuse, provider deduplication, durable AI jobs, and message-received audits. Webhook signature and realtime caller behavior remain covered by entrypoint/pipeline unit tests.
+
+### Live inbound email persistence
+
+```bash
+npm run test:integration:inbound-email
+```
+
+The inbound email suite exercises the same real repository/RPC path while verifying lowercase sender normalization, subject persistence, open-conversation reuse, deduplication, durable AI jobs, and message-received audits.
 
 ### Static checks
 

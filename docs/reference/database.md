@@ -471,6 +471,8 @@ Conversation/message policies remain tenant-scoped through organization membersh
 
 Migration `014` first revokes broad table SELECT, then grants authenticated users only explicit safe columns. `sms_provider_accounts.credentials_secret_id`, `email_provider_accounts.credentials_secret_id`, and `webchat_widgets.hmac_secret` are therefore not exposed through client PostgREST reads. A column-level REVOKE alone would not override a pre-existing table-level grant.
 
+Migration `017` removes orphan unconditional policies left by earlier deployments, revokes direct `webchat_threads` access from public browser roles, removes public/anonymous widget-table access, preserves authenticated widget management established by `014`, and drops the legacy `debug_auth_info()` function.
+
 ### Knowledge storage
 
 `storage.objects` policies authorize by the organization UUID in the first object-key segment. All organization roles can read; only owners/admins can insert, update, or delete. Uploads must also record the authenticated user as `uploaded_by`. Restrictive companion policies prevent another permissive storage policy from bypassing these role checks. These SQL policies do not make a public bucket private, so the dashboard visibility step after migration `014` is mandatory.

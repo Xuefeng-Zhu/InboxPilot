@@ -140,6 +140,38 @@ describe('WidgetChatPage', () => {
     expect(screen.queryByLabelText('Your email')).toBeNull();
   });
 
+  it('recovers from a transient session load failure without reloading', async () => {
+    let sessionCalls = 0;
+    vi.stubGlobal('fetch', vi.fn(() => {
+      sessionCalls += 1;
+      if (sessionCalls === 1) {
+        return Promise.reject(new Error('temporary network failure'));
+      }
+      return Promise.resolve(jsonResponse({
+        data: {
+          requiresPreChat: false,
+          thread: { identifiedAt: null },
+          history: [],
+        },
+      }));
+    }));
+
+    render(<WidgetChatPage />);
+
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toContain('Network error while loading chat.');
+    const input = screen.getByLabelText('Message input') as HTMLInputElement;
+    expect(input.disabled).toBe(true);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Retry session' }));
+
+    await waitFor(() => {
+      expect(sessionCalls).toBe(2);
+      expect(screen.queryByRole('alert')).toBeNull();
+      expect(input.disabled).toBe(false);
+    });
+  });
+
   it('restores a failed message and allows the visitor to dismiss or retry', async () => {
     let sendCalls = 0;
     const fetchMock = vi.fn(

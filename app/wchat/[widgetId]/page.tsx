@@ -74,6 +74,8 @@ function WidgetChatContent() {
   const [identifying, setIdentifying] = useState(false);
   const [identifyError, setIdentifyError] = useState<string | null>(null);
   const [sessionReady, setSessionReady] = useState(false);
+  const [sessionRetryable, setSessionRetryable] = useState(false);
+  const [sessionRetryNonce, setSessionRetryNonce] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messageIdsRef = useRef(new Set<string>());
   const identifyingRef = useRef(false);
@@ -130,6 +132,7 @@ function WidgetChatContent() {
 
     if (!visitorToken) {
       setError('Unable to initialize chat session. Please close and reopen the chat.');
+      setSessionRetryable(false);
       return () => {
         cancelled = true;
         abortController.abort();
@@ -137,6 +140,9 @@ function WidgetChatContent() {
     }
 
     async function loadSession() {
+      setSessionReady(false);
+      setSessionRetryable(false);
+      setError(null);
       try {
         const res = await fetch(`/functions/v1/webchat-session-info`, {
           method: 'GET',
@@ -160,6 +166,7 @@ function WidgetChatContent() {
               ? json.error
               : 'Unable to load this chat session.',
           );
+          setSessionRetryable(true);
           return;
         }
 
@@ -182,6 +189,7 @@ function WidgetChatContent() {
         setShowPreChat(
           requiresPreChat && !preChatCompletedRef.current,
         );
+        setSessionRetryable(false);
         setSessionReady(true);
       } catch (err) {
         if (
@@ -189,6 +197,7 @@ function WidgetChatContent() {
           (err instanceof DOMException && err.name === 'AbortError')
         ) return;
         setError('Network error while loading chat. Please try again.');
+        setSessionRetryable(true);
       }
     }
 
@@ -197,7 +206,7 @@ function WidgetChatContent() {
       cancelled = true;
       abortController.abort();
     };
-  }, [visitorToken, searchParams]);
+  }, [visitorToken, searchParams, sessionRetryNonce]);
 
   // Read color from URL
   useEffect(() => {
@@ -356,7 +365,21 @@ function WidgetChatContent() {
               <div ref={messagesEndRef} />
             </div>
 
-            {error && <div className="wchat-error" role="alert">{error}</div>}
+            {error && (
+              <div className="wchat-error wchat-send-error" role="alert">
+                <span>{error}</span>
+                {sessionRetryable ? (
+                  <button
+                    type="button"
+                    className="wchat-error-dismiss"
+                    aria-label="Retry session"
+                    onClick={() => setSessionRetryNonce((value) => value + 1)}
+                  >
+                    Retry
+                  </button>
+                ) : null}
+              </div>
+            )}
 
             {sendError && (
               <div className="wchat-error wchat-send-error" role="alert">

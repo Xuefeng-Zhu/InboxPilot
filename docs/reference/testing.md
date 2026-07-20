@@ -71,7 +71,6 @@ packages/support-core/__tests__/            # support-core tests (vitest, node e
       ├── inbound-sms-flow.test.ts
       ├── outbound-message-flow.test.ts
       ├── realtime-events.test.ts
-      ├── rls-policies.test.ts
       └── seed-idempotency.test.ts
 ```
 
@@ -112,6 +111,14 @@ npm run test:integration:seed
 ```
 
 This command is destructive only to the fixed seed organization on the currently linked disposable branch. The suite refuses to run against the production host or a project that is not a branched `qa-*` environment. It applies `insforge/seed.sql` twice through InsForge CLI 0.2.0, then verifies expected record counts and pending-draft ownership.
+
+### Live tenant isolation
+
+```bash
+npm run test:integration:rls
+```
+
+The live RLS suite creates two temporary organizations and authenticated users on the linked disposable branch. It verifies cross-tenant read/write isolation, append-only audit logs, and that provider credential references cannot be selected by authenticated clients, then removes the temporary organizations.
 
 ### Static checks
 

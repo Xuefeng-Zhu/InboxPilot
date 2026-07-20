@@ -122,6 +122,33 @@ const db = {
     return { data, error: null };
   },
 
+  async rpc(functionName, args = {}) {
+    const res = await fetch(
+      `${BASE_URL}/api/database/rpc/${encodeURIComponent(functionName)}`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: SERVICE_KEY,
+          Authorization: `Bearer ${SERVICE_KEY}`,
+        },
+        body: JSON.stringify(args),
+      },
+    );
+
+    if (!res.ok) {
+      const err = await readJsonOrFallback(
+        res,
+        { message: `HTTP ${res.status}` },
+        `RPC ${functionName} error`,
+      );
+      return { data: null, error: { message: err.message || err.details || JSON.stringify(err) } };
+    }
+
+    const data = await readJsonOrFallback(res, null, `RPC ${functionName}`);
+    return { data, error: null };
+  },
+
   from(table) {
     return new QueryBuilder(table);
   },
@@ -450,18 +477,31 @@ async function cmdStatus(externalMessageId, deliveryStatus = 'delivered') {
     return;
   }
 
-  // Update
-  const { error: updateErr } = await db
-    .from('messages')
-    .update({ delivery_status: deliveryStatus, updated_at: new Date().toISOString() })
-    .eq('id', msg.id);
+  // Advance atomically so delayed provider callbacks cannot regress a terminal status.
+  const { data: updatedRows, error: updateErr } = await db.rpc(
+    'advance_message_delivery_status',
+    {
+      p_message_id: msg.id,
+      p_delivery_status: deliveryStatus,
+    },
+  );
 
   if (updateErr) {
     console.log(c.red(`  ✗ Update failed: ${updateErr.message}`));
     return;
   }
 
-  console.log(c.green(`  ✓ Message ${msg.id} status: ${msg.delivery_status} → ${deliveryStatus}`));
+  const updatedMessage = Array.isArray(updatedRows) ? updatedRows[0] : updatedRows;
+  if (!updatedMessage) {
+    console.log(c.red('  ✗ Update failed: message no longer exists'));
+    return;
+  }
+
+  console.log(
+    c.green(
+      `  ✓ Message ${msg.id} status: ${msg.delivery_status} → ${updatedMessage.delivery_status}`,
+    ),
+  );
 }
 
 async function cmdReply(conversationId, message = "Thanks for reaching out! We're looking into this now.") {

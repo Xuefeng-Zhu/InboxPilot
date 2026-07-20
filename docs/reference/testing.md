@@ -26,26 +26,37 @@ InboxPilot uses **property-based testing** as the primary correctness strategy. 
 ## Test organization
 
 ```
-__tests__/                                  # Top-level UI tests (vitest, jsdom env)
-  ├── proxy.test.ts                         # Exercises root proxy.ts
-  ├── properties/                           # UI property-based tests (fast-check)
+__tests__/                                  # Frontend, route, and function tests
+  ├── api/                                  # Direct coverage for all 12 privileged routes
+  ├── auth/                                 # Password-recovery flows
+  ├── hooks/                                # React Query and state hooks
+  ├── inbox/                                # Inbox and Kanban components
+  ├── insforge/                             # Function/runtime contracts
+  ├── knowledge/                            # Knowledge UI, mutations, and storage
+  ├── properties/                           # Frontend property tests (fast-check)
   │   ├── button.property.test.tsx
   │   ├── conversation-item.property.test.tsx
+  │   ├── conversation-sort.property.test.ts
   │   ├── design-tokens.property.test.ts
   │   ├── form-elements.property.test.tsx
+  │   ├── format-response-time.property.test.ts
   │   ├── input-error.property.test.tsx
+  │   ├── lane-filters.prop.test.ts
   │   ├── message-bubble.property.test.tsx
-  │   ├── metric-card.property.test.tsx
-  │   ├── navigation.property.test.tsx
-  │   └── status-badge.property.test.tsx
-  └── ui/                                   # UI example-based tests
-      └── StatusBadge.test.tsx
+  │   ├── message-pagination.property.test.ts
+  │   ├── status-badge.property.test.tsx
+  │   └── symphony-window.property.test.ts
+  ├── proxy.test.ts                         # Exercises root proxy.ts
+  ├── symphony/                             # Symphony components and hook behavior
+  ├── ui/                                   # Shared UI example tests
+  └── wchat/                                # Widget and iframe flows
 
 packages/support-core/__tests__/            # support-core tests (vitest, node env)
   ├── properties/                           # support-core property-based tests
   │   ├── ai-decision.prop.test.ts
   │   ├── audit-log.prop.test.ts
   │   ├── auto-reply.prop.test.ts
+  │   ├── chat-model-passthrough.prop.test.ts
   │   ├── deduplication.prop.test.ts
   │   ├── escalation.prop.test.ts
   │   ├── job-queue.prop.test.ts
@@ -54,24 +65,7 @@ packages/support-core/__tests__/            # support-core tests (vitest, node e
   │   ├── rbac.prop.test.ts
   │   ├── state-machine.prop.test.ts
   │   └── webhook-roundtrip.prop.test.ts
-  ├── unit/                                 # support-core unit tests
-  │   ├── ai-agent-service.test.ts
-  │   ├── contact-repository.test.ts
-  │   ├── conversation-repository.test.ts
-  │   ├── conversation-service.test.ts
-  │   ├── email-stubs.test.ts
-  │   ├── escalation-engine.test.ts
-  │   ├── inbound-message-service.test.ts
-  │   ├── knowledge-ingestion-service.test.ts
-  │   ├── message-repository.test.ts
-  │   ├── mock-email-adapter.test.ts
-  │   ├── mock-sms-adapter.test.ts
-  │   ├── normalization.test.ts
-  │   ├── outbound-message-service.test.ts
-  │   ├── postmark-email-adapter.test.ts
-  │   ├── sms-stubs.test.ts
-  │   ├── telnyx-sms-adapter.test.ts
-  │   └── twilio-sms-adapter.test.ts
+  ├── unit/                                 # Services, repositories, adapters, utilities
   └── integration/                          # Integration test stubs (require real DB)
       ├── inbound-email-flow.test.ts
       ├── inbound-sms-flow.test.ts
@@ -158,49 +152,52 @@ npx vitest run -t "normalizePhone"
 
 ## Correctness properties
 
-The support-core test suite defines 17 correctness properties (each runs 100+ iterations with randomly generated inputs). They cover every meaningful invariant the system relies on.
+The support-core suite preserves the original 17 numbered correctness properties. Most use 100+ generated inputs; a few structural properties validate a class or repository's public shape directly. Additional unnumbered property suites, such as chat-model passthrough, extend that baseline.
 
 | # | Property | File | What it verifies |
 |---|---|---|---|
 | 1 | Phone normalization idempotence | `normalization.prop.test.ts` | `normalizePhone(normalizePhone(x)) === normalizePhone(x)` for all input formats |
 | 2 | Email normalization idempotence | `normalization.prop.test.ts` | Same, for email addresses |
-| 3 | SMS webhook round-trip | `webhook-roundtrip.prop.test.ts` | Parsing an SMS payload via the adapter preserves `from`, `to`, `body`, `externalMessageId` |
-| 4 | Email webhook round-trip | `webhook-roundtrip.prop.test.ts` | Same for email (adds `subject`, `bodyText`) |
-| 5 | AI decision JSON round-trip | `ai-decision.prop.test.ts` | `parseAiDecision(JSON.stringify(decision))` returns the same decision |
-| 6 | Escalation: human request | `escalation.prop.test.ts` | `HumanRequestRule` triggers for any message containing a human-request phrase |
-| 7 | Escalation: profanity/anger | `escalation.prop.test.ts` | `ProfanityAngerRule` triggers for messages with profanity or anger indicators |
-| 8 | Escalation: sensitive topic | `escalation.prop.test.ts` | `SensitiveTopicRule` triggers for legal/chargeback/refund/cancellation phrases |
-| 9 | Message deduplication | `deduplication.prop.test.ts` | Inserting two messages with the same `(provider, external_message_id)` results in one record (DB-level) |
-| 10 | Job queue exponential backoff | `job-queue.prop.test.ts` | After failure, `run_after = now() + 2^attempts seconds` |
-| 11 | Job queue dead-lettering | `job-queue.prop.test.ts` | `attempts >= max_attempts` → status `dead`, never re-claimed |
-| 12 | Auto-reply threshold gating | `auto-reply.prop.test.ts` | In `auto_reply` mode, high-confidence responses send; low-confidence become drafts |
-| 13 | Conversation state machine | `state-machine.prop.test.ts` | Invalid status transitions (e.g. `resolved → escalated` without reopen) are rejected |
-| 14 | RBAC permission enforcement | `rbac.prop.test.ts` | `hasPermission(role, p)` returns `true` only if the role's allow-set contains `p`. Verifies the complete matrix. |
-| 15 | Audit log immutability | `audit-log.prop.test.ts` | Audit log rows can be inserted and read, but UPDATE/DELETE are denied (RLS) |
-| 16 | Knowledge chunk similarity | `knowledge.prop.test.ts` | `match_knowledge_chunks` returns rows ordered by descending similarity above the threshold |
-| 17 | Escalation: safety concern | `escalation.prop.test.ts` | `SafetyConcernRule` triggers for security/medical/legal/safety phrases |
+| 3 | Webhook normalization round-trip | `webhook-roundtrip.prop.test.ts` | Mock, Twilio, Telnyx, and Postmark normalization preserves channel-specific payload fields |
+| 4 | Valid AI decision JSON round-trip | `ai-decision.prop.test.ts` | `parseAiDecision(JSON.stringify(decision))` returns the same decision |
+| 5 | Invalid AI decision rejection | `ai-decision.prop.test.ts` | Invalid JSON and non-conforming objects always fail parsing |
+| 6 | Escalation rules | `escalation.prop.test.ts` | Trigger phrases, repeated failures, configured keywords, and clean messages follow deterministic rules |
+| 7 | Message deduplication | `deduplication.prop.test.ts` | Replaying a `(provider, externalMessageId)` creates one message |
+| 8 | Job backoff and dead-lettering | `job-queue.prop.test.ts` | Failure applies exponential backoff or moves exhausted jobs to `dead` |
+| 9 | Job enqueue idempotency | `job-queue.prop.test.ts` | Equivalent jobs reuse the existing active or completed work item |
+| 10 | Job claim limit | `job-queue.prop.test.ts` | `claim(N)` returns at most N claimable jobs |
+| 11 | Auto-reply threshold gating | `auto-reply.prop.test.ts` | Auto-send occurs only in `auto_reply` mode above threshold without human escalation |
+| 12 | Conversation state contract | `state-machine.prop.test.ts` | Valid status/AI-state values survive repository updates and round trips |
+| 13 | Organization owner invariant | `rbac.prop.test.ts` | Organization operations preserve exactly one owner |
+| 14 | RBAC permission enforcement | `rbac.prop.test.ts` | Role permission sets and hierarchy match the canonical matrix |
+| 15 | Audit log immutability | `audit-log.prop.test.ts` | The repository exposes append-only creation, not update/delete operations |
+| 16 | Knowledge chunk similarity | `knowledge.prop.test.ts` | `matchChunks` results remain above threshold and ordered by descending similarity |
+| 17 | Document chunking coverage | `knowledge.prop.test.ts` | Chunking produces output and preserves the source text content |
 
-Each property test runs `numRuns: 100` by default. The fast-check arbitrary is documented at the top of each test file.
+Generated properties use `numRuns: 100` by default. Structural contract checks do not invoke fast-check.
 
 ---
 
 ## UI property tests
 
-The `__tests__/properties/` directory contains 9 fast-check-driven property tests for UI components. These verify component invariants against arbitrary prop shapes (e.g. "the StatusBadge never renders an empty label", "the MessageBubble always renders a body", "the navigation component never has two items with the same path").
+The `__tests__/properties/` directory contains 12 fast-check-driven property files for frontend components and pure presentation/state helpers.
 
 | File | Component(s) |
 |---|---|
 | `button.property.test.tsx` | Button |
 | `conversation-item.property.test.tsx` | ConversationItem |
+| `conversation-sort.property.test.ts` | Conversation activity sorting |
 | `design-tokens.property.test.ts` | (design-token constants) |
 | `form-elements.property.test.tsx` | Input, Select, Textarea |
+| `format-response-time.property.test.ts` | Analytics response-time formatting |
 | `input-error.property.test.tsx` | Input with error state |
+| `lane-filters.prop.test.ts` | Kanban lane routing and filtering |
 | `message-bubble.property.test.tsx` | MessageBubble |
-| `metric-card.property.test.tsx` | MetricCard |
-| `navigation.property.test.tsx` | Sidebar / NavItem |
+| `message-pagination.property.test.ts` | Message page flattening and offsets |
 | `status-badge.property.test.tsx` | StatusBadge |
+| `symphony-window.property.test.ts` | Symphony time windows and axis ticks |
 
-These run in jsdom (Vitest's default `environment: 'node'` is overridden per-file with `// @vitest-environment jsdom` at the top, or via test config).
+Component `.tsx` properties opt into jsdom with a per-file directive; pure `.ts` helper properties use Vitest's default Node environment.
 
 ---
 
@@ -302,16 +299,14 @@ import { describe, it, expect, vi } from 'vitest';
 
 describe('MyService', () => {
   it('does X when given Y', async () => {
-    const mockDb = {
-      from: vi.fn().mockReturnValue({
-        select: vi.fn().mockReturnThis(),
-        eq: vi.fn().mockReturnThis(),
-        single: vi.fn().mockReturnThis(),
-        then: vi.fn().mockResolvedValue({ data: { id: '123' }, error: null }),
-      }),
+    interface RecordLoader {
+      load(id: string): Promise<{ id: string }>;
+    }
+    const loader: RecordLoader = {
+      load: vi.fn().mockResolvedValue({ id: '123' }),
     };
 
-    const service = new MyService(mockDb as any);
+    const service = new MyService(loader);
     const result = await service.doSomething('input');
 
     expect(result).toBeDefined();

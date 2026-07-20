@@ -135,7 +135,7 @@ The JWT has no `sub` claim. Check that:
 - The token hasn't expired (InsForge tokens are short-lived by default).
 - The user actually exists in InsForge auth.
 
-For the Next.js API routes, the local JWT decoder in `app/api/functions/_auth.ts` reads `payload.sub || payload.id`.
+For the Next.js API routes, `app/api/functions/_auth.ts` sends the token to InsForge's `/api/auth/sessions/current` endpoint and accepts an id only from that verified session response. It does not trust a locally decoded JWT payload.
 
 ## Job queue
 

@@ -9,7 +9,7 @@
 | Framework | Next.js 16 (App Router) | Server + Client Components |
 | UI | React 19 | Server actions not currently used |
 | Styling | Tailwind CSS 3.4 | **Do not upgrade to v4** (see `AGENTS.md`) |
-| Data fetching | TanStack Query 5 | `lib/queries.ts` |
+| Data fetching | TanStack Query 5 | `lib/queries/` |
 | Auth state | React Context | `lib/auth-context.tsx` |
 | Realtime | InsForge Realtime (Socket.IO) | `lib/use-realtime.ts` |
 | Server-side DB | `@insforge/sdk` with service role | `lib/insforge-admin.ts` |
@@ -24,14 +24,17 @@ app/                          # Pages (App Router)
   page.tsx                    # Marketing landing
   login/                      # /login
   register/                   # /register (with workspace creation)
-  inbox/                      # /inbox — main agent UI
+  forgot-password/            # /forgot-password
+  reset-password/             # /reset-password
+  inbox/                      # /inbox and /inbox/kanban
   knowledge/                  # /knowledge — KB management
   analytics/                  # /analytics
   settings/                   # /settings (AI, SMS, email, web chat, team)
   customers/                  # /customers
   team/                       # /team — members list
+  symphony/                   # /symphony — timeline inbox
   wchat/[widgetId]/           # Widget iframe content
-  api/functions/              # 7 InsForge-verified, RBAC-checked routes
+  api/functions/              # 12 InsForge-verified, RBAC-checked routes
 components/
   inbox/                      # Conversation list, thread, AI draft panel, etc.
   knowledge/                  # KB table, editor, document content
@@ -44,7 +47,11 @@ lib/
   insforge-admin.ts           # Server-side client (service role)
   auth-context.tsx            # <AuthProvider>, useAuth()
   query-provider.tsx          # <QueryProvider> wrapping <QueryClientProvider>
-  queries.ts                  # useConversations, useMessages, useContacts, ...
+  queries/                    # keys, helpers, and feature-scoped query hooks
+    index.ts                  # public query-hook exports
+    keys.ts                   # tenant-aware query keys
+    helpers.ts                # shared pagination and auth helpers
+    hooks/                    # feature-specific hooks
   use-realtime.ts             # useRealtime() hook (Socket.IO)
   onboarding.ts               # createOrganizationWithOwner() (calls the SQL RPC)
 proxy.ts                      # Auth redirect for protected routes
@@ -77,8 +84,8 @@ flowchart LR
 `lib/auth-context.tsx` provides `useAuth()` returning `{ user, loading, signIn, signUp, signOut }`.
 
 - On mount, the provider calls `insforge.auth.getCurrentUser()` to hydrate.
-- After `signIn` / `signUp`, the access token is written to the `insforge_access_token` cookie (max-age 7 days, SameSite=Lax). The cookie is read by `proxy.ts` for auth-gate redirects.
-- `proxy.ts` matches all paths except `/_next/static`, `/_next/image`, `favicon.ico`, and the public paths (`/`, `/login`, `/register`). If the cookie is missing, the user is redirected to `/login`.
+- After `signIn`, the access token is mirrored to the `insforge_access_token` cookie. It is a session cookie unless Remember me is selected, in which case it lasts seven days. Sign-up uses the seven-day cookie. SDK token refreshes are mirrored back to a session cookie by `lib/insforge.ts`.
+- `proxy.ts` allows auth/recovery pages (`/`, `/login`, `/register`, `/forgot-password`, `/reset-password`), webchat/function/API paths, and static assets. Other paths redirect to `/login` when the cookie is missing.
 
 ### Auth gating
 
@@ -88,22 +95,37 @@ flowchart LR
 
 ## React Query conventions
 
-`lib/queries.ts` defines the query keys and a `useAuthReady()` helper. Every hook checks `authReady && !!<id>` before firing.
+`lib/queries/keys.ts` defines tenant-aware query keys, `lib/queries/helpers.ts` contains shared helpers such as `useAuthReady()`, and `lib/queries/hooks/` contains feature-scoped hooks. `lib/queries/index.ts` is the public barrel. Hooks gate requests until authentication and required identifiers are ready.
 
 ### Query keys
 
 ```ts
 export const queryKeys = {
   conversations: (orgId, filters) => ['conversations', orgId, filters],
+  conversationsInfinite: (orgId, filters, pageSize) =>
+    ['conversations', 'infinite', orgId, filters, pageSize],
   messages: (conversationId) => ['messages', conversationId],
+  messagesInfinite: (conversationId, pageSize) =>
+    ['messages', 'infinite', conversationId, pageSize],
   conversation: (id) => ['conversation', id],
-  contacts: (filters) => ['contacts', filters],
-  contact: (id) => ['contact', id],
-  knowledgeDocs: () => ['knowledge-documents'],
-  knowledgeDoc: (id) => ['knowledge-document', id],
-  teamMembers: () => ['team-members'],
+  contacts: (orgId, filters) => ['contacts', orgId, filters],
+  contact: (orgId, id) => ['contact', orgId, id],
+  knowledgeDocs: (orgId) => ['knowledge-documents', orgId],
+  knowledgeDoc: (orgId, id) => ['knowledge-document', orgId, id],
+  teamMembers: (orgId) => ['team-members', orgId],
+  teamMemberInfo: (orgId) => ['team-member-info', orgId],
+  organization: (orgId) => ['organization', orgId],
   aiDecision: (conversationId) => ['ai-decision', conversationId],
+  aiDecisionsForConversation: (conversationId) =>
+    ['ai-decisions', conversationId],
   orgMembership: (userId) => ['org-membership', userId],
+  conversationCounts: (orgId) => ['conversation-counts', orgId],
+  inboxSublineCounts: (orgId) => ['inbox-sublime-counts', orgId],
+  symphonyConversations: (orgId, zoom) =>
+    ['symphony-conversations', orgId, zoom],
+  symphonyCounts: (orgId, zoom) => ['symphony-counts', orgId, zoom],
+  kanbanLanes: (orgId, userId) => ['kanban-lanes', orgId, userId],
+  auditLogs: (orgId, filters) => ['audit-logs', orgId, filters],
 };
 ```
 
@@ -111,16 +133,20 @@ export const queryKeys = {
 
 | Hook | Returns | Notes |
 |---|---|---|
-| `useOrgMembership(userId)` | `string \| null` (org id) | First org the user belongs to. |
+| `useOrgMembership(userId)` / `useCurrentMembership(userId)` | Organization id / membership | Resolve the current user's first organization and role. |
+| `useOrganization(orgId)` | `Organization` | Organization name, slug, and SLA thresholds. |
 | `useConversations(orgId, filters?)` | `Conversation[]` | Filters: `status`, `channel`, `contactId`, `search`. Excludes `status = 'resolved'` by default. Joins `contacts(*)`. |
+| `useInfiniteConversations(orgId, filters?)` | Paginated conversations | The inbox's 25-row infinite query. |
 | `useConversation(conversationId)` | `Conversation` (with contact) | Single conversation with joined contact. |
-| `useMessages(conversationId)` | `Message[]` | Sorted ascending by `created_at`. |
+| `useMessages(conversationId)` / `useInfiniteMessages(conversationId)` | Messages | Chronological list or 50-row infinite query. |
 | `useContacts(filters?)` | `Contact[]` | |
 | `useContact(contactId)` | `Contact` | |
-| `useAiDecision(conversationId)` | `AiDecision` (latest) | Used by the AI draft panel. |
+| `useAiDecision(conversationId)` / `useAiDecisionsForConversation(conversationId)` | AI decisions | Latest draft or complete conversation decision history. |
 | `useKnowledgeDocs()` | `KnowledgeDocument[]` | `staleTime: 0` so updates show up immediately. |
 | `useKnowledgeDoc(docId)` | `KnowledgeDocument` | |
-| `useTeamMembers()` | `OrganizationMember[]` | Currently does not join `users` — see [`../plans/ui-polish.md`](../plans/ui-polish.md). |
+| `useTeamMembers()` / `useTeamMemberInfo()` | Memberships / profile details | The second hook enriches members through the authorized server route. |
+| `useAuditLogs(filters?)` / `useConversationAuditTrail(conversationId)` | Audit rows | Tenant-scoped audit queries and a deduplicated conversation trail. |
+| `useSymphonyConversations(orgId, zoom)` / `useSymphonyCounts(orgId, zoom)` | Timeline data | Windowed Symphony rows and counts. |
 
 ### Default React Query config
 
@@ -161,7 +187,7 @@ const res = await fetch('/api/functions/send-reply', {
 });
 ```
 
-The access token comes from `getAccessToken()` in `lib/insforge.ts`, which reads it from the `insforge_access_token` cookie. (The token is in localStorage at runtime; the cookie is a parallel write to make it readable from the server.)
+The access token comes from `getAccessToken()` in `lib/insforge.ts`, which reads and URL-decodes the `insforge_access_token` cookie. The SDK keeps its own in-memory auth state; the custom fetch wrapper mirrors refreshed access tokens into the cookie for local API calls and `proxy.ts`.
 
 ### 3. InsForge Realtime events
 
@@ -189,13 +215,11 @@ The hook subscribes via `insforge.realtime.connect()` / `.subscribe()` and unsub
 
 1. Create `app/your-page/page.tsx`.
 2. If the page needs auth, it can be a client component that uses `useAuth()` and early-returns while `loading` or while `!user`.
-3. If the page needs data, prefer using an existing hook from `lib/queries.ts`; add a new one if needed.
+3. If the page needs data, prefer an existing export from `lib/queries/`; add a feature hook under `lib/queries/hooks/` if needed.
 4. Use Tailwind for styling. **Do not upgrade to v4.**
-5. If the page should be public, add the path to `PUBLIC_PATHS` in `proxy.ts` and to the matcher exclusions in `proxy.ts` if it lives at the app root.
+5. If the page should be public, add the path to `PUBLIC_PATHS` in `proxy.ts` and add proxy coverage.
 
 ## Known gotchas
 
-- **Two `StatusBadge` components** — `components/ui/StatusBadge.tsx` and `components/inbox/StatusBadge.tsx` exist and have different prop signatures. They conflict on import resolution. Tracked in [`../plans/ui-polish.md`](../plans/ui-polish.md).
 - **Real-time channel names** — app code subscribes to `org:{orgId}` channels, which match the InsForge functions' published events. The hook also listens for legacy `message_created` events for compatibility.
-- **`aria-invalid` typing** — the Input/Select/Textarea components historically passed a boolean to `aria-invalid`. ARIA spec requires the string `"true"`. Tracked in [`../plans/ui-polish.md`](../plans/ui-polish.md).
-- **Team page name bug** — `useTeamMembers` selects from `organization_members` only (no `users` join), so the team page renders the user's UUID as the name. Tracked in [`../plans/ui-polish.md`](../plans/ui-polish.md).
+- **Proxy checks cookie presence only** — protected API handlers perform the real token verification with InsForge and then apply permission checks. Do not treat `proxy.ts` as the authorization boundary.

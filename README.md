@@ -1,10 +1,10 @@
 # InboxPilot — AI Customer Support Platform
 
-InboxPilot is a multi-tenant AI-powered customer support platform built on [InsForge](https://insforge.app). It handles inbound and outbound communication over SMS and email, uses AI to draft and auto-reply to messages, and escalates sensitive conversations to human agents.
+InboxPilot is a multi-tenant AI-powered customer support platform built on [InsForge](https://insforge.app). It handles inbound and outbound communication over SMS, email, and embedded web chat; uses AI to draft and auto-reply to messages; and escalates sensitive conversations to human agents.
 
 ## Features
 
-- **Multi-channel support** — SMS (Twilio, Telnyx) and email (Postmark) with provider-neutral adapters
+- **Multi-channel support** — SMS (Twilio, Telnyx), email (Postmark), and embedded web chat with provider-neutral adapters
 - **AI-powered responses** — Draft, auto-reply, and escalation modes powered by OpenRouter LLMs
 - **Knowledge base** — Upload documents for AI retrieval-augmented generation (RAG) with pgvector
 - **Escalation engine** — Deterministic rules evaluated before any LLM call (profanity, legal threats, safety concerns, etc.)
@@ -134,7 +134,11 @@ The Next.js development server starts at `http://localhost:3000`.
 
 ### Function Deployment
 
-Deploy the InsForge Deno functions from the `insforge/functions/` directory using the InsForge CLI or dashboard. There are 9 Deno function entrypoints:
+Deploy all 9 InsForge Deno function entrypoints from the checked-in source manifest:
+
+```bash
+npm run deploy:functions
+```
 
 | Function | Trigger | Purpose |
 |----------|---------|---------|

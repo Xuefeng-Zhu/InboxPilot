@@ -28,14 +28,10 @@ graph TD
   end
 
   subgraph NextRoutes["Next.js API Routes (app/api/functions/)"]
-    NextAuth["_auth.ts<br/>JWT decoder"]
-    SendReply["/api/functions/send-reply"]
-    ApproveDraft["/api/functions/approve-ai-draft"]
-    RegenDraft["/api/functions/regenerate-ai-draft"]
-    Escalate["/api/functions/escalate-conversation"]
-    Resolve["/api/functions/resolve-conversation"]
-    Reopen["/api/functions/reopen-conversation"]
-    TestConn["/api/functions/test-channel-connection"]
+    NextAuth["_auth.ts<br/>InsForge session verification + RBAC"]
+    ConversationActions["7 conversation/provider actions"]
+    MemberActions["4 team/member actions"]
+    WidgetAction["delete-widget"]
   end
 
   subgraph InsForge["InsForge Platform"]
@@ -80,7 +76,7 @@ graph TD
 | Layer | Location | Responsibility | May import |
 |---|---|---|---|
 | **Frontend pages & components** | `app/`, `components/` | UI rendering, auth gating, data fetching via React Query | `lib/`, `@insforge/sdk` |
-| **Frontend data layer** | `lib/queries.ts`, `lib/auth-context.tsx`, `lib/use-realtime.ts`, `lib/insforge.ts`, `lib/insforge-admin.ts` | Auth context, query hooks, realtime subscriptions, server-side admin client | `@insforge/sdk` |
+| **Frontend data layer** | `lib/queries/`, `lib/auth-context.tsx`, `lib/use-realtime.ts`, `lib/insforge.ts`, `lib/insforge-admin.ts` | Auth context, tenant-aware query hooks, realtime subscriptions, server-side admin client | `@insforge/sdk` |
 | **Next.js API Routes** | `app/api/functions/*/route.ts` | JWT-authed actions (send-reply, approve-ai-draft, …) — short, direct to DB; primarily thin wrappers for non-business-logic operations | `@insforge/sdk` (via `insforgeAdmin`) |
 | **InsForge Deno Functions** | `insforge/functions/*/index.ts` | Webhook receivers, internal job runner — parse request, wire adapters, delegate to support-core | `support-core` (can import everything in it) |
 | **Service layer** | `packages/support-core/src/services/` | Business logic orchestration: inbound processing, AI pipeline, outbound sending, RBAC, knowledge ingestion, webchat thread lifecycle | repositories, interfaces, types, utils |
@@ -258,22 +254,26 @@ All three channels use the same `conversations` and `messages` tables (the `chan
 
 ---
 
-## Services (12)
+## Services and service helpers (14)
 
 | Service | File | Responsibility |
 |---|---|---|
 | `InboundMessageService` | `services/inbound-message-service.ts` | Process inbound SMS / email / webchat: dedup, find-or-create contact/conversation, insert message, enqueue AI job, audit log |
 | `OutboundMessageService` | `services/outbound-message-service.ts` | Send outbound SMS / email / webchat reply: load conversation, dispatch by channel, insert message, audit log |
 | `AiAgentService` | `services/ai-agent-service.ts` | AI pipeline: load settings + history + knowledge, evaluate pre-LLM escalation, call LLM, parse JSON decision, post-LLM confidence check, mode gating (draft_only vs auto_reply), audit log |
+| `AiDecisionRecorder` | `services/ai-decision-recorder.ts` | Persist one recoverable AI decision for each source job and link its knowledge chunks |
+| `AiPromptBuilder` | `services/ai-prompt-builder.ts` | Construct deterministic system and conversation prompts for the selected model |
 | `KnowledgeIngestionService` | `services/knowledge-ingestion-service.ts` | Chunk a document, generate embeddings, store chunks; mark ready / failed with audit log |
 | `WebchatThreadService` | `services/webchat-thread-service.ts` | Webchat thread init (anonymous contact + conversation + thread), identify (rotate JTI), audit log |
+| `WebchatWidgetService` | `services/webchat-widget-service.ts` | Organization-scoped widget lifecycle and deletion audit |
 | `OrganizationService` | `services/organization-service.ts` | Create org + owner, invite members, change role (single-owner invariant), remove members; audit log |
 | `PostgresJobQueue` | `services/postgres-job-queue.ts` | Enqueue (idempotent), claim, complete, fail (exponential backoff, dead-lettering) |
+| `OutboundProviderConfig` (helper) | `services/outbound-provider-config.ts` | Resolve organization provider routes and stored credentials for outbound delivery |
 | `RbacService` (helpers) | `services/rbac.ts` | `hasPermission`, `checkPermission`, `ROLE_PERMISSIONS` |
 | `AiDecisionParser` (helpers) | `services/ai-decision-parser.ts` | Zod schema + `parseAiDecision` for the structured LLM JSON |
 | `EscalationRule` impls (8) | `services/escalation-rules.ts` | HumanRequest, ProfanityAnger, SensitiveTopic, SafetyConcern, MissingKnowledge, LowConfidence, RepeatedFailure, Keyword; plus `createDefaultEscalationEngine` |
 
-(See [`reference/rbac.md`](rbac.md), [`reference/jobs.md`](jobs.md), [`reference/audit.md`](audit.md) for cross-service references.)
+(See [`rbac.md`](rbac.md), [`jobs.md`](jobs.md), and [`audit.md`](audit.md) for cross-service references.)
 
 ---
 
@@ -358,9 +358,9 @@ Frontend subscribes via `lib/use-realtime.ts` (Socket.IO via InsForge). The widg
 
 ## Cross-references
 
-- **AI pipeline details** → [`reference/jobs.md`](jobs.md), and the underlying plan in [`../adr/1.4-rag-over-past-conversations.md`](../adr/1.4-rag-over-past-conversations.md)
-- **Web chat widget integration** → [`reference/webchat.md`](webchat.md) and [`../adr/7.3-webchat-widget.md`](../adr/7.3-webchat-widget.md)
-- **RBAC matrix** → [`reference/rbac.md`](rbac.md)
-- **All audit log actions** → [`reference/audit.md`](audit.md)
-- **Frontend data layer** → [`reference/frontend.md`](reference/frontend.md)
-- **Full API reference** → [`reference/api.md`](reference/api.md)
+- **AI pipeline details** → [`jobs.md`](jobs.md), and the underlying plan in [`../adr/1.4-rag-over-past-conversations.md`](../adr/1.4-rag-over-past-conversations.md)
+- **Web chat widget integration** → [`webchat.md`](webchat.md) and [`../adr/7.3-webchat-widget.md`](../adr/7.3-webchat-widget.md)
+- **RBAC matrix** → [`rbac.md`](rbac.md)
+- **All audit log actions** → [`audit.md`](audit.md)
+- **Frontend data layer** → [`frontend.md`](frontend.md)
+- **Full API reference** → [`api.md`](api.md)

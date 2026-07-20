@@ -16,9 +16,10 @@ This starts the Next.js dev server at `http://localhost:3000`. Hot reload is ena
 |---|---|
 | `npm run dev` | Start Next.js dev server |
 | `npm run build` | Run `build:widget` then `next build` for production |
+| `npm run install:widget` | Install the widget's locked development dependencies |
 | `npm run build:widget` | Build the embeddable widget JS bundle to `public/widget.js` |
 | `npm run start` | Start a production Next.js server (requires `build` first) |
-| `npm run lint` | `next lint` — runs ESLint on `.ts`/`.tsx` files |
+| `npm run lint` | Run `tsc --noEmit`, the Deno safety scan, and `deno check` for all 9 function entrypoints |
 | `npm run deploy:functions` | Freshly bundle and deploy all 9 function entrypoints from the checked-in manifest |
 
 ## Deploying Deno functions

@@ -51,17 +51,13 @@ Any platform that supports Next.js 16 App Router (Netlify, Render, Fly.io, self-
 
 ## Deploying the InsForge Deno functions
 
-Use the InsForge CLI:
+Use the checked-in deployment script:
 
 ```bash
-# Deploy all functions
-insforge functions deploy --all
-
-# Deploy a single function
-insforge functions deploy sms-inbound
+npm run deploy:functions
 ```
 
-After deploying, note the functions base URL. It's typically `https://<your-app>.functions.insforge.app`. Set `NEXT_PUBLIC_INSFORGE_FUNCTIONS_URL` in the Next.js app to this value.
+The deployment script reads the explicit nine-function source manifest in `scripts/deploy-insforge-functions.mjs`; its test prevents entrypoints from being silently omitted. After deploying, note the functions base URL. It's typically `https://<your-app>.functions.insforge.app`. Set `NEXT_PUBLIC_INSFORGE_FUNCTIONS_URL` in the Next.js app to this value.
 
 ### Function secrets
 

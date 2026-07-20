@@ -97,13 +97,13 @@ Open `http://localhost:3000`. Sign up creates a new organization and assigns you
 
 ## 6. (Optional) Deploy serverless functions
 
-The InsForge Deno Functions live in `insforge/functions/`. Deploy them with the InsForge CLI or dashboard:
+The InsForge Deno Functions live in `insforge/functions/`. Deploy them with the checked-in deployment script:
 
 ```bash
-insforge functions deploy --all
+npm run deploy:functions
 ```
 
-There are 9 Deno functions. See [`../reference/api.md`](../reference/api.md#insforge-deno-functions-9) for the full list and auth requirements.
+The checked-in deployment manifest enumerates all 9 Deno functions. See [`../reference/api.md`](../reference/api.md#insforge-deno-functions-9) for the full list and auth requirements.
 
 ## 7. (Optional) Configure providers
 

@@ -55,6 +55,11 @@ function toMessage(row: MessageRow): Message {
   };
 }
 
+/** Restore chronological order after a newest-first limited database query. */
+export function chronologicalFromNewest<T>(items: ReadonlyArray<T>): T[] {
+  return [...items].reverse();
+}
+
 export class MessageRepository {
   constructor(private db: DatabaseClient) {}
 
@@ -159,11 +164,13 @@ export class MessageRepository {
     conversationId: string,
     limit?: number,
   ): Promise<Message[]> {
+    const newestFirst = limit !== undefined;
     let query = this.db
       .from('messages')
       .select('*')
       .eq('conversation_id', conversationId)
-      .order('created_at', { ascending: true });
+      .order('created_at', { ascending: !newestFirst })
+      .order('id', { ascending: !newestFirst });
 
     if (limit !== undefined) {
       query = query.limit(limit);
@@ -176,7 +183,8 @@ export class MessageRepository {
     }
 
     const rows = (data ?? []) as MessageRow[];
-    return rows.map(toMessage);
+    const messages = rows.map(toMessage);
+    return newestFirst ? chronologicalFromNewest(messages) : messages;
   }
 
   /** Return the latest persisted message for supersession checks. */
@@ -199,38 +207,66 @@ export class MessageRepository {
 
   /**
    * Return chronological context ending at an immutable source message.
-   * Rows are trimmed in memory so a same-timestamp message cannot move the
-   * context boundary past the exact source ID.
+   * Two bounded newest-first queries model the composite
+   * `(created_at, id) <= (source.created_at, source.id)` boundary without
+   * requiring a provider-specific raw filter. Reversing the combined rows
+   * restores chronological order for the AI prompt.
    */
   async listByConversationThroughMessage(
     conversationId: string,
     sourceMessage: Pick<Message, 'id' | 'createdAt'>,
-    limit?: number,
+    limit: number,
   ): Promise<Message[]> {
-    const { data, error } = await this.db
+    const sourceTimestamp = sourceMessage.createdAt.toISOString();
+    const sameTimestampQuery = this.db
       .from('messages')
       .select('*')
       .eq('conversation_id', conversationId)
-      .lte('created_at', sourceMessage.createdAt.toISOString())
-      .order('created_at', { ascending: true })
-      .order('id', { ascending: true });
+      .eq('created_at', sourceTimestamp)
+      .lte('id', sourceMessage.id)
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: false })
+      .limit(limit);
 
-    if (error) {
+    const { data: sameTimestampData, error: sameTimestampError } = await sameTimestampQuery;
+
+    if (sameTimestampError) {
       throw new Error(
-        `MessageRepository.listByConversationThroughMessage failed: ${error.message}`,
+        `MessageRepository.listByConversationThroughMessage failed: ${sameTimestampError.message}`,
       );
     }
 
-    const messages = ((data ?? []) as MessageRow[]).map(toMessage);
-    const sourceIndex = messages.findIndex(({ id }) => id === sourceMessage.id);
-    if (sourceIndex === -1) {
+    const sameTimestampRows = (sameTimestampData ?? []) as MessageRow[];
+    if (!sameTimestampRows.some(({ id }) => id === sourceMessage.id)) {
       throw new Error(
         `MessageRepository.listByConversationThroughMessage source not found: ${sourceMessage.id}`,
       );
     }
 
-    const end = sourceIndex + 1;
-    const start = limit === undefined ? 0 : Math.max(0, end - limit);
-    return messages.slice(start, end);
+    const remaining = limit - sameTimestampRows.length;
+    if (remaining <= 0) {
+      return chronologicalFromNewest(sameTimestampRows.map(toMessage));
+    }
+
+    const { data: earlierData, error: earlierError } = await this.db
+      .from('messages')
+      .select('*')
+      .eq('conversation_id', conversationId)
+      .lt('created_at', sourceTimestamp)
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: false })
+      .limit(remaining);
+
+    if (earlierError) {
+      throw new Error(
+        `MessageRepository.listByConversationThroughMessage failed: ${earlierError.message}`,
+      );
+    }
+
+    const newestFirst = [
+      ...sameTimestampRows,
+      ...((earlierData ?? []) as MessageRow[]),
+    ];
+    return chronologicalFromNewest(newestFirst.map(toMessage));
   }
 }

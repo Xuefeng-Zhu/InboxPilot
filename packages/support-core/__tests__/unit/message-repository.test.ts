@@ -291,20 +291,34 @@ describe('MessageRepository', () => {
       expect(builder.select).toHaveBeenCalledWith('*');
       expect(builder.eq).toHaveBeenCalledWith('conversation_id', 'conv1');
       expect(builder.order).toHaveBeenCalledWith('created_at', { ascending: true });
+      expect(builder.order).toHaveBeenCalledWith('id', { ascending: true });
 
       expect(result).toHaveLength(2);
       expect(result[0].id).toBe('msg1');
       expect(result[1].id).toBe('msg2');
     });
 
-    it('applies limit when provided', async () => {
-      const builder = createMockQueryBuilder({ data: [SAMPLE_ROW], error: null });
+    it('queries newest first when limited and returns that tail chronologically', async () => {
+      const latestRow = {
+        ...SAMPLE_ROW,
+        id: 'msg3',
+        created_at: '2024-01-15T10:40:00.000Z',
+      };
+      const previousRow = {
+        ...SAMPLE_ROW,
+        id: 'msg2',
+        created_at: '2024-01-15T10:35:00.000Z',
+      };
+      const builder = createMockQueryBuilder({ data: [latestRow, previousRow], error: null });
       const db = createMockDb(builder);
       const repo = new MessageRepository(db);
 
-      await repo.listByConversation('conv1', 10);
+      const result = await repo.listByConversation('conv1', 2);
 
-      expect(builder.limit).toHaveBeenCalledWith(10);
+      expect(builder.order).toHaveBeenNthCalledWith(1, 'created_at', { ascending: false });
+      expect(builder.order).toHaveBeenNthCalledWith(2, 'id', { ascending: false });
+      expect(builder.limit).toHaveBeenCalledWith(2);
+      expect(result.map(({ id }) => id)).toEqual(['msg2', 'msg3']);
     });
 
     it('does not apply limit when not provided', async () => {
@@ -364,28 +378,62 @@ describe('MessageRepository', () => {
       expect(result?.id).toBe('msg1');
     });
 
-    it('returns chronological context ending at the exact source message', async () => {
+    it('returns a database-bounded chronological tail ending at the exact source', async () => {
       const sourceRow = {
         ...SAMPLE_ROW,
-        id: 'msg2',
-        created_at: '2024-01-15T10:35:00.000Z',
+        id: 'msg-30',
+        created_at: '2024-01-15T11:00:00.000Z',
       };
-      const sameTimestampAfterSource = { ...sourceRow, id: 'msg3' };
-      const builder = createMockQueryBuilder({
-        data: [SAMPLE_ROW, sourceRow, sameTimestampAfterSource],
+      const sameTimestampBeforeSource = { ...sourceRow, id: 'msg-29' };
+      const sameTimestampAfterSource = { ...sourceRow, id: 'msg-31' };
+      const earlierRows = Array.from({ length: 25 }, (_, index) => ({
+        ...SAMPLE_ROW,
+        id: `msg-${String(28 - index).padStart(2, '0')}`,
+        created_at: new Date(Date.parse(sourceRow.created_at) - (index + 1) * 60_000).toISOString(),
+      }));
+      const sameTimestampBuilder = createMockQueryBuilder({
+        // The database's id <= source filter excludes msg-31.
+        data: [sourceRow, sameTimestampBeforeSource],
         error: null,
       });
-      const db = createMockDb(builder);
+      const earlierBuilder = createMockQueryBuilder({
+        // The database limit returns only the 18 newest earlier rows.
+        data: earlierRows.slice(0, 18),
+        error: null,
+      });
+      const db: DatabaseClient = {
+        from: vi.fn()
+          .mockReturnValueOnce(sameTimestampBuilder)
+          .mockReturnValueOnce(earlierBuilder),
+        rpc: vi.fn(),
+      };
       const repo = new MessageRepository(db);
 
       const result = await repo.listByConversationThroughMessage(
         'conv1',
-        { id: 'msg2', createdAt: new Date(sourceRow.created_at) },
-        2,
+        { id: sourceRow.id, createdAt: new Date(sourceRow.created_at) },
+        20,
       );
 
-      expect(builder.lte).toHaveBeenCalledWith('created_at', sourceRow.created_at);
-      expect(result.map(({ id }) => id)).toEqual(['msg1', 'msg2']);
+      expect(sameTimestampBuilder.eq).toHaveBeenCalledWith('created_at', sourceRow.created_at);
+      expect(sameTimestampBuilder.lte).toHaveBeenCalledWith('id', sourceRow.id);
+      expect(sameTimestampBuilder.order).toHaveBeenNthCalledWith(
+        1,
+        'created_at',
+        { ascending: false },
+      );
+      expect(sameTimestampBuilder.order).toHaveBeenNthCalledWith(
+        2,
+        'id',
+        { ascending: false },
+      );
+      expect(sameTimestampBuilder.limit).toHaveBeenCalledWith(20);
+      expect(earlierBuilder.lt).toHaveBeenCalledWith('created_at', sourceRow.created_at);
+      expect(earlierBuilder.limit).toHaveBeenCalledWith(18);
+      expect(result).toHaveLength(20);
+      expect(result.at(-2)?.id).toBe(sameTimestampBeforeSource.id);
+      expect(result.at(-1)?.id).toBe(sourceRow.id);
+      expect(result.some(({ id }) => id === sameTimestampAfterSource.id)).toBe(false);
     });
 
     it('fails when the immutable source is absent from the bounded history', async () => {

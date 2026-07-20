@@ -24,10 +24,12 @@ export function ReplyComposer({
   onPrefillConsumed,
 }: ReplyComposerProps) {
   const [body, setBody] = useState('');
+  const [acceptedWarning, setAcceptedWarning] = useState<string | null>(null);
   const queryClient = useQueryClient();
 
   useEffect(() => {
     setBody('');
+    setAcceptedWarning(null);
   }, [conversationId]);
 
   // Adopt external prefill (e.g. "Fill composer" from the AI Draft panel)
@@ -49,14 +51,22 @@ export function ReplyComposer({
         },
         body: JSON.stringify({ conversationId, body: trimmedBody }),
       });
+      const data = await readResponseJsonObject(res, 'send-reply response');
       if (!res.ok) {
-        const data = await readResponseJsonObject(res, 'send-reply error');
         throw new Error(typeof data.error === 'string' ? data.error : 'Failed to send reply');
       }
-      return res.json();
+      return data;
     },
-    onSuccess: () => {
+    onMutate: () => {
+      setAcceptedWarning(null);
+    },
+    onSuccess: (result) => {
       setBody('');
+      setAcceptedWarning(
+        typeof result.warning === 'string' && result.warning.trim()
+          ? result.warning
+          : null,
+      );
       // The server transitioned conversations.ai_state to 'idle' so the
       // AiDraftPanel + DRAFTED header pill need a fresh conversation fetch.
       // Realtime would normally cover this, but the webchat broadcast goes
@@ -113,6 +123,23 @@ export function ReplyComposer({
         <p className="px-6 pt-2 font-mono text-[10px] text-[var(--m03-red)]" role="alert">
           {error}
         </p>
+      )}
+
+      {acceptedWarning && (
+        <div
+          className="mx-6 mt-3 flex items-start gap-3 rounded-md border border-[var(--m03-orange-line)] bg-[var(--m03-orange-fill)] px-3 py-2 text-[12px] text-[var(--m03-orange)]"
+          role="alert"
+        >
+          <span className="flex-1">{acceptedWarning}</span>
+          <button
+            type="button"
+            onClick={() => setAcceptedWarning(null)}
+            className="shrink-0 font-medium text-[var(--m03-orange)] underline-offset-2 hover:underline"
+            aria-label="Dismiss reply warning"
+          >
+            Dismiss
+          </button>
+        </div>
       )}
 
       {/* Textarea */}

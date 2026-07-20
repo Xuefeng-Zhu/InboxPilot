@@ -27,6 +27,78 @@ interface UseRealtimeOptions {
   enabled?: boolean;
 }
 
+type SharedChannelStatus = 'pending' | 'subscribed' | 'failed';
+
+interface SharedChannelState {
+  references: number;
+  status: SharedChannelStatus;
+  subscription: Promise<boolean>;
+}
+
+interface SharedChannelLease {
+  channel: string;
+  state: SharedChannelState;
+}
+
+const sharedChannels = new Map<string, SharedChannelState>();
+
+function acquireChannel(channel: string): SharedChannelLease {
+  let state = sharedChannels.get(channel);
+
+  if (!state) {
+    state = {
+      references: 0,
+      status: 'pending',
+      subscription: Promise.resolve(false),
+    };
+    const newState = state;
+    sharedChannels.set(channel, newState);
+
+    newState.subscription = Promise.resolve()
+      .then(() => insforge.realtime.subscribe(channel))
+      .then((response) => {
+        if (!response.ok) {
+          newState.status = 'failed';
+          if (sharedChannels.get(channel) === newState) {
+            sharedChannels.delete(channel);
+          }
+          return false;
+        }
+
+        newState.status = 'subscribed';
+        if (newState.references === 0) {
+          insforge.realtime.unsubscribe(channel);
+          if (sharedChannels.get(channel) === newState) {
+            sharedChannels.delete(channel);
+          }
+        }
+        return true;
+      })
+      .catch((error: unknown) => {
+        newState.status = 'failed';
+        if (sharedChannels.get(channel) === newState) {
+          sharedChannels.delete(channel);
+        }
+        throw error;
+      });
+  }
+
+  state.references += 1;
+  return { channel, state };
+}
+
+function releaseChannel({ channel, state }: SharedChannelLease): void {
+  state.references = Math.max(0, state.references - 1);
+  if (state.references > 0) return;
+
+  if (state.status === 'subscribed') {
+    insforge.realtime.unsubscribe(channel);
+  }
+  if (state.status !== 'pending' && sharedChannels.get(channel) === state) {
+    sharedChannels.delete(channel);
+  }
+}
+
 export function useRealtime(options: UseRealtimeOptions): void {
   const {
     messageChannel,
@@ -43,7 +115,7 @@ export function useRealtime(options: UseRealtimeOptions): void {
     if (!enabled) return;
 
     let disposed = false;
-    const channels: string[] = [];
+    const channelLeases: SharedChannelLease[] = [];
 
     async function setup() {
       try {
@@ -63,17 +135,13 @@ export function useRealtime(options: UseRealtimeOptions): void {
       );
 
       for (const channel of requestedChannels) {
+        if (disposed) return;
+        const lease = acquireChannel(channel);
+        channelLeases.push(lease);
         try {
-          const res = await insforge.realtime.subscribe(channel);
-          if (disposed) {
-            if (res.ok) {
-              insforge.realtime.unsubscribe(channel);
-            }
-            return;
-          }
-          if (res.ok) {
-            channels.push(channel);
-          } else {
+          const subscribed = await lease.state.subscription;
+          if (disposed) return;
+          if (!subscribed) {
             console.warn(`useRealtime: failed to subscribe to ${channel}`);
           }
         } catch (err) {
@@ -114,9 +182,10 @@ export function useRealtime(options: UseRealtimeOptions): void {
       insforge.realtime.off('conversation_updated', handleConversationUpdated);
       insforge.realtime.off('knowledge_document_updated', handleKnowledgeDocumentUpdated);
 
-      // Unsubscribe from channels
-      for (const ch of channels) {
-        insforge.realtime.unsubscribe(ch);
+      // Release shared channels. The SDK subscription is removed only after
+      // the final hook consumer releases its lease.
+      for (const lease of channelLeases) {
+        releaseChannel(lease);
       }
     };
   }, [enabled, messageChannel, conversationChannel]);

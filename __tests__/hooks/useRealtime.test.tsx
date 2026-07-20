@@ -28,6 +28,15 @@ function RealtimeHarness() {
   return null;
 }
 
+function SharedChannelHarness({ showSecond }: { showSecond: boolean }) {
+  return (
+    <>
+      <RealtimeHarness />
+      {showSecond && <RealtimeHarness />}
+    </>
+  );
+}
+
 function deferred<T>() {
   let resolve!: (value: T) => void;
   const promise = new Promise<T>((resolvePromise) => {
@@ -92,5 +101,23 @@ describe('useRealtime', () => {
     await waitFor(() => {
       expect(mocks.unsubscribe).toHaveBeenCalledWith('org:org-1');
     });
+  });
+
+  it('keeps a shared channel subscribed until its final consumer unmounts', async () => {
+    mocks.connect.mockResolvedValue(undefined);
+    mocks.subscribe.mockResolvedValue({ ok: true });
+
+    const { rerender, unmount } = render(<SharedChannelHarness showSecond />);
+
+    await waitFor(() => {
+      expect(mocks.subscribe).toHaveBeenCalledTimes(1);
+    });
+
+    rerender(<SharedChannelHarness showSecond={false} />);
+    expect(mocks.unsubscribe).not.toHaveBeenCalled();
+
+    unmount();
+    expect(mocks.unsubscribe).toHaveBeenCalledTimes(1);
+    expect(mocks.unsubscribe).toHaveBeenCalledWith('org:org-1');
   });
 });

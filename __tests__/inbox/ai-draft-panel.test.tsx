@@ -5,7 +5,7 @@
 import React from 'react';
 import '@testing-library/jest-dom/vitest';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AiDraftPanel } from '@/components/inbox/AiDraftPanel';
 import { queryKeys } from '@/lib/queries/keys';
@@ -89,6 +89,36 @@ function renderPanel(onPrefillComposer = vi.fn()) {
     </QueryClientProvider>,
   );
   return { ...view, client, onPrefillComposer };
+}
+
+function renderRecoveryHarness(parentState: {
+  aiState: 'drafted' | 'thinking';
+}) {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false, gcTime: Infinity } },
+  });
+
+  function RecoveryHarness() {
+    const { data: conversation } = useQuery({
+      queryKey: queryKeys.conversation('conversation-1'),
+      queryFn: async () => ({ ai_state: parentState.aiState }),
+      initialData: { ai_state: parentState.aiState },
+    });
+
+    return (
+      <AiDraftPanel
+        conversationId="conversation-1"
+        aiState={conversation.ai_state}
+      />
+    );
+  }
+
+  const view = render(
+    <QueryClientProvider client={client}>
+      <RecoveryHarness />
+    </QueryClientProvider>,
+  );
+  return { ...view, client };
 }
 
 describe('AiDraftPanel regeneration', () => {
@@ -244,6 +274,49 @@ describe('AiDraftPanel regeneration', () => {
       await vi.advanceTimersByTimeAsync(30_000);
     });
     expect(mocks.queryCallCount).toBe(callsAfterRecovery);
+  });
+
+  it('refreshes a stale thinking conversation when polling recovers D2', async () => {
+    const parentState: { aiState: 'drafted' | 'thinking' } = {
+      aiState: 'drafted',
+    };
+    const { client } = renderRecoveryHarness(parentState);
+    expect(await screen.findByText('First generated draft')).toBeTruthy();
+
+    const regeneratedDecision = {
+      ...mocks.latestDecision,
+      id: 'decision-2',
+      response_text: 'Recovered draft after lost conversation event',
+      created_at: '2026-07-20T12:02:00.000Z',
+    };
+    mocks.queryDecisionQueue = [mocks.latestDecision, regeneratedDecision];
+    mocks.latestDecision = regeneratedDecision;
+    parentState.aiState = 'thinking';
+
+    fireEvent.click(screen.getByRole('button', { name: 'Regenerate AI draft' }));
+    await waitFor(() =>
+      expect(
+        screen.getByRole('status', { name: 'AI is processing' }),
+      ).toBeTruthy(),
+    );
+
+    parentState.aiState = 'drafted';
+
+    await waitFor(() =>
+      expect(
+        screen.getByText('Recovered draft after lost conversation event'),
+      ).toBeTruthy(),
+      { timeout: 3_500 },
+    );
+    expect(client.getQueryData(queryKeys.aiDecision('conversation-1'))).toEqual(
+      regeneratedDecision,
+    );
+    expect(client.getQueryData(queryKeys.conversation('conversation-1'))).toEqual({
+      ai_state: 'drafted',
+    });
+    expect(
+      screen.queryByRole('status', { name: 'AI is processing' }),
+    ).toBeNull();
   });
 
   it('stops polling and replaces the spinner when a recovery refetch fails', async () => {

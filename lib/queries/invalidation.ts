@@ -12,13 +12,12 @@ function rootPrefix(key: readonly unknown[]): QueryKey {
 export async function invalidateConversationMutationCaches(
   queryClient: QueryClient,
   conversationId: string,
+  options: { preserveAiDecisions?: boolean } = {},
 ): Promise<void> {
   const queryKeysToInvalidate: QueryKey[] = [
     queryKeys.conversation(conversationId),
     queryKeys.messages(conversationId),
     queryKeys.messagesInfinite(conversationId).slice(0, 3),
-    queryKeys.aiDecision(conversationId),
-    queryKeys.aiDecisionsForConversation(conversationId),
     rootPrefix(queryKeys.conversations('')),
     rootPrefix(queryKeys.conversationCounts('')),
     rootPrefix(queryKeys.inboxSublineCounts('')),
@@ -26,6 +25,13 @@ export async function invalidateConversationMutationCaches(
     rootPrefix(queryKeys.symphonyConversations('', '')),
     rootPrefix(queryKeys.symphonyCounts('', '')),
   ];
+
+  if (!options.preserveAiDecisions) {
+    queryKeysToInvalidate.push(
+      queryKeys.aiDecision(conversationId),
+      queryKeys.aiDecisionsForConversation(conversationId),
+    );
+  }
 
   await Promise.all(
     queryKeysToInvalidate.map((queryKey) =>

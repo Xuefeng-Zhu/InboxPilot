@@ -35,4 +35,24 @@ describe('invalidateConversationMutationCaches', () => {
     }
     expect(queryClient.getQueryState(unrelatedKey)?.isInvalidated).toBe(false);
   });
+
+  it('preserves a recovered AI decision while refreshing conversation state', async () => {
+    const queryClient = new QueryClient();
+    const conversationId = 'conversation-1';
+    const conversationKey = queryKeys.conversation(conversationId);
+    const decisionKey = queryKeys.aiDecision(conversationId);
+    const decisionHistoryKey = queryKeys.aiDecisionsForConversation(conversationId);
+
+    queryClient.setQueryData(conversationKey, { ai_state: 'thinking' });
+    queryClient.setQueryData(decisionKey, { id: 'decision-2' });
+    queryClient.setQueryData(decisionHistoryKey, [{ id: 'decision-2' }]);
+
+    await invalidateConversationMutationCaches(queryClient, conversationId, {
+      preserveAiDecisions: true,
+    });
+
+    expect(queryClient.getQueryState(conversationKey)?.isInvalidated).toBe(true);
+    expect(queryClient.getQueryState(decisionKey)?.isInvalidated).toBe(false);
+    expect(queryClient.getQueryState(decisionHistoryKey)?.isInvalidated).toBe(false);
+  });
 });

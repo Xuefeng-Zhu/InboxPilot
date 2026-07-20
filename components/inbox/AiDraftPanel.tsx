@@ -48,18 +48,22 @@ interface AiDraftPanelProps {
 
 export function AiDraftPanel({ conversationId, aiState, onPrefillComposer }: AiDraftPanelProps) {
   const queryClient = useQueryClient();
-  const shouldLoadDecision = aiState === 'drafted' || aiState === 'needs_human';
+  const [actionLoading, setActionLoading] = useState<'approve' | 'regenerate' | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [supersededDecisionId, setSupersededDecisionId] = useState<string | null>(null);
+  const [regenerationRecoveryError, setRegenerationRecoveryError] = useState<string | null>(null);
+  const shouldLoadDecision =
+    aiState === 'drafted' ||
+    aiState === 'needs_human' ||
+    supersededDecisionId !== null;
   const {
     data: decisionData,
     isLoading: loading,
     error: decisionError,
     refetch: refetchDecision,
   } = useAiDecision(shouldLoadDecision ? conversationId : undefined);
-  const [actionLoading, setActionLoading] = useState<'approve' | 'regenerate' | null>(null);
-  const [actionError, setActionError] = useState<string | null>(null);
-  const [supersededDecisionId, setSupersededDecisionId] = useState<string | null>(null);
-  const [regenerationRecoveryError, setRegenerationRecoveryError] = useState<string | null>(null);
   const refetchDecisionRef = useRef(refetchDecision);
+  const recoveryCompletionInFlightRef = useRef(false);
 
   const queriedDecision = (decisionData as AiDecisionRow | null | undefined) ?? null;
   const decision =
@@ -77,7 +81,29 @@ export function AiDraftPanel({ conversationId, aiState, onPrefillComposer }: AiD
     setActionError(null);
     setSupersededDecisionId(null);
     setRegenerationRecoveryError(null);
+    recoveryCompletionInFlightRef.current = false;
   }, [conversationId]);
+
+  const finalizeRegenerationRecovery = useCallback(async () => {
+    if (recoveryCompletionInFlightRef.current) return;
+    recoveryCompletionInFlightRef.current = true;
+
+    try {
+      await invalidateConversationMutationCaches(queryClient, conversationId, {
+        preserveAiDecisions: true,
+      });
+      setSupersededDecisionId(null);
+      setRegenerationRecoveryError(null);
+    } catch (recoveryError) {
+      setRegenerationRecoveryError(
+        recoveryError instanceof Error
+          ? `The regenerated draft arrived, but the conversation could not refresh: ${recoveryError.message}`
+          : 'The regenerated draft arrived, but the conversation could not refresh.',
+      );
+    } finally {
+      recoveryCompletionInFlightRef.current = false;
+    }
+  }, [conversationId, queryClient]);
 
   useEffect(() => {
     if (
@@ -85,10 +111,9 @@ export function AiDraftPanel({ conversationId, aiState, onPrefillComposer }: AiD
       queriedDecision?.id &&
       queriedDecision.id !== supersededDecisionId
     ) {
-      setSupersededDecisionId(null);
-      setRegenerationRecoveryError(null);
+      void finalizeRegenerationRecovery();
     }
-  }, [queriedDecision?.id, supersededDecisionId]);
+  }, [finalizeRegenerationRecovery, queriedDecision?.id, supersededDecisionId]);
 
   useEffect(() => {
     refetchDecisionRef.current = refetchDecision;
@@ -123,8 +148,7 @@ export function AiDraftPanel({ conversationId, aiState, onPrefillComposer }: AiD
         refreshedDecisionId &&
         refreshedDecisionId !== supersededDecisionId
       ) {
-        setSupersededDecisionId(null);
-        setRegenerationRecoveryError(null);
+        await finalizeRegenerationRecovery();
         return;
       }
 
@@ -151,7 +175,7 @@ export function AiDraftPanel({ conversationId, aiState, onPrefillComposer }: AiD
       cancelled = true;
       if (pollTimer) clearTimeout(pollTimer);
     };
-  }, [regenerationRecoveryError, supersededDecisionId]);
+  }, [finalizeRegenerationRecovery, regenerationRecoveryError, supersededDecisionId]);
 
   // ---- Approve handler ---------------------------------------------------
 
@@ -240,6 +264,18 @@ export function AiDraftPanel({ conversationId, aiState, onPrefillComposer }: AiD
     }
   }, [conversationId, decision?.id, queryClient]);
 
+  if (supersededDecisionId && regenerationRecoveryError) {
+    return (
+      <div
+        className="border-t border-[var(--m03-red-line)] bg-[var(--m03-red-fill)] px-6 py-3 text-[13px] text-[var(--m03-red)]"
+        role="alert"
+        aria-label="AI draft regeneration failed"
+      >
+        {regenerationRecoveryError}
+      </div>
+    );
+  }
+
   // ---- Thinking state: show spinner with mono orange accent --------------
 
   if (aiState === 'thinking') {
@@ -292,18 +328,6 @@ export function AiDraftPanel({ conversationId, aiState, onPrefillComposer }: AiD
 
   if (aiState === 'drafted') {
     if (loading || (supersededDecisionId && !decision)) {
-      if (regenerationRecoveryError) {
-        return (
-          <div
-            className="border-t border-[var(--m03-red-line)] bg-[var(--m03-red-fill)] px-6 py-3 text-[13px] text-[var(--m03-red)]"
-            role="alert"
-            aria-label="AI draft regeneration failed"
-          >
-            {regenerationRecoveryError}
-          </div>
-        );
-      }
-
       return (
         <div
           className="border-t border-[var(--m03-orange-line)] bg-[var(--m03-orange-fill)] px-6 py-3"

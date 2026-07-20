@@ -30,6 +30,14 @@ import type {
 } from '../types/index.js';
 import { normalizePhone, normalizeEmail } from '../utils/normalization.js';
 
+/** Non-retryable conflict between a persisted duplicate and the resolved route. */
+export class InboundMessageConflictError extends Error {
+  constructor() {
+    super('Inbound message conflicts with receiving route');
+    this.name = 'InboundMessageConflictError';
+  }
+}
+
 export class InboundMessageService {
   constructor(
     private contactRepo: ContactRepository,
@@ -235,6 +243,14 @@ export class InboundMessageService {
     orgId: string,
     metadata?: Record<string, unknown>,
   ): Promise<Message> {
+    const conversation = await this.conversationRepo.findById(message.conversationId);
+    if (!conversation) {
+      throw new Error('Duplicate inbound message conversation was not found');
+    }
+    if (conversation.organizationId !== orgId) {
+      throw new InboundMessageConflictError();
+    }
+
     await this.jobQueue.enqueue(
       'process_ai_message',
       { conversationId: message.conversationId, messageId: message.id },

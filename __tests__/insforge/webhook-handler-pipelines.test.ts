@@ -9,8 +9,15 @@ import {
 import type { DatabaseClient } from '../../packages/support-core/src/interfaces/database-client';
 import type {
   Message,
+  NormalizedInboundEmail,
   NormalizedInboundSms,
 } from '../../packages/support-core/src/types';
+import { InboundMessageService } from '../../packages/support-core/src/services/inbound-message-service';
+import type { ContactRepository } from '../../packages/support-core/src/repositories/contact-repository';
+import type { ConversationRepository } from '../../packages/support-core/src/repositories/conversation-repository';
+import type { MessageRepository } from '../../packages/support-core/src/repositories/message-repository';
+import type { AuditLogRepository } from '../../packages/support-core/src/repositories/audit-log-repository';
+import type { JobQueue } from '../../packages/support-core/src/interfaces/job-queue';
 
 const MESSAGE: Message = {
   id: 'message-1',
@@ -145,6 +152,32 @@ function statusConfig(input?: { signatureValid?: boolean }) {
   return { config, verifyWebhook, resolveContext };
 }
 
+function createConflictingInboundService() {
+  const enqueue = vi.fn();
+  const ensureMessageReceived = vi.fn();
+  const service = new InboundMessageService(
+    {} as unknown as ContactRepository,
+    {
+      findById: vi.fn().mockResolvedValue({
+        id: MESSAGE.conversationId,
+        organizationId: 'another-organization',
+      }),
+    } as unknown as ConversationRepository,
+    {
+      findByExternalId: vi.fn().mockResolvedValue(MESSAGE),
+    } as unknown as MessageRepository,
+    {
+      enqueue,
+      claim: vi.fn(),
+      complete: vi.fn(),
+      fail: vi.fn(),
+    } satisfies JobQueue,
+    { ensureMessageReceived } as unknown as AuditLogRepository,
+  );
+
+  return { service, enqueue, ensureMessageReceived };
+}
+
 describe('shared inbound webhook pipeline', () => {
   it('uses trusted account context for processing and realtime publication', async () => {
     const { dependencies, processInboundSms, publish } = createDependencies();
@@ -216,6 +249,72 @@ describe('shared inbound webhook pipeline', () => {
 
     expect(response.status).toBe(400);
     expect(createAdapter).not.toHaveBeenCalled();
+  });
+
+  it('returns a non-retryable SMS conflict without duplicate repair writes', async () => {
+    const { dependencies, publish } = createDependencies();
+    const { service, enqueue, ensureMessageReceived } = createConflictingInboundService();
+    dependencies.createInboundService = () => service;
+    const { config } = inboundConfig();
+    const handler = createInboundWebhookHandler(config, dependencies);
+
+    const response = await handler(new Request('https://functions.test/sms-inbound', {
+      method: 'POST',
+      headers: { 'x-provider': 'telnyx' },
+      body: '{}',
+    }));
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toEqual({ error: 'Inbound message conflict' });
+    expect(enqueue).not.toHaveBeenCalled();
+    expect(ensureMessageReceived).not.toHaveBeenCalled();
+    expect(publish).not.toHaveBeenCalled();
+  });
+
+  it('returns a non-retryable email conflict without duplicate repair writes', async () => {
+    const { dependencies, publish } = createDependencies();
+    const { service, enqueue, ensureMessageReceived } = createConflictingInboundService();
+    dependencies.createInboundService = () => service;
+    const normalizedEmail: NormalizedInboundEmail = {
+      from: 'customer@example.test',
+      to: 'support@example.test',
+      subject: 'Help',
+      bodyText: 'Hello',
+      externalMessageId: 'external-1',
+      rawPayload: {},
+    };
+    const config: InboundWebhookPipelineConfig<NormalizedInboundEmail> = {
+      channelLabel: 'email',
+      errorPrefix: 'email-inbound',
+      createAdapter: () => ({
+        parseInboundWebhook: () => normalizedEmail,
+        verifyWebhook: vi.fn().mockResolvedValue(true),
+      }),
+      parseBody: (rawBody) => JSON.parse(rawBody),
+      destination: (normalized) => normalized.to,
+      resolveContext: vi.fn().mockResolvedValue({
+        organizationId: 'organization-1',
+        providerAccountId: 'account-1',
+        provider: 'postmark',
+        signingSecret: 'stored-signing-secret',
+      }),
+      processInbound: (inboundService, normalized, organizationId, provider) => (
+        inboundService.processInboundEmail(normalized, organizationId, provider)
+      ),
+    };
+    const handler = createInboundWebhookHandler(config, dependencies);
+
+    const response = await handler(new Request('https://functions.test/email-inbound', {
+      method: 'POST',
+      headers: { 'x-provider': 'postmark' },
+      body: '{}',
+    }));
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toEqual({ error: 'Inbound message conflict' });
+    expect(enqueue).not.toHaveBeenCalled();
+    expect(ensureMessageReceived).not.toHaveBeenCalled();
+    expect(publish).not.toHaveBeenCalled();
   });
 });
 

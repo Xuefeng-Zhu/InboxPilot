@@ -5,7 +5,10 @@ import { ContactRepository } from '../../../packages/support-core/src/repositori
 import { ConversationRepository } from '../../../packages/support-core/src/repositories/conversation-repository.ts';
 import { DeliveryEventRepository } from '../../../packages/support-core/src/repositories/delivery-event-repository.ts';
 import { MessageRepository } from '../../../packages/support-core/src/repositories/message-repository.ts';
-import { InboundMessageService } from '../../../packages/support-core/src/services/inbound-message-service.ts';
+import {
+  InboundMessageConflictError,
+  InboundMessageService,
+} from '../../../packages/support-core/src/services/inbound-message-service.ts';
 import { PostgresJobQueue } from '../../../packages/support-core/src/services/postgres-job-queue.ts';
 import { createDbClient } from './create-db-client.ts';
 import { createRealtimePublisher } from './create-realtime-publisher.ts';
@@ -212,6 +215,9 @@ export function createInboundWebhookHandler<TNormalized>(
 
       return jsonResponse({ status: 'ok', data: message });
     } catch (error) {
+      if (error instanceof InboundMessageConflictError) {
+        return jsonResponse({ error: 'Inbound message conflict' }, 409);
+      }
       console.error(`${config.errorPrefix} error:`, error);
       return jsonResponse(
         {

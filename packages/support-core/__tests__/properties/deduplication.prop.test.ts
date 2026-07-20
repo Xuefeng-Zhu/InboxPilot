@@ -170,6 +170,7 @@ describe('Message deduplication property tests', () => {
           } as unknown as ContactRepository;
 
           const conversationRepo = {
+            findById: vi.fn().mockResolvedValue(conversation),
             findOpenByContactAndChannel: vi.fn().mockResolvedValue(conversation),
             create: vi.fn().mockResolvedValue(conversation),
             update: vi.fn().mockResolvedValue(conversation),
@@ -232,6 +233,86 @@ describe('Message deduplication property tests', () => {
         }
       ),
       { numRuns: 100 }
+    );
+  });
+
+  it('rejects duplicate repair when the resolved route belongs to another organization', async () => {
+    await fc.assert(
+      fc.asyncProperty(
+        fc.uuid(),
+        fc.uuid(),
+        async (persistedOrgId, resolvedOrgId) => {
+          fc.pre(persistedOrgId !== resolvedOrgId);
+
+          const message: Message = {
+            id: 'message-1',
+            conversationId: 'conversation-1',
+            senderType: 'contact',
+            senderId: null,
+            direction: 'inbound',
+            channel: 'sms',
+            body: 'hello',
+            subject: null,
+            rawPayload: {},
+            provider: 'mock',
+            providerAccountId: null,
+            externalMessageId: 'external-1',
+            deliveryStatus: 'delivered',
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          };
+          const conversation: Conversation = {
+            id: message.conversationId,
+            organizationId: persistedOrgId,
+            contactId: 'contact-1',
+            channel: 'sms',
+            status: 'open',
+            aiState: 'idle',
+            subject: null,
+            assignedTo: null,
+            lastMessageAt: null,
+            metadata: {},
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          };
+          const messageRepo = {
+            findByExternalId: vi.fn().mockResolvedValue(message),
+          } as unknown as MessageRepository;
+          const conversationRepo = {
+            findById: vi.fn().mockResolvedValue(conversation),
+          } as unknown as ConversationRepository;
+          const jobQueue = {
+            enqueue: vi.fn(),
+            claim: vi.fn(),
+            complete: vi.fn(),
+            fail: vi.fn(),
+          } satisfies JobQueue;
+          const auditLog = {
+            ensureMessageReceived: vi.fn(),
+          } as unknown as AuditLogRepository;
+          const service = new InboundMessageService(
+            {} as unknown as ContactRepository,
+            conversationRepo,
+            messageRepo,
+            jobQueue,
+            auditLog,
+          );
+
+          await expect(service.processInboundSms({
+            from: '+15551234567',
+            to: '+15557654321',
+            body: 'hello',
+            externalMessageId: 'external-1',
+            rawPayload: {},
+          }, resolvedOrgId, 'mock')).rejects.toThrow(
+            'Inbound message conflicts with receiving route',
+          );
+
+          expect(jobQueue.enqueue).not.toHaveBeenCalled();
+          expect(auditLog.ensureMessageReceived).not.toHaveBeenCalled();
+        },
+      ),
+      { numRuns: 100 },
     );
   });
 });

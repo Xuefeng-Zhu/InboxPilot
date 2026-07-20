@@ -97,6 +97,7 @@ function createMockContactRepo(): ContactRepository {
 
 function createMockConversationRepo(): ConversationRepository {
   return {
+    findById: vi.fn().mockResolvedValue(SAMPLE_CONVERSATION),
     findOpenByContactAndChannel: vi.fn().mockResolvedValue(null),
     create: vi.fn().mockResolvedValue(SAMPLE_CONVERSATION),
     update: vi.fn().mockResolvedValue(SAMPLE_CONVERSATION),
@@ -270,6 +271,25 @@ describe('InboundMessageService', () => {
         SAMPLE_MESSAGE.id,
         {},
       );
+    });
+
+    it('rejects a duplicate resolved through another organization before repair writes', async () => {
+      const existingMessage = { ...SAMPLE_MESSAGE, id: 'cross-org-message' };
+      vi.mocked(messageRepo.findByExternalId).mockResolvedValue(existingMessage);
+      vi.mocked(conversationRepo.findById).mockResolvedValue({
+        ...SAMPLE_CONVERSATION,
+        organizationId: 'org-other',
+      });
+
+      await expect(
+        service.processInboundSms(smsPayload, ORG_ID, 'mock'),
+      ).rejects.toThrow('Inbound message conflicts with receiving route');
+
+      expect(conversationRepo.findById).toHaveBeenCalledWith(existingMessage.conversationId);
+      expect(jobQueue.enqueue).not.toHaveBeenCalled();
+      expect(auditLog.ensureMessageReceived).not.toHaveBeenCalled();
+      expect(contactRepo.findByPhone).not.toHaveBeenCalled();
+      expect(messageRepo.create).not.toHaveBeenCalled();
     });
 
     it('uses existing contact when one is found by phone', async () => {

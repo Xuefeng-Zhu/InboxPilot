@@ -9,6 +9,7 @@ import AnalyticsPage from '@/app/analytics/page';
 
 const mocks = vi.hoisted(() => ({
   eqCalls: [] as Array<{ column: string; value: unknown }>,
+  ltCalls: [] as Array<{ column: string; value: unknown }>,
 }));
 
 vi.mock('@/lib/auth-context', () => ({
@@ -34,6 +35,7 @@ vi.mock('@/lib/insforge', () => {
       select: vi.fn(),
       eq: vi.fn(),
       gte: vi.fn(),
+      lt: vi.fn(),
       limit: vi.fn(),
     };
 
@@ -43,6 +45,10 @@ vi.mock('@/lib/insforge', () => {
       return builder;
     });
     builder.gte.mockImplementation(() => builder);
+    builder.lt.mockImplementation((column: string, value: unknown) => {
+      mocks.ltCalls.push({ column, value });
+      return builder;
+    });
     builder.limit.mockResolvedValue({ data: [], error: null });
     return builder;
   }
@@ -65,6 +71,12 @@ describe('Analytics tenant scoping', () => {
         column: 'organization_id',
         value: 'org-1',
       });
+      expect(mocks.ltCalls).toEqual([
+        {
+          column: 'created_at',
+          value: expect.any(String),
+        },
+      ]);
     });
   });
 });

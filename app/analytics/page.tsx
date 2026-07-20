@@ -41,7 +41,12 @@ interface VolumeBucket {
   count: number;
 }
 
-type RangeKey = '7d' | '30d' | 'quarter';
+export type RangeKey = '7d' | '30d' | 'quarter';
+
+export interface AnalyticsInterval {
+  startInclusive: Date;
+  endExclusive: Date;
+}
 
 function formatDuration(ms: number | null): string {
   if (ms === null) return '—';
@@ -59,45 +64,47 @@ function formatRate(score: number | null): string {
   return `${(score * 100).toFixed(1)}%`;
 }
 
-function rangeToDates(range: RangeKey): { start: string; end: string } {
-  const end = new Date();
-  const start = new Date();
-  if (range === '7d') start.setDate(start.getDate() - 7);
-  else if (range === '30d') start.setDate(start.getDate() - 30);
-  else start.setMonth(start.getMonth() - 3);
-  return {
-    start: start.toISOString().split('T')[0],
-    end: end.toISOString().split('T')[0],
-  };
+export function rangeToInterval(
+  range: RangeKey,
+  now = new Date(),
+): AnalyticsInterval {
+  const startInclusive = new Date(now);
+  startInclusive.setHours(0, 0, 0, 0);
+
+  const endExclusive = new Date(startInclusive);
+  endExclusive.setDate(endExclusive.getDate() + 1);
+
+  if (range === '7d') {
+    startInclusive.setDate(startInclusive.getDate() - 6);
+  } else if (range === '30d') {
+    startInclusive.setDate(startInclusive.getDate() - 29);
+  } else {
+    startInclusive.setMonth(startInclusive.getMonth() - 3);
+  }
+
+  return { startInclusive, endExclusive };
+}
+
+function formatLocalDate(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
 function buildVolume(
   conversations: Conversation[],
   range: RangeKey,
-  now: Date,
+  interval: AnalyticsInterval,
 ): VolumeBucket[] {
-  const rangeStart = rangeStartMs(range, now);
-  const startOfFirstDay = new Date(rangeStart);
-  startOfFirstDay.setHours(0, 0, 0, 0);
-  const startOfToday = new Date(now);
-  startOfToday.setHours(0, 0, 0, 0);
-  const dayMs = 24 * 60 * 60 * 1000;
-
   if (range === '7d' || range === '30d') {
     const numDays = range === '7d' ? 7 : 30;
-    // Anchor on today: the last bucket is the partial day [today 00:00, now),
-    // earlier buckets are full days. This gives exactly N buckets where N
-    // matches the range label, not N+1.
-    const startOfFirstBucket = new Date(now);
-    startOfFirstBucket.setDate(startOfFirstBucket.getDate() - (numDays - 1));
-    startOfFirstBucket.setHours(0, 0, 0, 0);
-
     const buckets: VolumeBucket[] = [];
     for (let i = 0; i < numDays; i++) {
-      const from = new Date(startOfFirstBucket);
+      const from = new Date(interval.startInclusive);
       from.setDate(from.getDate() + i);
-      const isLast = i === numDays - 1;
-      const to = isLast ? new Date(now) : new Date(from.getTime() + dayMs);
+      const to = new Date(from);
+      to.setDate(to.getDate() + 1);
       buckets.push({
         label: from.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
         from: from.getTime(),
@@ -114,15 +121,22 @@ function buildVolume(
     return buckets;
   }
 
-  // quarter: weekly buckets from the start of the range
-  const numWeeks = computeVolumeBucketCount(range, now);
+  // Quarter: local-calendar week buckets derived from the same query interval.
   const buckets: VolumeBucket[] = [];
-  for (let i = 0; i < numWeeks; i++) {
-    const from = new Date(startOfFirstDay);
-    from.setDate(from.getDate() + i * 7);
+  let from = new Date(interval.startInclusive);
+  let index = 0;
+  while (from < interval.endExclusive) {
     const to = new Date(from);
     to.setDate(to.getDate() + 7);
-    buckets.push({ label: `W${i + 1}`, from: from.getTime(), to: to.getTime(), count: 0 });
+    const boundedTo = Math.min(to.getTime(), interval.endExclusive.getTime());
+    buckets.push({
+      label: `W${index + 1}`,
+      from: from.getTime(),
+      to: boundedTo,
+      count: 0,
+    });
+    from = new Date(boundedTo);
+    index += 1;
   }
   for (const c of conversations) {
     const t = new Date(c.created_at).getTime();
@@ -133,25 +147,19 @@ function buildVolume(
   return buckets;
 }
 
-function rangeStartMs(range: RangeKey, now: Date): number {
-  const d = new Date(now);
-  if (range === '7d') d.setDate(d.getDate() - 7);
-  else if (range === '30d') d.setDate(d.getDate() - 30);
-  else d.setMonth(d.getMonth() - 3);
-  return d.getTime();
-}
-
-function computeVolumeBucketCount(range: RangeKey, now: Date): number {
+function computeVolumeBucketCount(
+  range: RangeKey,
+  interval: AnalyticsInterval,
+): number {
   if (range === '7d') return 7;
   if (range === '30d') return 30;
-  // quarter: no fixed count in the label, align to the KPI range
-  const rangeStart = rangeStartMs(range, now);
-  const startDay = new Date(rangeStart);
-  startDay.setHours(0, 0, 0, 0);
-  const today = new Date(now);
-  today.setHours(0, 0, 0, 0);
-  const dayMs = 24 * 60 * 60 * 1000;
-  return Math.max(1, Math.round((today.getTime() - startDay.getTime()) / (7 * dayMs)) + 1);
+  let count = 0;
+  const cursor = new Date(interval.startInclusive);
+  while (cursor < interval.endExclusive) {
+    cursor.setDate(cursor.getDate() + 7);
+    count += 1;
+  }
+  return Math.max(1, count);
 }
 
 export default function AnalyticsPage() {
@@ -161,7 +169,11 @@ export default function AnalyticsPage() {
   const authReady = !authLoading && !!user;
   const analyticsReady = authReady && !!orgId;
   const [range, setRange] = useState<RangeKey>('30d');
-  const { start: startDate, end: endDate } = useMemo(() => rangeToDates(range), [range]);
+  const interval = useMemo(() => rangeToInterval(range), [range]);
+  const endDate = useMemo(() => {
+    const lastIncludedMoment = new Date(interval.endExclusive.getTime() - 1);
+    return formatLocalDate(lastIncludedMoment);
+  }, [interval]);
   const [metrics, setMetrics] = useState<Metrics | null>(null);
   const [volumeBuckets, setVolumeBuckets] = useState<VolumeBucket[]>([]);
   const [channelSplit, setChannelSplit] = useState<{ email: number; sms: number; webchat: number }>({
@@ -188,14 +200,15 @@ export default function AnalyticsPage() {
     }
     setError(null);
     try {
-      const startIso = new Date(startDate).toISOString();
-      const endIso = new Date(endDate + 'T23:59:59.999Z').toISOString();
+      const startIso = interval.startInclusive.toISOString();
+      const endIso = interval.endExclusive.toISOString();
 
       const { data: conversations, error: convError } = await insforge.database
         .from('conversations')
         .select('id,status,ai_state,created_at,last_message_at,channel')
         .eq('organization_id', orgId!)
         .gte('created_at', startIso)
+        .lt('created_at', endIso)
         .limit(10000);
 
       if (convError) {
@@ -204,7 +217,13 @@ export default function AnalyticsPage() {
       }
 
       const convList = Array.isArray(conversations) ? (conversations as Conversation[]) : [];
-      const filtered = convList.filter((c) => new Date(c.created_at) <= new Date(endIso));
+      const filtered = convList.filter((conversation) => {
+        const createdAt = new Date(conversation.created_at).getTime();
+        return (
+          createdAt >= interval.startInclusive.getTime() &&
+          createdAt < interval.endExclusive.getTime()
+        );
+      });
 
       const totalConversations = filtered.length;
       const openConversations = filtered.filter((c) => c.status === 'open').length;
@@ -232,7 +251,7 @@ export default function AnalyticsPage() {
       setChannelSplit(channelCounts);
 
       // Conversation volume — bucketed per selected range
-      setVolumeBuckets(buildVolume(filtered, range, new Date()));
+      setVolumeBuckets(buildVolume(filtered, range, interval));
 
       // Average response time from messages
       let averageResponseTimeMs: number | null = null;
@@ -292,7 +311,7 @@ export default function AnalyticsPage() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [startDate, endDate, orgId, range]);
+  }, [interval, orgId, range]);
 
   useEffect(() => {
     if (!analyticsReady) return;
@@ -309,7 +328,7 @@ export default function AnalyticsPage() {
   const volumePlaceholderCount =
     volumeBuckets.length > 0
       ? volumeBuckets.length
-      : computeVolumeBucketCount(range, new Date());
+      : computeVolumeBucketCount(range, interval);
   const rangeDisabled = loading || refreshing;
 
   const subline = `${endDate}${org?.name ? ` · ${org.name} workspace` : ''}`;

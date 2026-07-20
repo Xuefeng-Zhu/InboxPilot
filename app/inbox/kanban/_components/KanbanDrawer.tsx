@@ -15,12 +15,6 @@
  * file is pure chrome — backdrop + panel + close button + the
  * <RightPanel> child.
  *
- * RightPanel's ESC keydown handler (RightPanel.tsx:52-59) is dormant
- * here: the useEffect early-returns when `open` is `undefined`, which
- * is the state we render (we pass no `open` prop). So the document-
- * level keydown listener never binds, and the kanban gets no keyboard
- * close. That matches v1's "no keyboard in the kanban" scope.
- *
  * The wrapper div around <RightPanel> uses the Tailwind arbitrary
  * variant `[&>aside]:!…` to override the aside's responsive
  * `hidden … xl:block` and its fixed `w-right-panel-w` (320px) so the
@@ -29,7 +23,18 @@
  * behavior; the panel's `overflow-y-auto` is a defensive fallback.
  */
 
+import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { RightPanel } from '@/components/inbox/RightPanel';
+
+const FOCUSABLE_SELECTOR = [
+  'a[href]',
+  'button:not([disabled])',
+  'input:not([disabled])',
+  'select:not([disabled])',
+  'textarea:not([disabled])',
+  '[tabindex]:not([tabindex="-1"])',
+].join(',');
 
 interface KanbanDrawerProps {
   conversationId: string | null;
@@ -42,9 +47,84 @@ export function KanbanDrawer({
   isOpen,
   onClose,
 }: KanbanDrawerProps) {
-  if (!isOpen || !conversationId) return null;
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const [portalElement, setPortalElement] = useState<HTMLDivElement | null>(null);
 
-  return (
+  useEffect(() => {
+    const element = document.createElement('div');
+    element.dataset.kanbanDrawerPortal = '';
+    document.body.appendChild(element);
+    setPortalElement(element);
+    return () => element.remove();
+  }, []);
+
+  useEffect(() => {
+    if (!isOpen || !conversationId || !portalElement) return;
+
+    const previousFocus =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
+    const backgroundState = Array.from(document.body.children)
+      .filter((element) => element !== portalElement)
+      .map((element) => ({
+        element,
+        ariaHidden: element.getAttribute('aria-hidden'),
+        hadInert: element.hasAttribute('inert'),
+      }));
+    for (const { element } of backgroundState) {
+      element.setAttribute('aria-hidden', 'true');
+      element.setAttribute('inert', '');
+    }
+    closeButtonRef.current?.focus();
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        onClose();
+        return;
+      }
+      if (event.key !== 'Tab') return;
+
+      const dialog = dialogRef.current;
+      if (!dialog) return;
+      const focusable = Array.from(
+        dialog.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR),
+      );
+      const first = focusable[0];
+      const last = focusable.at(-1);
+      if (!first || !last) {
+        event.preventDefault();
+        dialog.focus();
+        return;
+      }
+
+      const active = document.activeElement;
+      if (event.shiftKey && (active === first || !dialog.contains(active))) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (active === last || !dialog.contains(active))) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      for (const { element, ariaHidden, hadInert } of backgroundState) {
+        if (ariaHidden === null) element.removeAttribute('aria-hidden');
+        else element.setAttribute('aria-hidden', ariaHidden);
+        if (!hadInert) element.removeAttribute('inert');
+      }
+      if (previousFocus?.isConnected) previousFocus.focus();
+    };
+  }, [conversationId, isOpen, onClose, portalElement]);
+
+  if (!isOpen || !conversationId || !portalElement) return null;
+
+  return createPortal(
     <>
       <div
         data-testid="drawer-backdrop"
@@ -53,6 +133,8 @@ export function KanbanDrawer({
         aria-hidden="true"
       />
       <div
+        ref={dialogRef}
+        tabIndex={-1}
         data-testid="kanban-drawer"
         className="fixed top-0 right-0 z-50 h-full w-full overflow-y-auto bg-white shadow-level-3 sm:w-[480px]"
         role="dialog"
@@ -60,6 +142,7 @@ export function KanbanDrawer({
         aria-label="Conversation details"
       >
         <button
+          ref={closeButtonRef}
           type="button"
           onClick={onClose}
           aria-label="Close details"
@@ -81,6 +164,7 @@ export function KanbanDrawer({
           <RightPanel conversationId={conversationId} />
         </div>
       </div>
-    </>
+    </>,
+    portalElement,
   );
 }

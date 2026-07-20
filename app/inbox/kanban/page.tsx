@@ -35,7 +35,7 @@
  *   a `Record<LaneId, …>` index access.
  */
 
-import { Suspense, useEffect, useRef, useState } from 'react';
+import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth-context';
@@ -79,6 +79,7 @@ function KanbanContent() {
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(
     null,
   );
+  const closeDrawer = useCallback(() => setSelectedConversationId(null), []);
 
   // Realtime — invalidate all 5 lane queries (parent-key prefix match)
   // with a 250ms debounce so a burst of N messages becomes 1 refetch.
@@ -249,7 +250,7 @@ function KanbanContent() {
             `fixed` positioning escapes the `overflow-hidden` parent. */}
         <KanbanDrawer
           conversationId={selectedConversationId}
-          onClose={() => setSelectedConversationId(null)}
+          onClose={closeDrawer}
           isOpen={selectedConversationId !== null}
         />
       </div>

@@ -219,10 +219,11 @@ the authenticated function is deployed.
 
 ## Pre-deploy checklist
 
-- [ ] All 20 migration files applied in the documented order (through `018`, including both timestamped job-trigger migrations).
+- [ ] All 21 migration files applied in the documented order (through `019`, including both timestamped job-trigger migrations).
 - [ ] Migration `016` applied **before** deploying the updated routes/functions; inbound audit repair, job leases, decision idempotency, and knowledge revisions depend on it.
 - [ ] Migration `017` applied so legacy public webchat table policies/grants and `debug_auth_info()` are removed.
 - [ ] Before migration `018`, pause the `process-jobs` schedule and let active invocations finish; apply the migration, deploy the source-bound routes/functions, then resume the schedule.
+- [ ] Migration `019` applied so browser roles cannot forge, replace, or delete server-produced AI decisions.
 - [ ] Existing `knowledge-files` bucket set to **private** in the InsForge dashboard after applying `014`.
 - [ ] Knowledge uploads use `<organization-id>/documents/...` object keys.
 - [ ] Seed data applied (optional for production).

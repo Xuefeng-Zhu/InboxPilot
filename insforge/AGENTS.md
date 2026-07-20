@@ -3,15 +3,15 @@
 **Always loaded** for any work touching the database, Deno functions, RLS, or migrations.
 
 ## OVERVIEW
-The committed InsForge backend tree. Contains **9 Deno function entrypoints** (webhooks + cron + widget), **20 SQL migration files**, a `seed.sql`, and a `_bundled/` directory of generated deploy output. The real InsForge project is **InboxPilot** (API base `https://y39ezar3.us-east.insforge.app`); credentials in `.insforge/project.json` (gitignored).
+The committed InsForge backend tree. Contains **9 Deno function entrypoints** (webhooks + cron + widget), **21 SQL migration files**, a `seed.sql`, and a `_bundled/` directory of generated deploy output. The real InsForge project is **InboxPilot** (API base `https://y39ezar3.us-east.insforge.app`); credentials in `.insforge/project.json` (gitignored).
 
 ## WHERE TO LOOK
 | Need | Location |
 |---|---|
 | Add a new Deno function (webhook, cron, widget) | `functions/<name>/index.ts` (delegates to `packages/support-core/`) |
 | Modify a shared function utility (DB, JWT, CORS, realtime) | `functions/_shared/` |
-| Schema, tables, constraints | `migrations/001_initial_schema.sql` plus later numbered migrations through 018 |
-| RLS policies + helpers | `migrations/003_rls_policies.sql`, `005`, `007`, `014`, `015`, `016`, `017`, `018` |
+| Schema, tables, constraints | `migrations/001_initial_schema.sql` plus later numbered migrations through 019 |
+| RLS policies + helpers | `migrations/003_rls_policies.sql`, `005`, `007`, `014`, `015`, `016`, `017`, `018`, `019` |
 | RPC functions | `migrations/002`, `004`, `007`, `008`, `012`, `013`, `016`, `018` |
 | Bundled output (deploy) | `functions/_bundled/*.ts` (regenerate via `deno bundle` — see `insforge-cli` skill) |
 | Dev seed | `seed.sql` (idempotent) |
@@ -52,5 +52,5 @@ The committed InsForge backend tree. Contains **9 Deno function entrypoints** (w
 ## NOTES
 - Use the `insforge` skill for app code with `@insforge/sdk`, the `insforge-cli` skill for backend infrastructure (migrations, RLS, functions deploy), and the `insforge-debug` skill for diagnosing failures.
 - Table count is **20** (the 20th is `ai_decision_chunks` from migration 007).
-- Migration count is **20** (`001` through `018` plus the two timestamped job-trigger migrations).
+- Migration count is **21** (`001` through `019` plus the two timestamped job-trigger migrations).
 - The frontend data layer lives under `lib/queries/`.

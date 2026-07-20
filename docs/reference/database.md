@@ -1,6 +1,6 @@
 # Database Reference
 
-> PostgreSQL schema reference. 20 application tables, 20 migration files, 9 application-callable RPCs, and role-aware RLS on tenant-scoped data.
+> PostgreSQL schema reference. 20 application tables, 21 migration files, 9 application-callable RPCs, and role-aware RLS on tenant-scoped data.
 
 ## Migration files
 
@@ -28,8 +28,9 @@ Apply pending files in the order shown. Do not replay the whole set against an i
 | `insforge/migrations/016_job_and_ai_decision_idempotency.sql` | Adds retry-safe job/decision, stale-claim, knowledge-revision, and inbound-audit guards |
 | `insforge/migrations/017_lock_down_legacy_webchat_access.sql` | Drops orphan unconditional webchat policies/grants and the legacy `debug_auth_info()` helper |
 | `insforge/migrations/018_atomic_ai_source_turns.sql` | Tracks the latest conversation turn transactionally and adds source-bound AI transition claims |
+| `insforge/migrations/019_restrict_ai_decision_writes.sql` | Removes browser mutation privileges from server-produced AI decisions |
 
-Apply via the InsForge SQL editor or migrations API. Migration `014` cannot change bucket configuration: after applying it, mark the existing `knowledge-files` bucket **private** in the InsForge dashboard. Then apply `015` for knowledge-job tenant binding, `016` for job/decision idempotency and revision safety, `017` for legacy webchat lockdown, and `018` for atomic AI source turns. Pause scheduled job processing and let active invocations finish before `018`; deploy the source-bound worker/routes before resuming. Storage object keys must use `<organization-id>/documents/...` so its policies can derive the tenant from the first path segment.
+Apply via the InsForge SQL editor or migrations API. Migration `014` cannot change bucket configuration: after applying it, mark the existing `knowledge-files` bucket **private** in the InsForge dashboard. Then apply `015` for knowledge-job tenant binding, `016` for job/decision idempotency, `017` for legacy webchat lockdown, `018` for atomic AI source turns, and `019` for the server-only AI-decision write boundary. Pause scheduled job processing and let active invocations finish before `018`; deploy the source-bound worker/routes before resuming. Storage object keys must use `<organization-id>/documents/...` so its policies can derive the tenant from the first path segment.
 
 ---
 
@@ -461,11 +462,12 @@ Migration `014` upgrades membership-only settings policies to the application RB
 | Organizations and memberships | organization members | organization creation only through the onboarding RPC; member writes only through trusted team APIs; org update owner/admin and delete owner-only |
 | Provider accounts/addresses | owner, admin, agent | owner/admin |
 | AI settings and webchat widgets | owner, admin, agent | owner/admin |
+| `ai_decisions` | all organization roles | trusted server paths only |
 | Knowledge documents/chunks and private files | all organization roles | owner/admin |
 | `support_jobs` | owner/admin | owner/admin may enqueue only `process_knowledge_document`; browser updates/deletes are denied |
 | `audit_logs` | organization members | owner/admin/agent may append with `actor_type = 'user'` and `actor_id = auth.uid()`; viewers cannot write |
 
-Conversation/message policies remain tenant-scoped through organization membership; delivery-event tables join through their message and conversation. Server-side workers use the project-admin/service role for trusted queue and provider operations.
+Conversation/message and AI-decision browser writes are denied; authenticated clients retain tenant-scoped reads. Delivery-event tables join through their message and conversation. Server-side workers use the project-admin/service role for trusted queue, AI, and provider operations.
 
 ### Secret-safe client reads
 

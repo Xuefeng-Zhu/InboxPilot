@@ -70,7 +70,6 @@ packages/support-core/__tests__/            # support-core tests (vitest, node e
       ├── inbound-email-flow.test.ts
       ├── inbound-sms-flow.test.ts
       ├── outbound-message-flow.test.ts
-      ├── realtime-events.test.ts
       └── seed-idempotency.test.ts
 ```
 
@@ -119,6 +118,14 @@ npm run test:integration:rls
 ```
 
 The live RLS suite creates two temporary organizations and authenticated users on the linked disposable branch. It verifies cross-tenant read/write isolation, append-only audit logs, and that provider credential references cannot be selected by authenticated clients, then removes the temporary organizations.
+
+### Live realtime delivery
+
+```bash
+npm run test:integration:realtime
+```
+
+The live realtime suite subscribes two authenticated users to their own organization channels, publishes the three UI event types through the server-only RPC, verifies payload delivery to the intended channel, and verifies that another organization's subscriber receives nothing.
 
 ### Static checks
 

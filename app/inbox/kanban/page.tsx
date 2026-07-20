@@ -36,6 +36,7 @@
  */
 
 import { Suspense, useEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth-context';
 import {
@@ -67,6 +68,7 @@ export default function KanbanPage() {
 }
 
 function KanbanContent() {
+  const router = useRouter();
   const { user } = useAuth();
   const { data: membership } = useCurrentMembership(user?.id);
   const rawOrgId = membership?.organizationId;
@@ -222,6 +224,11 @@ function KanbanContent() {
                     isSelected={selectedConversationId === conversation.id}
                     onClick={() =>
                       setSelectedConversationId(conversation.id)
+                    }
+                    onReview={() =>
+                      router.push(
+                        `/inbox?conversation=${encodeURIComponent(conversation.id)}`,
+                      )
                     }
                     thresholds={thresholds}
                     now={now}

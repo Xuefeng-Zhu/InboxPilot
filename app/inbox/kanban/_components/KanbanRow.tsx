@@ -46,6 +46,7 @@ export interface KanbanRowProps {
   conversation: ConversationListItem;
   isSelected: boolean;
   onClick: () => void;
+  onReview?: () => void;
   thresholds: SlaThresholds;
   now: Date;
   /** Render the `Review` badge at the top-right (used in `ai_drafted` lane). */
@@ -84,6 +85,7 @@ export function KanbanRow({
   conversation,
   isSelected,
   onClick,
+  onReview,
   thresholds,
   now,
   showReviewButton,
@@ -120,7 +122,10 @@ export function KanbanRow({
           {showReviewButton ? (
             <button
               type="button"
-              onClick={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
+                onReview?.();
+              }}
               className="rounded bg-violet-100 px-1.5 py-0.5 text-[10px] font-semibold text-violet-700"
             >
               Review

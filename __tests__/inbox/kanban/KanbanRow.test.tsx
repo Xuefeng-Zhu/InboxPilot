@@ -122,4 +122,25 @@ describe('KanbanRow', () => {
     );
     expect(getByRole('button', { name: 'Review' })).toBeInTheDocument();
   });
+
+  it('opens the review workflow without also opening the details drawer', () => {
+    const onClick = vi.fn();
+    const onReview = vi.fn();
+    const { getByRole } = render(
+      <KanbanRow
+        conversation={makeConversation({ ai_state: 'drafted' })}
+        isSelected={false}
+        onClick={onClick}
+        onReview={onReview}
+        thresholds={DEFAULT_SLA_THRESHOLDS}
+        now={NOW}
+        showReviewButton
+      />,
+    );
+
+    fireEvent.click(getByRole('button', { name: 'Review' }));
+
+    expect(onReview).toHaveBeenCalledOnce();
+    expect(onClick).not.toHaveBeenCalled();
+  });
 });

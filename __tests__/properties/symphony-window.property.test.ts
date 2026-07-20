@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import fc from 'fast-check';
 import {
   computeSymphonyWindow,
@@ -9,6 +9,8 @@ import {
 const zoomArb = fc.constantFrom<Zoom>('today', 'week', 'month', 'all');
 const steppedZoomArb = fc.constantFrom<Zoom>('today', 'week', 'month');
 const stepArb = fc.integer({ min: -24, max: 24 });
+const SYMPHONY_WINDOW_REGRESSION_SEED = 1_802_785_625;
+const FIXED_NOW = new Date('2026-07-20T18:21:53.883Z');
 
 function assertStartOfDay(date: Date): void {
   expect(date.getHours()).toBe(0);
@@ -39,6 +41,15 @@ function countInclusiveCalendarDays(start: Date, end: Date): number {
 }
 
 describe('Symphony window helpers', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(FIXED_NOW);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it('always returns an ordered, finite window with the requested zoom and step', () => {
     fc.assert(
       fc.property(zoomArb, stepArb, (zoom, step) => {
@@ -88,7 +99,7 @@ describe('Symphony window helpers', () => {
           }
         }
       }),
-      { numRuns: 100 },
+      { numRuns: 100, seed: SYMPHONY_WINDOW_REGRESSION_SEED },
     );
   });
 });

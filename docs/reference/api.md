@@ -429,9 +429,9 @@ Manually escalates a conversation to human agents.
 { "status": "ok" }
 ```
 
-**Behaviour**: Updates `conversations` to `status = 'escalated'`, `ai_state = 'needs_human'`, `updated_at = now()`, appends a `conversation_escalated` audit row, and broadcasts `conversation_updated` to the organization channel. If the state change persists but the audit write fails, the route returns `status = 'accepted'` with a warning instead of reporting the mutation as failed.
+**Behaviour**: Transitions an open conversation to `status = 'escalated'`, `ai_state = 'needs_human'`, appends a `conversation_escalated` audit row, and broadcasts `conversation_updated` to the organization channel. Repeating an already-completed escalation is an idempotent success; other source states return `409`. If the state change persists but the audit write fails, the route returns `status = 'accepted'` with a warning instead of reporting the mutation as failed.
 
-**Errors**: `400`, `401`, `500`.
+**Errors**: `400`, `401`, `403`, `404`, `409`, `500`.
 
 ### POST /api/functions/resolve-conversation
 
@@ -449,9 +449,9 @@ Marks a conversation as resolved.
 { "status": "ok" }
 ```
 
-**Behaviour**: Updates `conversations.status = 'resolved'`, `ai_state = 'idle'`, appends a `conversation_resolved` audit row, and broadcasts `conversation_updated` to the organization channel. If the state change persists but the audit write fails, the route returns `status = 'accepted'` with a warning instead of reporting the mutation as failed.
+**Behaviour**: Transitions an open or escalated conversation to `status = 'resolved'`, `ai_state = 'idle'`, appends a `conversation_resolved` audit row, and broadcasts `conversation_updated` to the organization channel. Repeating an already-completed resolution is an idempotent success; an unexpected source state returns `409`. If the state change persists but the audit write fails, the route returns `status = 'accepted'` with a warning instead of reporting the mutation as failed.
 
-**Errors**: `400`, `401`, `500`.
+**Errors**: `400`, `401`, `403`, `404`, `409`, `500`.
 
 ### POST /api/functions/reopen-conversation
 
@@ -469,9 +469,9 @@ Reopens a resolved conversation.
 { "status": "ok" }
 ```
 
-**Behaviour**: Updates `conversations.status = 'open'`, `ai_state = 'idle'`, appends a `conversation_reopened` audit row, and broadcasts `conversation_updated` to the organization channel. If the state change persists but the audit write fails, the route returns `status = 'accepted'` with a warning instead of reporting the mutation as failed.
+**Behaviour**: Transitions a resolved conversation to `status = 'open'`, `ai_state = 'idle'`, appends a `conversation_reopened` audit row, and broadcasts `conversation_updated` to the organization channel. Repeating an already-completed reopen is an idempotent success; other source states return `409`. If the state change persists but the audit write fails, the route returns `status = 'accepted'` with a warning instead of reporting the mutation as failed.
 
-**Errors**: `400`, `401`, `500`.
+**Errors**: `400`, `401`, `403`, `404`, `409`, `500`.
 
 ### POST /api/functions/test-channel-connection
 

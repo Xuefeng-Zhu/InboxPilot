@@ -14,7 +14,7 @@ export async function POST(req: NextRequest) {
 
     const conversationResult = await insforge.database
       .from('conversations')
-      .select('organization_id')
+      .select('organization_id,status')
       .eq('id', conversationId)
       .limit(1);
     assertInsforgeSuccess(conversationResult, 'reopen-conversation failed to load conversation');
@@ -28,6 +28,16 @@ export async function POST(req: NextRequest) {
       'reply_conversations',
     );
     if (!allowed) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+
+    if (conversation.status === 'open') {
+      return NextResponse.json({ status: 'ok' });
+    }
+    if (conversation.status !== 'resolved') {
+      return NextResponse.json(
+        { error: 'Only resolved conversations can be reopened' },
+        { status: 409 },
+      );
+    }
 
     const updateResult = await insforge.database.from('conversations')
       .update({ status: 'open', ai_state: 'idle', updated_at: new Date().toISOString() })

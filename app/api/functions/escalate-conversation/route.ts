@@ -14,7 +14,7 @@ export async function POST(req: NextRequest) {
 
     const conversationResult = await insforge.database
       .from('conversations')
-      .select('organization_id')
+      .select('organization_id,status')
       .eq('id', conversationId)
       .limit(1);
     assertInsforgeSuccess(conversationResult, 'escalate-conversation failed to load conversation');
@@ -28,6 +28,16 @@ export async function POST(req: NextRequest) {
       'reply_conversations',
     );
     if (!allowed) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+
+    if (conversation.status === 'escalated') {
+      return NextResponse.json({ status: 'ok' });
+    }
+    if (conversation.status !== 'open') {
+      return NextResponse.json(
+        { error: 'Only open conversations can be escalated' },
+        { status: 409 },
+      );
+    }
 
     const updateResult = await insforge.database.from('conversations')
       .update({ status: 'escalated', ai_state: 'needs_human', updated_at: new Date().toISOString() })

@@ -88,6 +88,10 @@ const routes = [
     expectedUpdate: { status: 'escalated', ai_state: 'needs_human' },
     expectedAction: 'conversation_escalated',
     pastTense: 'escalated',
+    sourceStatus: 'open',
+    targetStatus: 'escalated',
+    conflictStatus: 'resolved',
+    conflictError: 'Only open conversations can be escalated',
   },
   {
     name: 'reopen-conversation',
@@ -95,6 +99,10 @@ const routes = [
     expectedUpdate: { status: 'open', ai_state: 'idle' },
     expectedAction: 'conversation_reopened',
     pastTense: 'reopened',
+    sourceStatus: 'resolved',
+    targetStatus: 'open',
+    conflictStatus: 'escalated',
+    conflictError: 'Only resolved conversations can be reopened',
   },
   {
     name: 'resolve-conversation',
@@ -102,13 +110,27 @@ const routes = [
     expectedUpdate: { status: 'resolved', ai_state: 'idle' },
     expectedAction: 'conversation_resolved',
     pastTense: 'resolved',
+    sourceStatus: 'open',
+    targetStatus: 'resolved',
+    conflictStatus: 'pending',
+    conflictError: 'Only open or escalated conversations can be resolved',
   },
 ] as const;
 
-describe.each(routes)('$name route', ({ name, post, expectedUpdate, expectedAction, pastTense }) => {
+describe.each(routes)('$name route', ({
+  name,
+  post,
+  expectedUpdate,
+  expectedAction,
+  pastTense,
+  sourceStatus,
+  targetStatus,
+  conflictStatus,
+  conflictError,
+}) => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.selectData = [{ organization_id: 'org-1' }];
+    mocks.selectData = [{ organization_id: 'org-1', status: sourceStatus }];
     mocks.selectError = null;
     mocks.updateError = null;
     mocks.auditError = null;
@@ -192,6 +214,34 @@ describe.each(routes)('$name route', ({ name, post, expectedUpdate, expectedActi
     await expect(response.json()).resolves.toEqual({
       error: `${name} failed to update conversation: write unavailable`,
     });
+  });
+
+  it('treats an already-completed transition as an idempotent success', async () => {
+    mocks.selectData = [{ organization_id: 'org-1', status: targetStatus }];
+
+    const response = await post(makeRequest(name, {
+      conversationId: 'conversation-1',
+    }));
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ status: 'ok' });
+    expect(mocks.updates).toHaveLength(0);
+    expect(mocks.inserts).toHaveLength(0);
+    expect(mocks.publishRealtimeMessage).not.toHaveBeenCalled();
+  });
+
+  it('rejects an invalid source state without mutating or auditing', async () => {
+    mocks.selectData = [{ organization_id: 'org-1', status: conflictStatus }];
+
+    const response = await post(makeRequest(name, {
+      conversationId: 'conversation-1',
+    }));
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toEqual({ error: conflictError });
+    expect(mocks.updates).toHaveLength(0);
+    expect(mocks.inserts).toHaveLength(0);
+    expect(mocks.publishRealtimeMessage).not.toHaveBeenCalled();
   });
 
   it('updates the authorized conversation to the requested state', async () => {

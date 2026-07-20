@@ -109,12 +109,37 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    let auditWarning: string | null = null;
+    try {
+      const auditResult = await insforge.database.from('audit_logs').insert([{
+        organization_id: conversation.organization_id,
+        actor_id: user.id,
+        actor_type: 'user',
+        action: 'ai_draft_regenerated',
+        resource_type: 'conversation',
+        resource_id: conversationId,
+        metadata: {
+          sourceMessageId: conversation.latest_message_id,
+          supersededDecisionId: conversation.pending_ai_decision_id,
+        },
+      }]);
+      if (auditResult.error) {
+        auditWarning = `Draft regeneration was queued, but its audit log failed: ${auditResult.error.message}`;
+        console.error('regenerate-ai-draft: failed to write audit log', auditResult.error.message);
+      }
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      auditWarning = `Draft regeneration was queued, but its audit log failed: ${detail}`;
+      console.error('regenerate-ai-draft: failed to write audit log', detail);
+    }
+
     // Trigger process-jobs server-side. The job is already durable, so trigger
     // failures are logged and left for the scheduler to pick up.
     await triggerProcessJobs();
 
     return NextResponse.json({
       status: 'queued',
+      ...(auditWarning ? { warning: auditWarning } : {}),
     }, { status: 202 });
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : 'Internal server error' }, { status: 500 });

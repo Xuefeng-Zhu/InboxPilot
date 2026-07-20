@@ -409,7 +409,7 @@ Regenerates an AI draft by enqueuing a new `process_ai_message` job.
 { "status": "queued" }
 ```
 
-**Behaviour**: Atomically claims the exact pending AI decision, enters `thinking`, and inserts an idempotent source-bound `process_ai_message` job in one server-only RPC. Approval and regeneration serialize on the conversation row; the loser returns `409` without provider dispatch or runnable work. The route then POSTs to the InsForge `process-jobs` function with a 1.5-second timeout; trigger failures leave the durable job for the scheduler. **No audit log entry** (an `ai_draft_regenerated` action would be a useful follow-up; tracked in [`../plans/refactor.md`](../plans/refactor.md)).
+**Behaviour**: Atomically claims the exact pending AI decision, enters `thinking`, and inserts an idempotent source-bound `process_ai_message` job in one server-only RPC. Approval and regeneration serialize on the conversation row; the loser returns `409` without provider dispatch or runnable work. The route appends an `ai_draft_regenerated` audit row, then POSTs to the InsForge `process-jobs` function with a 1.5-second timeout; trigger failures leave the durable job for the scheduler. If the durable enqueue succeeds but the audit write fails, the `202` response includes a warning.
 
 **Errors**: `400`, `401`, `404` (conversation not found), `409` (draft is already processing or no longer pending), `500`.
 

@@ -7,6 +7,8 @@ const mocks = vi.hoisted(() => ({
   userHasOrgPermission: vi.fn(),
   fetch: vi.fn(),
   rpc: vi.fn(),
+  auditError: null as { message: string } | null,
+  inserts: [] as Array<{ table: string; values: Array<Record<string, unknown>> }>,
 }));
 
 vi.mock('@/lib/insforge-admin', () => ({
@@ -35,9 +37,10 @@ interface ConversationRow {
   pending_ai_decision_id: string | null;
 }
 
-function createBuilder(conversation: ConversationRow) {
+function createBuilder(table: string, conversation: ConversationRow) {
   const builder = {
     select: vi.fn(),
+    insert: vi.fn(),
     eq: vi.fn(),
     limit: vi.fn(),
     then: vi.fn(),
@@ -45,8 +48,16 @@ function createBuilder(conversation: ConversationRow) {
   builder.select.mockReturnValue(builder);
   builder.eq.mockReturnValue(builder);
   builder.limit.mockReturnValue(builder);
+  builder.insert.mockImplementation((values: Array<Record<string, unknown>>) => {
+    mocks.inserts.push({ table, values });
+    return builder;
+  });
   builder.then.mockImplementation((onfulfilled, onrejected) => (
-    Promise.resolve({ data: [conversation], error: null }).then(onfulfilled, onrejected)
+    Promise.resolve(
+      table === 'audit_logs'
+        ? { data: null, error: mocks.auditError }
+        : { data: [conversation], error: null },
+    ).then(onfulfilled, onrejected)
   ));
   return builder;
 }
@@ -65,7 +76,9 @@ describe('regenerate-ai-draft route', () => {
       latest_message_id: 'message-1',
       pending_ai_decision_id: 'decision-1',
     };
-    mocks.from.mockImplementation(() => createBuilder(conversation));
+    mocks.auditError = null;
+    mocks.inserts = [];
+    mocks.from.mockImplementation((table: string) => createBuilder(table, conversation));
     mocks.rpc.mockResolvedValue({ data: true, error: null });
     mocks.getUserFromToken.mockResolvedValue({ id: 'user-1' });
     mocks.userHasOrgPermission.mockResolvedValue(true);
@@ -101,6 +114,45 @@ describe('regenerate-ai-draft route', () => {
       p_source_message_id: 'message-1',
       p_pending_ai_decision_id: 'decision-1',
     });
+    expect(mocks.inserts).toEqual([{
+      table: 'audit_logs',
+      values: [{
+        organization_id: 'org-1',
+        actor_id: 'user-1',
+        actor_type: 'user',
+        action: 'ai_draft_regenerated',
+        resource_type: 'conversation',
+        resource_id: 'conversation-1',
+        metadata: {
+          sourceMessageId: 'message-1',
+          supersededDecisionId: 'decision-1',
+        },
+      }],
+    }]);
+  });
+
+  it('surfaces an audit failure without reporting the durable job as failed', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    mocks.auditError = { message: 'audit unavailable' };
+    delete process.env.NEXT_PUBLIC_INSFORGE_FUNCTIONS_URL;
+    delete process.env.PROCESS_JOBS_SECRET;
+
+    try {
+      const response = await POST(makeRequest());
+
+      expect(response.status).toBe(202);
+      await expect(response.json()).resolves.toEqual({
+        status: 'queued',
+        warning: 'Draft regeneration was queued, but its audit log failed: audit unavailable',
+      });
+      expect(mocks.rpc).toHaveBeenCalledOnce();
+      expect(error).toHaveBeenCalledWith(
+        'regenerate-ai-draft: failed to write audit log',
+        'audit unavailable',
+      );
+    } finally {
+      error.mockRestore();
+    }
   });
 
   it('does not expose thinking or queue work when the transactional enqueue fails', async () => {

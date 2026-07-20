@@ -10,7 +10,7 @@
 |---|---|---|---|
 | `POST /api/functions/send-reply` | `conversations` (read), `messages` (insert outbound), `webchat_threads` (read for broadcast) | — | Permission: `reply_conversations` |
 | `POST /api/functions/approve-ai-draft` | `ai_decisions` (read), `conversations` (owner-bound claim/restore/finish RPCs), `messages` (insert ai-sender), `webchat_threads` (read), `audit_logs` (insert) | `ai_draft_approved` | Permission: `reply_conversations`; only the exact pending decision can dispatch |
-| `POST /api/functions/regenerate-ai-draft` | `conversations` + `support_jobs` through one atomic pending-decision claim/enqueue RPC; triggers `${FUNCTIONS_URL}/process-jobs` with a 1.5s bound | — | Permission: `reply_conversations`; approval/regeneration races return `409` to the loser |
+| `POST /api/functions/regenerate-ai-draft` | `conversations` + `support_jobs` through one atomic pending-decision claim/enqueue RPC, `audit_logs`; triggers `${FUNCTIONS_URL}/process-jobs` with a 1.5s bound | `ai_draft_regenerated` | Permission: `reply_conversations`; approval/regeneration races return `409` to the loser |
 | `POST /api/functions/escalate-conversation` | `conversations` (update `status=escalated, ai_state=needs_human`), `audit_logs` | `conversation_escalated` | Permission: `reply_conversations` |
 | `POST /api/functions/resolve-conversation` | `conversations` (update `status=resolved, ai_state=idle`), `audit_logs` | `conversation_resolved` | Permission: `reply_conversations` |
 | `POST /api/functions/reopen-conversation` | `conversations` (update `status=open, ai_state=idle`), `audit_logs` | `conversation_reopened` | Permission: `reply_conversations` |

@@ -29,6 +29,7 @@ Every `action` string emitted in the codebase, where it originates, and the reso
 | `message_received` | `system` | `InboundMessageService` (SMS, email, webchat) | `message` | A new inbound message has been inserted and an AI job enqueued. |
 | `message_sent` | `user` | `OutboundMessageService.sendReply` | `message` | An outbound reply has been sent (channel: sms/email/webchat). |
 | `ai_draft_approved` | `user` | `app/api/functions/approve-ai-draft/route.ts` | `ai_decision` | An agent approved an AI-drafted response. |
+| `ai_draft_regenerated` | `user` | `app/api/functions/regenerate-ai-draft/route.ts` | `conversation` | An agent queued a replacement for the pending AI draft. `metadata.sourceMessageId` and `metadata.supersededDecisionId` identify the source turn and replaced decision. |
 | `conversation_escalated` | `user` | `app/api/functions/escalate-conversation/route.ts` | `conversation` | An agent manually escalated a conversation. |
 | `conversation_resolved` | `user` | `app/api/functions/resolve-conversation/route.ts` | `conversation` | An agent marked a conversation resolved. |
 | `conversation_reopened` | `user` | `app/api/functions/reopen-conversation/route.ts` | `conversation` | An agent reopened a conversation. |
@@ -73,14 +74,6 @@ The "off" path also sets `metadata.reason = 'ai_mode_off'`. The "low confidence"
 | `webchat_thread_created` | `system` | `WebchatThreadService.initThread` | `webchat_thread` | A new webchat session was initialized. `metadata.widgetId`, `metadata.conversationId`, `metadata.contactId`, `metadata.identified = !!preChat?.email`. |
 | `webchat_thread_identified` | `system` | `WebchatThreadService.identifyThread` | `webchat_thread` | A visitor was identified (provided email). `metadata.email`. |
 | `webchat_widget_deleted` | `user` | `WebchatWidgetService.removeWidget` (called from `app/api/functions/delete-widget/route.ts`) | `webchat_widget` | A webchat widget was deleted. The service first asserts the widget's `organizationId` matches the caller's authorized org (cross-tenant guard). FK cascade wipes the widget's `webchat_thread`s; `conversations` and `contacts` are NOT cascade-deleted. The audit log is the only surviving record of the widget. `metadata.name`, `metadata.wasActive`. |
-
-## Known gaps
-
-The following actions are *referenced* in this catalog's intent but **not yet emitted** in code (tracked in [`../plans/refactor.md`](../plans/refactor.md)):
-
-- `ai_draft_regenerated` — `regenerate-ai-draft` route does not write an audit log.
-
-When added, they should be `actor_type: 'user'`, `resource_type: 'conversation'`, with the user as `actor_id` and the conversation as `resource_id`.
 
 ## Querying
 

@@ -142,8 +142,9 @@ For the Next.js API routes, the local JWT decoder in `app/api/functions/_auth.ts
 ### Jobs stuck in `pending`
 
 - The InsForge cron/scheduler may not be running. Check the function logs for the InsForge environment.
-- Trigger manually: `POST /functions/v1/process-jobs` with body `{}`.
-- Or POST to `${FUNCTIONS_URL}/process-jobs` from the server.
+- Trigger manually with `POST /functions/v1/process-jobs`, body `{}`, and the
+  server-only `X-Process-Jobs-Secret: <PROCESS_JOBS_SECRET>` header.
+- Or send the same authenticated POST to `${FUNCTIONS_URL}/process-jobs` from the server.
 
 ### Job in `failed` with backoff
 

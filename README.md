@@ -64,6 +64,7 @@ cp .env.example .env.local
 | `NEXT_PUBLIC_INSFORGE_URL` | InsForge project base URL |
 | `NEXT_PUBLIC_INSFORGE_ANON_KEY` | InsForge anonymous/public API key |
 | `INSFORGE_SERVICE_ROLE_KEY` | InsForge service role key (server-side only) |
+| `PROCESS_JOBS_SECRET` | Dedicated server-only secret shared by the worker scheduler and trusted triggers |
 
 See `.env.example` for the full list with comments.
 

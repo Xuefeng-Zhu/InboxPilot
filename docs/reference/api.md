@@ -153,9 +153,9 @@ Same pattern as `sms-status`, including its explicit-provider and local-only moc
 
 ### process-jobs
 
-Claims and processes pending jobs from the queue. Designed to be called on a schedule or manually.
+Claims and processes pending jobs from the queue. Designed to be called on a schedule or manually from a trusted server.
 
-- **Auth**: None (uses service role key from env).
+- **Auth**: `X-Process-Jobs-Secret` or `Authorization: Bearer <PROCESS_JOBS_SECRET>`.
 - **Trigger**: Cron / scheduler / manual HTTP call.
 - **Method**: POST (no body required).
 - **Path**: `/functions/v1/process-jobs` (invoked by the scheduler or manually; inbound functions only enqueue jobs).
@@ -534,7 +534,7 @@ The widget iframe receives events via `postMessage` from the parent page; the ag
 | `/functions/v1/sms-status` | Deno | Webhook signature | POST | Provider status payload |
 | `/functions/v1/email-inbound` | Deno | Webhook signature | POST | Provider payload |
 | `/functions/v1/email-status` | Deno | Webhook signature | POST | Provider status payload |
-| `/functions/v1/process-jobs` | Deno | None | POST | (none) |
+| `/functions/v1/process-jobs` | Deno | Dedicated server secret | POST | (none) |
 | `/functions/v1/webchat-thread-init` | Deno | Widget token | POST | (optional body) |
 | `/functions/v1/webchat-inbound` | Deno | Visitor JWT | POST | `{ text, page_url }` |
 | `/functions/v1/webchat-identify` | Deno | Visitor JWT | POST | `{ email, name }` |

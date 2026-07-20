@@ -73,7 +73,7 @@ function createBuilder(
 
 describe('regenerate-ai-draft route', () => {
   const originalFunctionsUrl = process.env.NEXT_PUBLIC_INSFORGE_FUNCTIONS_URL;
-  const originalServiceKey = process.env.INSFORGE_SERVICE_ROLE_KEY;
+  const originalProcessJobsSecret = process.env.PROCESS_JOBS_SECRET;
   let enqueueError: string | null;
   let stateUpdateError: string | null;
   let stateUpdateReject: string | null;
@@ -106,10 +106,10 @@ describe('regenerate-ai-draft route', () => {
     } else {
       process.env.NEXT_PUBLIC_INSFORGE_FUNCTIONS_URL = originalFunctionsUrl;
     }
-    if (originalServiceKey === undefined) {
-      delete process.env.INSFORGE_SERVICE_ROLE_KEY;
+    if (originalProcessJobsSecret === undefined) {
+      delete process.env.PROCESS_JOBS_SECRET;
     } else {
-      process.env.INSFORGE_SERVICE_ROLE_KEY = originalServiceKey;
+      process.env.PROCESS_JOBS_SECRET = originalProcessJobsSecret;
     }
     vi.unstubAllGlobals();
   });
@@ -117,7 +117,7 @@ describe('regenerate-ai-draft route', () => {
   it('does not change conversation state before the durable job insert succeeds', async () => {
     enqueueError = 'job queue unavailable';
     delete process.env.NEXT_PUBLIC_INSFORGE_FUNCTIONS_URL;
-    delete process.env.INSFORGE_SERVICE_ROLE_KEY;
+    delete process.env.PROCESS_JOBS_SECRET;
 
     const response = await POST(makeRequest());
 
@@ -131,7 +131,7 @@ describe('regenerate-ai-draft route', () => {
   it('returns once the durable job is queued even when the direct trigger times out', async () => {
     vi.useFakeTimers();
     process.env.NEXT_PUBLIC_INSFORGE_FUNCTIONS_URL = 'https://functions.example.test';
-    process.env.INSFORGE_SERVICE_ROLE_KEY = 'service-key';
+    process.env.PROCESS_JOBS_SECRET = 'worker-secret';
     mocks.fetch.mockImplementation((_url: string, init: RequestInit) => (
       new Promise((_resolve, reject) => {
         init.signal?.addEventListener('abort', () => {
@@ -148,13 +148,23 @@ describe('regenerate-ai-draft route', () => {
     await expect(response.json()).resolves.toEqual({ status: 'queued' });
     expect(insertedJobs).toHaveLength(1);
     expect(mocks.fetch).toHaveBeenCalledOnce();
+    expect(mocks.fetch).toHaveBeenCalledWith(
+      'https://functions.example.test/process-jobs',
+      expect.objectContaining({
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Process-Jobs-Secret': 'worker-secret',
+        },
+      }),
+    );
     expect(mocks.update).toHaveBeenCalledWith({ ai_state: 'thinking' });
   });
 
   it('returns an accepted warning when state display fails after enqueue', async () => {
     stateUpdateError = 'conversation update unavailable';
     delete process.env.NEXT_PUBLIC_INSFORGE_FUNCTIONS_URL;
-    delete process.env.INSFORGE_SERVICE_ROLE_KEY;
+    delete process.env.PROCESS_JOBS_SECRET;
 
     const response = await POST(makeRequest());
 
@@ -169,7 +179,7 @@ describe('regenerate-ai-draft route', () => {
   it('returns an accepted warning when the state update promise rejects', async () => {
     stateUpdateReject = 'state update network failure';
     delete process.env.NEXT_PUBLIC_INSFORGE_FUNCTIONS_URL;
-    delete process.env.INSFORGE_SERVICE_ROLE_KEY;
+    delete process.env.PROCESS_JOBS_SECRET;
 
     const response = await POST(makeRequest());
 

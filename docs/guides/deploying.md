@@ -71,6 +71,7 @@ Each function reads from `Deno.env`:
 |---|---|---|
 | `INSFORGE_BASE_URL` | yes | All functions |
 | `INSFORGE_SERVICE_ROLE_KEY` | yes | All functions |
+| `PROCESS_JOBS_SECRET` | yes | `process-jobs`; shared with its scheduler and trusted server callers |
 | `SERVICE_ROLE_KEY` | sometimes (fallback) | `process-jobs` and the shared SMS/email inbound/status webhook runtime |
 
 Set these via the InsForge dashboard or CLI. The functions **must not** be reachable without these set.
@@ -137,12 +138,17 @@ Production requires:
 | `NEXT_PUBLIC_INSFORGE_URL` | Next.js (browser + server) | yes |
 | `NEXT_PUBLIC_INSFORGE_ANON_KEY` | Next.js (browser) | yes |
 | `INSFORGE_SERVICE_ROLE_KEY` | Next.js (server-only) | yes |
+| `PROCESS_JOBS_SECRET` | Next.js + Deno functions + scheduler header | yes |
 | `NEXT_PUBLIC_INSFORGE_FUNCTIONS_URL` | Next.js (rewrite target) | recommended |
 | `INSFORGE_BASE_URL` | Deno functions | yes |
 | `INSFORGE_SERVICE_ROLE_KEY` | Deno functions | yes |
 | `SERVICE_ROLE_KEY` | Deno functions (fallback) | optional |
 
 Variables prefixed `NEXT_PUBLIC_` are exposed to the browser. Only the InsForge URL, anon key, and functions URL should be public. The service role key must remain server-side.
+
+Configure the `process-jobs` schedule as a `POST` and set
+`X-Process-Jobs-Secret: ${{secrets.PROCESS_JOBS_SECRET}}`. Manual server-side
+triggers must send the same header; unauthenticated calls are rejected.
 
 ## Pre-deploy checklist
 
@@ -155,6 +161,7 @@ Variables prefixed `NEXT_PUBLIC_` are exposed to the browser. Only the InsForge 
 - [ ] At least one web chat widget configured (if you want to embed the widget).
 - [ ] `NEXT_PUBLIC_DEMO_WIDGET_ID` unset in production (otherwise the landing page shows a demo chat button).
 - [ ] `INSFORGE_SERVICE_ROLE_KEY` not in any browser-bundled env.
+- [ ] `PROCESS_JOBS_SECRET` is configured for Next.js, the Deno function, and the scheduler header.
 - [ ] `npm run lint` clean.
 - [ ] `npm test` clean.
 - [ ] `npm run build` succeeds.

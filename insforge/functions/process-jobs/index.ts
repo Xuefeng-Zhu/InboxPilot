@@ -1,8 +1,8 @@
 /**
  * process-jobs — Claims and processes pending jobs from the queue.
  *
- * Auth: Cron / manual trigger (no JWT required)
- * Trigger: Scheduled invocation or manual HTTP call
+ * Auth: Dedicated PROCESS_JOBS_SECRET supplied by the scheduler/server caller
+ * Trigger: Authenticated scheduled invocation or manual HTTP POST
  *
  * Flow:
  * 1. Create database client from environment
@@ -20,6 +20,7 @@ import { shouldAutoSendDecision } from '../_shared/auto-reply-policy.ts';
 import { enqueueAutoReplyFallback } from '../_shared/auto-reply-fallback.ts';
 import { createAutoReplySender } from '../_shared/auto-reply-sender.ts';
 import { runClaimedJob, type ClaimedJobResult } from '../_shared/run-claimed-job.ts';
+import { isAuthorizedProcessJobsRequest } from '../_shared/process-jobs-auth.ts';
 import { PostgresJobQueue } from '../../../packages/support-core/src/services/postgres-job-queue.ts';
 import { ConversationRepository } from '../../../packages/support-core/src/repositories/conversation-repository.ts';
 import { MessageRepository } from '../../../packages/support-core/src/repositories/message-repository.ts';
@@ -257,14 +258,38 @@ function buildJobHandlers(
 // Function entrypoint
 // ---------------------------------------------------------------------------
 
-export default async function (_req: Request): Promise<Response> {
+export default async function (req: Request): Promise<Response> {
   try {
+    if (req.method !== 'POST') {
+      return new Response(
+        JSON.stringify({ error: 'Method not allowed' }),
+        {
+          status: 405,
+          headers: { 'Content-Type': 'application/json', Allow: 'POST' },
+        },
+      );
+    }
+
+    const processJobsSecret = getRuntimeEnv('PROCESS_JOBS_SECRET');
+    if (!processJobsSecret) {
+      return new Response(
+        JSON.stringify({ error: 'Missing environment configuration' }),
+        { status: 500, headers: { 'Content-Type': 'application/json' } },
+      );
+    }
+    if (!isAuthorizedProcessJobsRequest(req, processJobsSecret)) {
+      return new Response(
+        JSON.stringify({ error: 'Unauthorized' }),
+        { status: 401, headers: { 'Content-Type': 'application/json' } },
+      );
+    }
+
     const baseUrl = getBaseUrl();
     const serviceRoleKey = getServiceRoleKey();
 
     if (!baseUrl || !serviceRoleKey) {
       return new Response(
-        JSON.stringify({ error: 'Missing environment configuration', debug: { hasBaseUrl: !!baseUrl, hasKey: !!serviceRoleKey } }),
+        JSON.stringify({ error: 'Missing environment configuration' }),
         { status: 500, headers: { 'Content-Type': 'application/json' } },
       );
     }
@@ -273,23 +298,17 @@ export default async function (_req: Request): Promise<Response> {
     const jobQueue = new PostgresJobQueue(db);
     const jobHandlers = buildJobHandlers(db, baseUrl, serviceRoleKey);
 
-    const requestUrl = new URL(_req.url);
+    const requestUrl = new URL(req.url);
     if (requestUrl.searchParams.get('health') === '1') {
-      let { data, error } = await db.rpc('claim_support_jobs', { max_count: 0 });
+      let { error } = await db.rpc('claim_support_jobs', { max_count: 0 });
       if (error && error.message.includes('claim_support_jobs')) {
         const fallback = await db.rpc('claim_support_jobs', { claim_limit: 0 });
-        data = fallback.data;
         error = fallback.error;
       }
       return new Response(
-        JSON.stringify({
-          status: error ? 'error' : 'ok',
-          hasBaseUrl: true,
-          hasKey: true,
-          rpcOk: !error,
-          rpcError: error?.message ?? null,
-          claimLimitZeroRows: Array.isArray(data) ? data.length : null,
-        }),
+        JSON.stringify(error
+          ? { status: 'error', error: 'Health check failed' }
+          : { status: 'ok' }),
         { status: error ? 500 : 200, headers: { 'Content-Type': 'application/json' } },
       );
     }

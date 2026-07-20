@@ -55,6 +55,7 @@ loadEnvFile();
 
 const BASE_URL = process.env.NEXT_PUBLIC_INSFORGE_URL || '';
 const SERVICE_KEY = process.env.INSFORGE_SERVICE_ROLE_KEY || '';
+const PROCESS_JOBS_SECRET = process.env.PROCESS_JOBS_SECRET || '';
 
 async function readJsonOrFallback(res, fallback, context) {
   const text = await res.text();
@@ -390,8 +391,7 @@ async function cmdInbound(message = 'Hi, I need help with my order #12345') {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          apikey: SERVICE_KEY,
-          Authorization: `Bearer ${SERVICE_KEY}`,
+          'X-Process-Jobs-Secret': PROCESS_JOBS_SECRET,
         },
         body: '{}',
       });

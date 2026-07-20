@@ -33,6 +33,7 @@ Edit `.env.local`:
 NEXT_PUBLIC_INSFORGE_URL=https://<your-app>.us-east.insforge.app
 NEXT_PUBLIC_INSFORGE_ANON_KEY=<your-anon-key>
 INSFORGE_SERVICE_ROLE_KEY=<your-service-role-key>
+PROCESS_JOBS_SECRET=<long-random-server-secret>
 
 # Optional: enables the demo chat widget on the landing page
 NEXT_PUBLIC_DEMO_WIDGET_ID=
@@ -43,6 +44,7 @@ NEXT_PUBLIC_DEMO_WIDGET_ID=
 | `NEXT_PUBLIC_INSFORGE_URL` | yes | Browser SDK, server-side SDK, realtime |
 | `NEXT_PUBLIC_INSFORGE_ANON_KEY` | yes | Browser SDK (anon, safe to expose) |
 | `INSFORGE_SERVICE_ROLE_KEY` | yes | Server-side only (bypasses RLS) |
+| `PROCESS_JOBS_SECRET` | yes | Server-only authentication for `process-jobs` scheduler and manual triggers |
 | `NEXT_PUBLIC_DEMO_WIDGET_ID` | no | Landing page demo chat widget |
 
 ## 3. Apply database migrations

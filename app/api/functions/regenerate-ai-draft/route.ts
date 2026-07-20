@@ -7,10 +7,10 @@ const PROCESS_JOBS_TRIGGER_TIMEOUT_MS = 1_500;
 
 async function triggerProcessJobs(): Promise<void> {
   const functionsUrl = process.env.NEXT_PUBLIC_INSFORGE_FUNCTIONS_URL;
-  const serviceKey = process.env.INSFORGE_SERVICE_ROLE_KEY;
-  if (!functionsUrl || !serviceKey) {
+  const processJobsSecret = process.env.PROCESS_JOBS_SECRET;
+  if (!functionsUrl || !processJobsSecret) {
     console.warn(
-      `regenerate-ai-draft: missing ${!functionsUrl ? 'NEXT_PUBLIC_INSFORGE_FUNCTIONS_URL' : 'INSFORGE_SERVICE_ROLE_KEY'}; job remains queued`,
+      `regenerate-ai-draft: missing ${!functionsUrl ? 'NEXT_PUBLIC_INSFORGE_FUNCTIONS_URL' : 'PROCESS_JOBS_SECRET'}; job remains queued`,
     );
     return;
   }
@@ -25,8 +25,7 @@ async function triggerProcessJobs(): Promise<void> {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        apikey: serviceKey,
-        Authorization: `Bearer ${serviceKey}`,
+        'X-Process-Jobs-Secret': processJobsSecret,
       },
       body: '{}',
       signal: controller.signal,

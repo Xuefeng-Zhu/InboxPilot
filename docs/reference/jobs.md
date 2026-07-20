@@ -78,6 +78,10 @@ The process-jobs function is invoked by:
 - The `regenerate-ai-draft` Next.js route after enqueuing; failures are logged
   and the durable job remains for the scheduler.
 
+Every caller uses `POST` with `X-Process-Jobs-Secret` set from the server-only
+`PROCESS_JOBS_SECRET`; the scheduler should reference the matching InsForge
+secret rather than embedding its value.
+
 ## Enqueue sites
 
 | File | Site |

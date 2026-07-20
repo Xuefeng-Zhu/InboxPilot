@@ -17,7 +17,8 @@
     "test:core": "vitest run packages/support-core/__tests__",
     "test:integration:seed": "INBOXPILOT_LIVE_INTEGRATION=1 vitest run packages/support-core/__tests__/integration/seed-idempotency.test.ts --maxWorkers=1 --minWorkers=1",
     "test:integration:rls": "INBOXPILOT_LIVE_INTEGRATION=1 vitest run __tests__/insforge/rls-policies.live.test.ts --maxWorkers=1 --minWorkers=1",
-    "test:integration:realtime": "INBOXPILOT_LIVE_INTEGRATION=1 vitest run __tests__/insforge/realtime-events.live.test.ts --maxWorkers=1 --minWorkers=1"
+    "test:integration:realtime": "INBOXPILOT_LIVE_INTEGRATION=1 vitest run __tests__/insforge/realtime-events.live.test.ts --maxWorkers=1 --minWorkers=1",
+    "test:integration:inbound-sms": "INBOXPILOT_LIVE_INTEGRATION=1 vitest run __tests__/insforge/inbound-sms-flow.live.test.ts --maxWorkers=1 --minWorkers=1"
   },
   "dependencies": {
     "@inboxpilot/support-core": "file:packages/support-core",

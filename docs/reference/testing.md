@@ -68,7 +68,6 @@ packages/support-core/__tests__/            # support-core tests (vitest, node e
   ├── unit/                                 # Services, repositories, adapters, utilities
   └── integration/                          # Live integration tests and remaining scenario stubs
       ├── inbound-email-flow.test.ts
-      ├── inbound-sms-flow.test.ts
       ├── outbound-message-flow.test.ts
       └── seed-idempotency.test.ts
 ```
@@ -126,6 +125,14 @@ npm run test:integration:realtime
 ```
 
 The live realtime suite subscribes two authenticated users to their own organization channels, publishes the three UI event types through the server-only RPC, verifies payload delivery to the intended channel, and verifies that another organization's subscriber receives nothing.
+
+### Live inbound SMS persistence
+
+```bash
+npm run test:integration:inbound-sms
+```
+
+The inbound SMS suite runs `InboundMessageService` against the disposable branch through the production PostgREST adapter and repositories. It verifies phone normalization, open-conversation reuse, provider deduplication, durable AI jobs, and message-received audits. Webhook signature and realtime caller behavior remain covered by entrypoint/pipeline unit tests.
 
 ### Static checks
 

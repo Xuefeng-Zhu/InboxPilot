@@ -99,6 +99,47 @@ describe('WidgetChatPage', () => {
     expect(screen.getByLabelText('Message input')).not.toBeNull();
   });
 
+  it('requires identification even when a greeting already exists', async () => {
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(
+      jsonResponse({
+        data: {
+          requiresPreChat: true,
+          thread: { identifiedAt: null },
+          history: [
+            {
+              id: 'welcome-message',
+              body: 'How can we help?',
+              sender_type: 'system',
+              created_at: '2026-07-20T00:00:00.000Z',
+            },
+          ],
+        },
+      }),
+    )));
+
+    render(<WidgetChatPage />);
+
+    expect(await screen.findByLabelText('Your email')).not.toBeNull();
+    expect(screen.queryByLabelText('Message input')).toBeNull();
+  });
+
+  it('resumes an identified session without showing pre-chat again', async () => {
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(
+      jsonResponse({
+        data: {
+          requiresPreChat: false,
+          thread: { identifiedAt: '2026-07-20T00:00:00.000Z' },
+          history: [],
+        },
+      }),
+    )));
+
+    render(<WidgetChatPage />);
+
+    expect(await screen.findByLabelText('Message input')).not.toBeNull();
+    expect(screen.queryByLabelText('Your email')).toBeNull();
+  });
+
   it('restores a failed message and allows the visitor to dismiss or retry', async () => {
     let sendCalls = 0;
     const fetchMock = vi.fn(
@@ -108,6 +149,7 @@ describe('WidgetChatPage', () => {
           return Promise.resolve(
             jsonResponse({
               data: {
+                requiresPreChat: false,
                 history: [
                   {
                     id: 'welcome-message',

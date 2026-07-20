@@ -170,14 +170,18 @@ function WidgetChatContent() {
           history.forEach((m) => messageIdsRef.current.add(m.id));
           setMessages(history);
         }
-        // Check if pre-chat is needed (no messages yet = fresh session, check widget config)
-        if (json.data?.history?.length === 0 || !json.data?.history) {
-          // We'll check pre-chat from URL param
-          const preChatParam = searchParams.get('prechat');
-          if (preChatParam === '1' && !preChatCompletedRef.current) {
-            setShowPreChat(true);
-          }
-        }
+        // Identification is independent of message history: a greeting is a
+        // message, but it must not bypass a widget's required pre-chat form.
+        // `requiresPreChat` is authoritative on current deployments. The URL
+        // fallback keeps rolling upgrades compatible with older functions.
+        const requiresPreChat =
+          typeof json.data?.requiresPreChat === 'boolean'
+            ? json.data.requiresPreChat
+            : searchParams.get('prechat') === '1' &&
+              !json.data?.thread?.identifiedAt;
+        setShowPreChat(
+          requiresPreChat && !preChatCompletedRef.current,
+        );
         setSessionReady(true);
       } catch (err) {
         if (

@@ -82,6 +82,7 @@ export interface CreateWebchatThreadInput {
   conversationId: string;
   contactId: string;
   visitorTokenJti: string;
+  identifiedAt?: Date | null;
   pageUrl?: string | null;
   referrer?: string | null;
   userAgent?: string | null;

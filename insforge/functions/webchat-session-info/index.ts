@@ -44,7 +44,7 @@ export default async function (req: Request): Promise<Response> {
       return jsonResponse({ error: 'Unauthorized' }, 401);
     }
 
-    const { claims, thread } = verified;
+    const { claims, thread, widget } = verified;
 
     // 3. Fetch contact info
     const { data: contactData } = await db
@@ -74,6 +74,7 @@ export default async function (req: Request): Promise<Response> {
           identifiedAt: thread.identifiedAt,
         },
         contact: contactData,
+        requiresPreChat: widget.preChatEnabled && !thread.identifiedAt,
         history,
       },
     });

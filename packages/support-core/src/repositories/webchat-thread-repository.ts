@@ -126,6 +126,11 @@ export class WebchatThreadRepository {
       visitor_token_jti: input.visitorTokenJti,
     };
 
+    if (input.identifiedAt !== undefined) {
+      row.identified_at = input.identifiedAt
+        ? input.identifiedAt.toISOString()
+        : null;
+    }
     if (input.pageUrl !== undefined) row.page_url = input.pageUrl;
     if (input.referrer !== undefined) row.referrer = input.referrer;
     if (input.userAgent !== undefined) row.user_agent = input.userAgent;

@@ -107,6 +107,7 @@ export class WebchatThreadService {
       conversationId: conversation.id,
       contactId: contact.id,
       visitorTokenJti,
+      identifiedAt: preChat?.email ? now : null,
       pageUrl: pageUrl ?? null,
       referrer: referrer ?? null,
       userAgent: userAgent ?? null,

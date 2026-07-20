@@ -93,19 +93,24 @@ export default async function (req: Request): Promise<Response> {
       return jsonResponse({ error: 'Widget is inactive' }, 403);
     }
 
-    // 4. Anti-flood rate limiting
+    // 4. Enforce pre-chat at the trusted boundary, not only in the iframe.
+    if (widget.preChatEnabled && !thread.identifiedAt) {
+      return jsonResponse({ error: 'Complete pre-chat identification before sending a message' }, 403);
+    }
+
+    // 5. Anti-flood rate limiting
     if (!checkRateLimit(claims.threadId)) {
       return jsonResponse({ error: 'Rate limit exceeded. Max 10 messages per minute.' }, 429);
     }
 
-    // 5. Parse body
+    // 6. Parse body
     const body = await req.json() as { text?: string; page_url?: string };
     const text = body.text?.trim();
     if (!text) {
       return jsonResponse({ error: 'Missing text field' }, 400);
     }
 
-    // 6. Update thread page_url and last_seen_at
+    // 7. Update thread page_url and last_seen_at
     const threadRepo = new WebchatThreadRepository(db);
     const threadUpdates: Record<string, unknown> = { lastSeenAt: new Date() };
     if (body.page_url) {
@@ -113,7 +118,7 @@ export default async function (req: Request): Promise<Response> {
     }
     await threadRepo.update(thread.id, threadUpdates as { lastSeenAt?: Date; pageUrl?: string });
 
-    // 7. Process inbound message
+    // 8. Process inbound message
     const contactRepo = new ContactRepository(db);
     const conversationRepo = new ConversationRepository(db);
     const messageRepo = new MessageRepository(db);
@@ -135,14 +140,14 @@ export default async function (req: Request): Promise<Response> {
       orgId: claims.organizationId,
     });
 
-    // 8. Publish new_message realtime event to the org channel (for agent inbox)
+    // 9. Publish new_message realtime event to the org channel (for agent inbox)
     const realtimePublisher = createRealtimePublisher(baseUrl, serviceRoleKey);
     await realtimePublisher.publish(`org:${claims.organizationId}`, 'new_message', {
       message,
       conversationId: thread.conversationId,
     });
 
-    // 9. The AI job is enqueued above. The `process-jobs` function picks it
+    // 10. The AI job is enqueued above. The `process-jobs` function picks it
     // up on its next cron tick (currently 10 seconds — see schedules in
     // InsForge dashboard). Function-to-function triggers within the same
     // Deno deployment are blocked by 508 LOOP_DETECTED, so a direct trigger
@@ -150,7 +155,7 @@ export default async function (req: Request): Promise<Response> {
     // was attempted but the `http` extension is unreliable in this project.
     // The 10s cron cadence is the practical equivalent of event-driven.
 
-    // 10. Return success
+    // 11. Return success
     return jsonResponse({
       status: 'ok',
       data: { message, conversationId: thread.conversationId },

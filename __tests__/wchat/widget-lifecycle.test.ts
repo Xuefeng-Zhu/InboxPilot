@@ -55,4 +55,29 @@ describe('embeddable widget lifecycle', () => {
     expect(container?.style.maxWidth).toBe('calc(100vw - 24px)');
     expect(container?.style.right).toBe('12px');
   });
+
+  it('preserves required pre-chat state when resuming a stored session', async () => {
+    const payload = btoa(JSON.stringify({
+      exp: Math.floor(Date.now() / 1000) + 3600,
+    }))
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=+$/g, '');
+    const token = `header.${payload}.signature`;
+    localStorage.setItem('inboxpilot:visitorToken:wt_demo', token);
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(new Response(
+      JSON.stringify({ data: { requiresPreChat: true } }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } },
+    ))));
+
+    await import('../../widget-src/widget');
+    document.getElementById('inboxpilot-widget-btn')?.click();
+
+    await vi.waitFor(() => {
+      expect(document.querySelector('iframe')).not.toBeNull();
+    });
+
+    const iframe = document.querySelector('iframe');
+    expect(new URL(iframe?.src ?? '').searchParams.get('prechat')).toBe('1');
+  });
 });

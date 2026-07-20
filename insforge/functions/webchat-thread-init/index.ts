@@ -209,6 +209,7 @@ export default async function (req: Request): Promise<Response> {
         conversationId: result.conversation.id,
         contactId: result.contact.id,
         preChatEnabled: widget.preChatEnabled,
+        requiresPreChat: widget.preChatEnabled && !result.thread.identifiedAt,
         history,
       },
     });

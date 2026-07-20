@@ -205,7 +205,7 @@ interface InboxPilotWidgetWindow extends Window {
   // Initialize session & open widget
   // ---------------------------------------------------------------------------
 
-  async function initSession(): Promise<{ token: string; preChatEnabled?: boolean } | null> {
+  async function initSession(): Promise<{ token: string; requiresPreChat?: boolean } | null> {
     // If we have a token, validate it's still accepted by checking session-info
     if (visitorToken) {
       try {
@@ -215,13 +215,19 @@ interface InboxPilotWidgetWindow extends Window {
           credentials: 'omit',
           signal: requestAbortController.signal,
         });
-        if (checkRes.ok) return { token: visitorToken, preChatEnabled: false };
+        if (checkRes.ok) {
+          const json = await checkRes.json();
+          return {
+            token: visitorToken,
+            requiresPreChat: json.data?.requiresPreChat ?? false,
+          };
+        }
         // Token rejected — clear and create new session
         localStorage.removeItem(STORAGE_KEY);
         visitorToken = null;
       } catch {
         // Network error — try using the token anyway
-        if (visitorToken) return { token: visitorToken, preChatEnabled: false };
+        if (visitorToken) return { token: visitorToken };
       }
     }
 
@@ -245,11 +251,12 @@ interface InboxPilotWidgetWindow extends Window {
 
       const json = await res.json();
       const token = json.data?.visitorToken;
-      const preChatEnabled = json.data?.preChatEnabled ?? false;
+      const requiresPreChat =
+        json.data?.requiresPreChat ?? json.data?.preChatEnabled ?? false;
       if (token) {
         visitorToken = token;
         localStorage.setItem(STORAGE_KEY, token);
-        return { token, preChatEnabled };
+        return { token, requiresPreChat };
       }
     } catch (err) {
       if (!destroyed) {
@@ -259,14 +266,14 @@ interface InboxPilotWidgetWindow extends Window {
     return null;
   }
 
-  function mountIframe(token: string, preChatEnabled = false) {
+  function mountIframe(token: string, requiresPreChat = false) {
     if (iframeEl) return;
 
     iframeEl = document.createElement('iframe');
     const iframeUrl = new URL(`${appOrigin}/wchat/${widgetId}`);
     iframeUrl.searchParams.set('t', token);
     iframeUrl.searchParams.set('color', color);
-    if (preChatEnabled) iframeUrl.searchParams.set('prechat', '1');
+    if (requiresPreChat) iframeUrl.searchParams.set('prechat', '1');
 
     iframeEl.src = iframeUrl.toString();
     iframeEl.style.width = '100%';
@@ -297,7 +304,7 @@ interface InboxPilotWidgetWindow extends Window {
         return;
       }
 
-      mountIframe(session.token, session.preChatEnabled);
+      mountIframe(session.token, session.requiresPreChat);
       container.style.display = 'block';
       isOpen = true;
       updateLauncherIcon();

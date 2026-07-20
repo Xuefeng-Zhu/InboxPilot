@@ -34,6 +34,27 @@ export async function POST(req: NextRequest) {
       .eq('id', conversationId);
     assertInsforgeSuccess(updateResult, 'reopen-conversation failed to update conversation');
 
+    let auditWarning: string | null = null;
+    try {
+      const auditResult = await insforge.database.from('audit_logs').insert([{
+        organization_id: conversation.organization_id,
+        actor_id: user.id,
+        actor_type: 'user',
+        action: 'conversation_reopened',
+        resource_type: 'conversation',
+        resource_id: conversationId,
+        metadata: {},
+      }]);
+      if (auditResult.error) {
+        auditWarning = `Conversation was reopened, but its audit log failed: ${auditResult.error.message}`;
+        console.error('reopen-conversation: failed to write audit log', auditResult.error.message);
+      }
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      auditWarning = `Conversation was reopened, but its audit log failed: ${detail}`;
+      console.error('reopen-conversation: failed to write audit log', detail);
+    }
+
     try {
       await publishRealtimeMessage(
         `org:${conversation.organization_id as string}`,
@@ -47,7 +68,11 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    return NextResponse.json({ status: 'ok' });
+    return NextResponse.json(
+      auditWarning
+        ? { status: 'accepted', warning: auditWarning }
+        : { status: 'ok' },
+    );
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : 'Internal server error' }, { status: 500 });
   }

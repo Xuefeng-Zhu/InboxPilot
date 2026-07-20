@@ -11,9 +11,9 @@
 | `POST /api/functions/send-reply` | `conversations` (read), `messages` (insert outbound), `webchat_threads` (read for broadcast) | — | Permission: `reply_conversations` |
 | `POST /api/functions/approve-ai-draft` | `ai_decisions` (read), `conversations` (owner-bound claim/restore/finish RPCs), `messages` (insert ai-sender), `webchat_threads` (read), `audit_logs` (insert) | `ai_draft_approved` | Permission: `reply_conversations`; only the exact pending decision can dispatch |
 | `POST /api/functions/regenerate-ai-draft` | `conversations` + `support_jobs` through one atomic pending-decision claim/enqueue RPC; triggers `${FUNCTIONS_URL}/process-jobs` with a 1.5s bound | — | Permission: `reply_conversations`; approval/regeneration races return `409` to the loser |
-| `POST /api/functions/escalate-conversation` | `conversations` (update `status=escalated, ai_state=needs_human`) | — | Permission: `reply_conversations` |
-| `POST /api/functions/resolve-conversation` | `conversations` (update `status=resolved, ai_state=idle`) | — | Permission: `reply_conversations` |
-| `POST /api/functions/reopen-conversation` | `conversations` (update `status=open, ai_state=idle`) | — | Permission: `reply_conversations` |
+| `POST /api/functions/escalate-conversation` | `conversations` (update `status=escalated, ai_state=needs_human`), `audit_logs` | `conversation_escalated` | Permission: `reply_conversations` |
+| `POST /api/functions/resolve-conversation` | `conversations` (update `status=resolved, ai_state=idle`), `audit_logs` | `conversation_resolved` | Permission: `reply_conversations` |
+| `POST /api/functions/reopen-conversation` | `conversations` (update `status=open, ai_state=idle`), `audit_logs` | `conversation_reopened` | Permission: `reply_conversations` |
 | `POST /api/functions/test-channel-connection` | `sms_provider_accounts` or `email_provider_accounts` (read) | — | Permission: `manage_settings` (the only one). Pings the provider via `health-check.ts`; loads credentials from InsForge secrets API (`getSecret`); returns `{status, data: {ok, message|reason, provider, active}}` |
 | `POST /api/functions/change-member-role` | `organization_members`, `audit_logs` | `member_role_changed` | **Uses the support-core service layer.** Permission: `manage_members`, plus an owner-only gate when the target is currently an owner or the new role is `owner` (P1). |
 | `POST /api/functions/invite-member` | `organization_members`, `audit_logs` | `member_added` | **Uses the support-core service layer.** Takes an email, looks up the user via the InsForge admin REST endpoint, then calls `OrganizationService.inviteMember`. Permission: `manage_members`. |
@@ -61,6 +61,6 @@
 - **The 4 team routes use the support-core service layer** (`OrganizationService.inviteMember` / `changeMemberRole` / `removeMember`). All other routes call `insforgeAdmin.database.from(...)` directly. This is the only place in the app that bridges from a Next.js route handler to support-core.
 - **`test-channel-connection` is the only conversation-touching route with `manage_settings`** (others need `reply_conversations`).
 - **`team-member-info` is the only read route** — it doesn't mutate state, just enriches the team panel with email/name for display.
-- **`change-member-role`, `remove-member`, `invite-member`, `delete-widget` are the routes that write to `audit_logs`** (the `approve-ai-draft` route also writes, so update this list when that changes).
+- **Conversation state, team, widget deletion, and AI-draft approval routes write to `audit_logs`.** If a conversation state is already persisted and the audit write fails, return an accepted warning instead of a false mutation failure.
 - **`regenerate-ai-draft` awaits the `${FUNCTIONS_URL}/process-jobs` trigger for at most 1.5 seconds** after enqueueing; trigger failures are logged and left for the scheduler because the job row is already durable.
 - **All routes resolve `orgId` from the request body** (not from the user session) — multi-org users work transparently.

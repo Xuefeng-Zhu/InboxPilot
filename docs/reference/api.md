@@ -429,7 +429,7 @@ Manually escalates a conversation to human agents.
 { "status": "ok" }
 ```
 
-**Behaviour**: Updates `conversations` to `status = 'escalated'`, `ai_state = 'needs_human'`, `updated_at = now()`. **No audit log entry** — also a known gap.
+**Behaviour**: Updates `conversations` to `status = 'escalated'`, `ai_state = 'needs_human'`, `updated_at = now()`, appends a `conversation_escalated` audit row, and broadcasts `conversation_updated` to the organization channel. If the state change persists but the audit write fails, the route returns `status = 'accepted'` with a warning instead of reporting the mutation as failed.
 
 **Errors**: `400`, `401`, `500`.
 
@@ -449,7 +449,7 @@ Marks a conversation as resolved.
 { "status": "ok" }
 ```
 
-**Behaviour**: Updates `conversations.status = 'resolved'`, `ai_state = 'idle'`. **No audit log entry.**
+**Behaviour**: Updates `conversations.status = 'resolved'`, `ai_state = 'idle'`, appends a `conversation_resolved` audit row, and broadcasts `conversation_updated` to the organization channel. If the state change persists but the audit write fails, the route returns `status = 'accepted'` with a warning instead of reporting the mutation as failed.
 
 **Errors**: `400`, `401`, `500`.
 
@@ -469,7 +469,7 @@ Reopens a resolved conversation.
 { "status": "ok" }
 ```
 
-**Behaviour**: Updates `conversations.status = 'open'`, `ai_state = 'idle'`. **No audit log entry.**
+**Behaviour**: Updates `conversations.status = 'open'`, `ai_state = 'idle'`, appends a `conversation_reopened` audit row, and broadcasts `conversation_updated` to the organization channel. If the state change persists but the audit write fails, the route returns `status = 'accepted'` with a warning instead of reporting the mutation as failed.
 
 **Errors**: `400`, `401`, `500`.
 

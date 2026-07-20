@@ -29,6 +29,9 @@ Every `action` string emitted in the codebase, where it originates, and the reso
 | `message_received` | `system` | `InboundMessageService` (SMS, email, webchat) | `message` | A new inbound message has been inserted and an AI job enqueued. |
 | `message_sent` | `user` | `OutboundMessageService.sendReply` | `message` | An outbound reply has been sent (channel: sms/email/webchat). |
 | `ai_draft_approved` | `user` | `app/api/functions/approve-ai-draft/route.ts` | `ai_decision` | An agent approved an AI-drafted response. |
+| `conversation_escalated` | `user` | `app/api/functions/escalate-conversation/route.ts` | `conversation` | An agent manually escalated a conversation. |
+| `conversation_resolved` | `user` | `app/api/functions/resolve-conversation/route.ts` | `conversation` | An agent marked a conversation resolved. |
+| `conversation_reopened` | `user` | `app/api/functions/reopen-conversation/route.ts` | `conversation` | An agent reopened a conversation. |
 
 ### AI decisions
 
@@ -76,9 +79,6 @@ The "off" path also sets `metadata.reason = 'ai_mode_off'`. The "low confidence"
 The following actions are *referenced* in this catalog's intent but **not yet emitted** in code (tracked in [`../plans/refactor.md`](../plans/refactor.md)):
 
 - `ai_draft_regenerated` — `regenerate-ai-draft` route does not write an audit log.
-- `conversation_escalated` — `escalate-conversation` route does not write an audit log.
-- `conversation_resolved` — `resolve-conversation` route does not write an audit log.
-- `conversation_reopened` — `reopen-conversation` route does not write an audit log.
 
 When added, they should be `actor_type: 'user'`, `resource_type: 'conversation'`, with the user as `actor_id` and the conversation as `resource_id`.
 
@@ -108,7 +108,7 @@ ORDER BY created_at DESC;
 -- Conversations escalated today
 SELECT * FROM audit_logs
 WHERE organization_id = $1
-  AND action = 'conversation_escalated' -- when added
+  AND action = 'conversation_escalated'
   AND created_at::date = CURRENT_DATE;
 ```
 

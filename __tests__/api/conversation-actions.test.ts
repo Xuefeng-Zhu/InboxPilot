@@ -8,10 +8,12 @@ const mocks = vi.hoisted(() => ({
   selectData: [{ organization_id: 'org-1' }] as unknown,
   selectError: null as { message: string } | null,
   updateError: null as { message: string } | null,
+  auditError: null as { message: string } | null,
   publishRealtimeMessage: vi.fn(),
   updates: [] as Array<Record<string, unknown>>,
+  inserts: [] as Array<{ table: string; values: Array<Record<string, unknown>> }>,
   eqCalls: [] as Array<{
-    operation: 'select' | 'update';
+    operation: 'select' | 'update' | 'insert';
     column: string;
     value: unknown;
   }>,
@@ -42,11 +44,12 @@ function makeRequest(path: string, body: Record<string, unknown>): NextRequest {
   }) as NextRequest;
 }
 
-function createBuilder() {
-  let operation: 'select' | 'update' = 'select';
+function createBuilder(table: string) {
+  let operation: 'select' | 'update' | 'insert' = 'select';
   const builder = {
     select: vi.fn(),
     update: vi.fn(),
+    insert: vi.fn(),
     eq: vi.fn(),
     limit: vi.fn(),
     then: vi.fn(),
@@ -62,10 +65,17 @@ function createBuilder() {
     mocks.updates.push(values);
     return builder;
   });
+  builder.insert.mockImplementation((values: Array<Record<string, unknown>>) => {
+    operation = 'insert';
+    mocks.inserts.push({ table, values });
+    return builder;
+  });
   builder.then.mockImplementation((onfulfilled, onrejected) => {
     const result = operation === 'select'
       ? { data: mocks.selectData, error: mocks.selectError }
-      : { data: null, error: mocks.updateError };
+      : operation === 'update'
+        ? { data: null, error: mocks.updateError }
+        : { data: null, error: mocks.auditError };
     return Promise.resolve(result).then(onfulfilled, onrejected);
   });
   return builder;
@@ -76,28 +86,36 @@ const routes = [
     name: 'escalate-conversation',
     post: escalate,
     expectedUpdate: { status: 'escalated', ai_state: 'needs_human' },
+    expectedAction: 'conversation_escalated',
+    pastTense: 'escalated',
   },
   {
     name: 'reopen-conversation',
     post: reopen,
     expectedUpdate: { status: 'open', ai_state: 'idle' },
+    expectedAction: 'conversation_reopened',
+    pastTense: 'reopened',
   },
   {
     name: 'resolve-conversation',
     post: resolve,
     expectedUpdate: { status: 'resolved', ai_state: 'idle' },
+    expectedAction: 'conversation_resolved',
+    pastTense: 'resolved',
   },
 ] as const;
 
-describe.each(routes)('$name route', ({ name, post, expectedUpdate }) => {
+describe.each(routes)('$name route', ({ name, post, expectedUpdate, expectedAction, pastTense }) => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.selectData = [{ organization_id: 'org-1' }];
     mocks.selectError = null;
     mocks.updateError = null;
+    mocks.auditError = null;
     mocks.updates = [];
+    mocks.inserts = [];
     mocks.eqCalls = [];
-    mocks.from.mockImplementation(() => createBuilder());
+    mocks.from.mockImplementation((table: string) => createBuilder(table));
     mocks.getUserFromToken.mockResolvedValue({ id: 'user-1' });
     mocks.userHasOrgPermission.mockResolvedValue(true);
     mocks.publishRealtimeMessage.mockResolvedValue(undefined);
@@ -200,6 +218,42 @@ describe.each(routes)('$name route', ({ name, post, expectedUpdate }) => {
         aiState: expectedUpdate.ai_state,
       },
     );
+    expect(mocks.inserts).toEqual([{
+      table: 'audit_logs',
+      values: [{
+        organization_id: 'org-1',
+        actor_id: 'user-1',
+        actor_type: 'user',
+        action: expectedAction,
+        resource_type: 'conversation',
+        resource_id: 'conversation-1',
+        metadata: {},
+      }],
+    }]);
+  });
+
+  it('surfaces audit failures without reporting a persisted state change as failed', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    mocks.auditError = { message: 'audit unavailable' };
+
+    try {
+      const response = await post(makeRequest(name, {
+        conversationId: 'conversation-1',
+      }));
+
+      expect(response.status).toBe(200);
+      await expect(response.json()).resolves.toEqual({
+        status: 'accepted',
+        warning: `Conversation was ${pastTense}, but its audit log failed: audit unavailable`,
+      });
+      expect(mocks.updates).toHaveLength(1);
+      expect(error).toHaveBeenCalledWith(
+        `${name}: failed to write audit log`,
+        'audit unavailable',
+      );
+    } finally {
+      error.mockRestore();
+    }
   });
 
   it('keeps a persisted state change successful when realtime publishing fails', async () => {

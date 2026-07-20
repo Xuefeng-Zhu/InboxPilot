@@ -1,8 +1,14 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { readResponseJsonObject } from '@/lib/http-json';
-import { insforge, getAccessToken } from '@/lib/insforge';
+import { getAccessToken } from '@/lib/insforge';
+import {
+  invalidateConversationMutationCaches,
+  queryKeys,
+  useAiDecision,
+} from '@/lib/queries';
 import type { AiState } from '@support-core/types';
 
 // ---------------------------------------------------------------------------
@@ -38,43 +44,43 @@ interface AiDraftPanelProps {
 }
 
 export function AiDraftPanel({ conversationId, aiState, onPrefillComposer }: AiDraftPanelProps) {
-  const [decision, setDecision] = useState<AiDecisionRow | null>(null);
-  const [loading, setLoading] = useState(false);
+  const queryClient = useQueryClient();
+  const shouldLoadDecision = aiState === 'drafted' || aiState === 'needs_human';
+  const {
+    data: decisionData,
+    isLoading: loading,
+    error: decisionError,
+  } = useAiDecision(shouldLoadDecision ? conversationId : undefined);
   const [actionLoading, setActionLoading] = useState<'approve' | 'regenerate' | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [supersededDecisionId, setSupersededDecisionId] = useState<string | null>(null);
 
-  // Fetch the latest AI decision for this conversation
-  const fetchDecision = useCallback(async () => {
-    if (aiState !== 'drafted' && aiState !== 'needs_human') return;
-
-    setLoading(true);
-    setError(null);
-
-    try {
-      const { data, error: fetchError } = await insforge.database
-        .from('ai_decisions')
-        .select('*')
-        .eq('conversation_id', conversationId)
-        .order('created_at', { ascending: false })
-        .limit(1);
-
-      if (fetchError) {
-        setError(fetchError.message);
-        return;
-      }
-
-      const rows = Array.isArray(data) ? data : data ? [data] : [];
-      setDecision((rows[0] as AiDecisionRow) ?? null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load AI decision');
-    } finally {
-      setLoading(false);
-    }
-  }, [conversationId, aiState]);
+  const queriedDecision = (decisionData as AiDecisionRow | null | undefined) ?? null;
+  const decision =
+    queriedDecision?.id === supersededDecisionId ? null : queriedDecision;
+  const error =
+    actionError ??
+    (decisionError instanceof Error
+      ? decisionError.message
+      : decisionError
+        ? 'Failed to load AI decision'
+        : null);
 
   useEffect(() => {
-    fetchDecision();
-  }, [fetchDecision]);
+    setActionLoading(null);
+    setActionError(null);
+    setSupersededDecisionId(null);
+  }, [conversationId]);
+
+  useEffect(() => {
+    if (
+      supersededDecisionId &&
+      queriedDecision?.id &&
+      queriedDecision.id !== supersededDecisionId
+    ) {
+      setSupersededDecisionId(null);
+    }
+  }, [queriedDecision?.id, supersededDecisionId]);
 
   // ---- Approve handler ---------------------------------------------------
 
@@ -88,7 +94,7 @@ export function AiDraftPanel({ conversationId, aiState, onPrefillComposer }: AiD
     }
 
     setActionLoading('approve');
-    setError(null);
+    setActionError(null);
 
     try {
       const token = getAccessToken();
@@ -112,7 +118,7 @@ export function AiDraftPanel({ conversationId, aiState, onPrefillComposer }: AiD
         );
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to approve draft');
+      setActionError(err instanceof Error ? err.message : 'Failed to approve draft');
     } finally {
       setActionLoading(null);
     }
@@ -122,7 +128,7 @@ export function AiDraftPanel({ conversationId, aiState, onPrefillComposer }: AiD
 
   const handleRegenerate = useCallback(async () => {
     setActionLoading('regenerate');
-    setError(null);
+    setActionError(null);
 
     try {
       const token = getAccessToken();
@@ -142,12 +148,25 @@ export function AiDraftPanel({ conversationId, aiState, onPrefillComposer }: AiD
           typeof body.error === 'string' ? body.error : 'Failed to regenerate draft',
         );
       }
+
+      const previousDecisionId = decision?.id ?? null;
+      if (previousDecisionId) {
+        setSupersededDecisionId(previousDecisionId);
+        queryClient.setQueryData(
+          queryKeys.aiDecision(conversationId),
+          (cachedDecision: unknown) =>
+            getDecisionId(cachedDecision) === previousDecisionId
+              ? null
+              : cachedDecision,
+        );
+      }
+      void invalidateConversationMutationCaches(queryClient, conversationId);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to regenerate draft');
+      setActionError(err instanceof Error ? err.message : 'Failed to regenerate draft');
     } finally {
       setActionLoading(null);
     }
-  }, [conversationId]);
+  }, [conversationId, decision?.id, queryClient]);
 
   // ---- Thinking state: show spinner with mono orange accent --------------
 
@@ -200,15 +219,19 @@ export function AiDraftPanel({ conversationId, aiState, onPrefillComposer }: AiD
   // ---- Drafted: show draft with AI mono treatment ------------------------
 
   if (aiState === 'drafted') {
-    if (loading) {
+    if (loading || (supersededDecisionId && !decision)) {
       return (
-        <div className="border-t border-[var(--m03-orange-line)] bg-[var(--m03-orange-fill)] px-6 py-3" role="status" aria-label="Loading AI draft">
+        <div
+          className="border-t border-[var(--m03-orange-line)] bg-[var(--m03-orange-fill)] px-6 py-3"
+          role="status"
+          aria-label={supersededDecisionId ? 'Regenerating AI draft' : 'Loading AI draft'}
+        >
           <div className="flex items-center gap-2 text-[13px] text-[var(--m03-orange)]">
             <svg className="h-4 w-4 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" aria-hidden="true">
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
             </svg>
-            Loading AI draft…
+            {supersededDecisionId ? 'Regenerating AI draft…' : 'Loading AI draft…'}
           </div>
         </div>
       );
@@ -284,4 +307,10 @@ export function AiDraftPanel({ conversationId, aiState, onPrefillComposer }: AiD
   }
 
   return null;
+}
+
+function getDecisionId(value: unknown): string | null {
+  if (!value || typeof value !== 'object') return null;
+  const id = (value as { id?: unknown }).id;
+  return typeof id === 'string' ? id : null;
 }

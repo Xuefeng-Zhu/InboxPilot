@@ -3,14 +3,15 @@
 **Always loaded** for any work on the inbox screen, conversation list, message thread, or AI draft panel.
 
 ## OVERVIEW
-10 feature components that compose the 3-pane inbox (`/inbox`): left filters+list, center thread, right detail panel. **No barrel `index.ts`** — every import is explicit. (The other feature dirs use barrels; this one is the gap.)
+11 feature components that compose the 3-pane inbox (`/inbox`): left filters+list, center thread, right detail panel. **No barrel `index.ts`** — every import is explicit. (The other feature dirs use barrels; this one is the gap.)
 
-## THE 10 COMPONENTS
+## THE 11 COMPONENTS
 | File | What it does |
 |---|---|
 | `AiDraftPanel.tsx` | Right-rail AI draft UI: shows the latest `ai_decision` for a conversation, allows regenerate / approve / edit-then-approve. |
 | `ContactDetails.tsx` | Right-rail contact card (name, email, phone, metadata, recent conversations). |
 | `ConversationItem.tsx` | Single row in the conversation list (avatar, name, preview, time, status pill). |
+| `ConversationActions.tsx` | Responsive thread-header actions for escalate, resolve, and reopen API mutations. |
 | `ConversationList.tsx` | The list itself, with virtualized scroll and selection. |
 | `CustomerSelector.tsx` | Combobox for switching the contact attached to a conversation. |
 | `InboxFilters.tsx` | Left-rail filters: status, channel, customer, and search; state is mirrored into `/inbox` URL params by `app/inbox/page.tsx`. |

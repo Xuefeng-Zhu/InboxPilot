@@ -13,6 +13,7 @@ import { useRealtime } from '@/lib/use-realtime';
 import { MessageBubble, type MessageRow } from './MessageBubble';
 import { ReplyComposer } from './ReplyComposer';
 import { AiDraftPanel } from './AiDraftPanel';
+import { ConversationActions } from './ConversationActions';
 import { StatusBadge, AiStateIndicator } from '@/components/ui';
 import type { ConversationRow } from './ConversationItem';
 
@@ -302,6 +303,10 @@ export function MessageThread({
           <span className="hidden sm:inline-flex">
             <StatusBadge status={conversation.status} />
           </span>
+          <ConversationActions
+            conversationId={conversationId}
+            status={conversation.status}
+          />
           {onToggleRightPanel && (
             <button
               type="button"

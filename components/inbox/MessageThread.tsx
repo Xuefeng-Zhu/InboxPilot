@@ -30,6 +30,38 @@ interface MessageThreadProps {
   onToggleRightPanel?: () => void;
 }
 
+function ThreadUnavailable({
+  message,
+  onBack,
+}: {
+  message: string;
+  onBack?: () => void;
+}) {
+  return (
+    <div className="flex flex-1 items-center justify-center p-8">
+      <div className="flex flex-col items-center gap-3">
+        {onBack ? (
+          <button
+            type="button"
+            onClick={onBack}
+            className="inline-flex items-center gap-2 rounded border border-[var(--m03-line)] bg-white px-3 py-2 text-[13px] font-medium text-[var(--m03-fg-2)] hover:bg-[var(--m03-line-2)] lg:hidden"
+            aria-label="Back to conversations"
+          >
+            <span aria-hidden="true">←</span>
+            Back to conversations
+          </button>
+        ) : null}
+        <div
+          role="alert"
+          className="rounded bg-[var(--m03-red-fill)] p-4 text-[13px] text-[var(--m03-red)]"
+        >
+          {message}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function getRealtimeConversationId(payload: Record<string, unknown>): string | null {
   const nestedMessage = payload.message;
   const message =
@@ -204,15 +236,21 @@ export function MessageThread({
 
   if (convoError || (msgsError && messages.length === 0)) {
     return (
-      <div className="flex flex-1 items-center justify-center p-8">
-        <div role="alert" className="rounded bg-[var(--m03-red-fill)] p-4 text-[13px] text-[var(--m03-red)]">
-          {convoError?.message ?? msgsError?.message}
-        </div>
-      </div>
+      <ThreadUnavailable
+        message={convoError?.message ?? msgsError?.message ?? 'Could not load conversation.'}
+        onBack={onBack}
+      />
     );
   }
 
-  if (!conversation) return null;
+  if (!conversation) {
+    return (
+      <ThreadUnavailable
+        message="Conversation not found."
+        onBack={onBack}
+      />
+    );
+  }
 
   const contactName = conversation.contacts?.name ?? 'Conversation';
   const subject = conversation.subject ?? `${conversation.channel} conversation`;

@@ -326,4 +326,30 @@ describe('Inbox infinite loading', () => {
 
     expect(screen.getByRole('alert').textContent).toContain('Older messages failed');
   });
+
+  it('keeps a recovery path when a mobile deep link points to a missing conversation', () => {
+    const onBack = vi.fn();
+    mocks.useConversation.mockReturnValue({
+      data: null,
+      isLoading: false,
+      error: null,
+    });
+    mocks.useInfiniteMessages.mockReturnValue({
+      items: [],
+      isInitialLoading: false,
+      isFetchingNextPage: false,
+      isFetchNextPageError: false,
+      hasNextPage: false,
+      fetchNextPage: vi.fn(),
+      error: null,
+    });
+
+    renderWithQueryClient(
+      <MessageThread conversationId="missing-conversation" onBack={onBack} />,
+    );
+
+    expect(screen.getByRole('alert').textContent).toContain('Conversation not found.');
+    fireEvent.click(screen.getByRole('button', { name: 'Back to conversations' }));
+    expect(onBack).toHaveBeenCalledOnce();
+  });
 });

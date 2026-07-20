@@ -1,6 +1,6 @@
 # Testing
 
-> Property-based testing as the primary correctness verification strategy, plus example-based unit tests, plus integration test stubs.
+> Property-based testing as the primary correctness verification strategy, plus example-based unit tests and opt-in live integration tests.
 
 ## Philosophy
 
@@ -13,7 +13,7 @@ InboxPilot uses **property-based testing** as the primary correctness strategy. 
 - **React Testing Library** for UI component tests.
 - **jsdom** for browser-like test environment.
 - **Example-based unit tests** for service-level logic with mocks.
-- **Integration test stubs** for database-dependent flows (require a real DB to run).
+- **Opt-in live integration tests and scenario stubs** for database-dependent flows.
 
 ### Test file patterns
 
@@ -66,7 +66,7 @@ packages/support-core/__tests__/            # support-core tests (vitest, node e
   │   ├── state-machine.prop.test.ts
   │   └── webhook-roundtrip.prop.test.ts
   ├── unit/                                 # Services, repositories, adapters, utilities
-  └── integration/                          # Integration test stubs (require real DB)
+  └── integration/                          # Live integration tests and remaining scenario stubs
       ├── inbound-email-flow.test.ts
       ├── inbound-sms-flow.test.ts
       ├── outbound-message-flow.test.ts
@@ -104,6 +104,14 @@ npm run test:core
 ```
 
 Runs the `packages/support-core/__tests__` path directly. Run this when you only want to iterate on portable business logic.
+
+### Live seed idempotency
+
+```bash
+npm run test:integration:seed
+```
+
+This command is destructive only to the fixed seed organization on the currently linked disposable branch. The suite refuses to run against the production host or a project that is not a branched `qa-*` environment. It applies `insforge/seed.sql` twice through InsForge CLI 0.2.0, then verifies expected record counts and pending-draft ownership.
 
 ### Static checks
 

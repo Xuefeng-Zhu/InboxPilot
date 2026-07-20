@@ -14,7 +14,8 @@
     "lint:deno": "node scripts/check-deno-safety.mjs && deno check insforge/functions/*/index.ts",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:core": "vitest run packages/support-core/__tests__"
+    "test:core": "vitest run packages/support-core/__tests__",
+    "test:integration:seed": "INBOXPILOT_LIVE_INTEGRATION=1 vitest run packages/support-core/__tests__/integration/seed-idempotency.test.ts --maxWorkers=1 --minWorkers=1"
   },
   "dependencies": {
     "@inboxpilot/support-core": "file:packages/support-core",

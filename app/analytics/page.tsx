@@ -159,6 +159,7 @@ export default function AnalyticsPage() {
   const { data: orgId } = useOrgMembership(user?.id);
   const { data: org } = useOrganization(orgId ?? undefined);
   const authReady = !authLoading && !!user;
+  const analyticsReady = authReady && !!orgId;
   const [range, setRange] = useState<RangeKey>('30d');
   const { start: startDate, end: endDate } = useMemo(() => rangeToDates(range), [range]);
   const [metrics, setMetrics] = useState<Metrics | null>(null);
@@ -193,6 +194,7 @@ export default function AnalyticsPage() {
       const { data: conversations, error: convError } = await insforge.database
         .from('conversations')
         .select('id,status,ai_state,created_at,last_message_at,channel')
+        .eq('organization_id', orgId!)
         .gte('created_at', startIso)
         .limit(10000);
 
@@ -290,12 +292,12 @@ export default function AnalyticsPage() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [startDate, endDate, range]);
+  }, [startDate, endDate, orgId, range]);
 
   useEffect(() => {
-    if (!authReady) return;
+    if (!analyticsReady) return;
     computeMetrics();
-  }, [authReady, computeMetrics]);
+  }, [analyticsReady, computeMetrics]);
 
   const channelTotal = channelSplit.email + channelSplit.sms + channelSplit.webchat || 1;
   const channelPct = {

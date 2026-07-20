@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   selectData: [{ organization_id: 'org-1' }] as unknown,
   selectError: null as { message: string } | null,
   updateError: null as { message: string } | null,
+  publishRealtimeMessage: vi.fn(),
   updates: [] as Array<Record<string, unknown>>,
   eqCalls: [] as Array<{
     operation: 'select' | 'update';
@@ -23,6 +24,10 @@ vi.mock('@/lib/insforge-admin', () => ({
 vi.mock('@/app/api/functions/_auth', () => ({
   getUserFromToken: mocks.getUserFromToken,
   userHasOrgPermission: mocks.userHasOrgPermission,
+}));
+
+vi.mock('@/lib/realtime-publisher', () => ({
+  publishRealtimeMessage: mocks.publishRealtimeMessage,
 }));
 
 import { POST as escalate } from '../../app/api/functions/escalate-conversation/route';
@@ -95,6 +100,7 @@ describe.each(routes)('$name route', ({ name, post, expectedUpdate }) => {
     mocks.from.mockImplementation(() => createBuilder());
     mocks.getUserFromToken.mockResolvedValue({ id: 'user-1' });
     mocks.userHasOrgPermission.mockResolvedValue(true);
+    mocks.publishRealtimeMessage.mockResolvedValue(undefined);
   });
 
   it('rejects anonymous callers before reading the conversation', async () => {
@@ -185,5 +191,35 @@ describe.each(routes)('$name route', ({ name, post, expectedUpdate }) => {
       column: 'id',
       value: 'conversation-1',
     });
+    expect(mocks.publishRealtimeMessage).toHaveBeenCalledWith(
+      'org:org-1',
+      'conversation_updated',
+      {
+        conversationId: 'conversation-1',
+        status: expectedUpdate.status,
+        aiState: expectedUpdate.ai_state,
+      },
+    );
+  });
+
+  it('keeps a persisted state change successful when realtime publishing fails', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    mocks.publishRealtimeMessage.mockRejectedValueOnce(new Error('realtime unavailable'));
+
+    try {
+      const response = await post(makeRequest(name, {
+        conversationId: 'conversation-1',
+      }));
+
+      expect(response.status).toBe(200);
+      await expect(response.json()).resolves.toEqual({ status: 'ok' });
+      expect(mocks.updates).toHaveLength(1);
+      expect(warn).toHaveBeenCalledWith(
+        `${name}: failed to publish realtime update`,
+        'realtime unavailable',
+      );
+    } finally {
+      warn.mockRestore();
+    }
   });
 });

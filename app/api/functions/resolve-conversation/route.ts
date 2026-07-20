@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { insforgeAdmin as insforge } from '@/lib/insforge-admin';
 import { getUserFromToken, userHasOrgPermission } from '../_auth';
 import { assertInsforgeSuccess } from '@/lib/insforge-result';
+import { publishRealtimeMessage } from '@/lib/realtime-publisher';
 
 export async function POST(req: NextRequest) {
   try {
@@ -32,6 +33,19 @@ export async function POST(req: NextRequest) {
       .update({ status: 'resolved', ai_state: 'idle', updated_at: new Date().toISOString() })
       .eq('id', conversationId);
     assertInsforgeSuccess(updateResult, 'resolve-conversation failed to update conversation');
+
+    try {
+      await publishRealtimeMessage(
+        `org:${conversation.organization_id as string}`,
+        'conversation_updated',
+        { conversationId, status: 'resolved', aiState: 'idle' },
+      );
+    } catch (error) {
+      console.warn(
+        'resolve-conversation: failed to publish realtime update',
+        error instanceof Error ? error.message : String(error),
+      );
+    }
 
     return NextResponse.json({ status: 'ok' });
   } catch (err) {

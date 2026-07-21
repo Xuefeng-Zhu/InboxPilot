@@ -6,9 +6,11 @@ This is a working draft for the Devpost submission at <https://openai.devpost.co
 
 - Project name: **InboxPilot**
 - Tagline: **Human-in-the-loop AI support for SMS, email, and web chat—escalating risky conversations before an LLM responds.**
+- Submitter type: **Individual**
+- Country of residence: **United States**
 - Category: **Work & Productivity**
 - Repository: <https://github.com/Xuefeng-Zhu/InboxPilot>
-- Demo video: **Missing — upload a public YouTube video under 3 minutes.**
+- Demo video: <https://youtu.be/u8UTRrz4wNo>
 - `/feedback` Session ID: **Missing — retrieve the primary build-thread ID.**
 - Live test URL: **No public deployment URL has been verified. Use the repository setup path unless a demo deployment is supplied.**
 
@@ -48,7 +50,7 @@ Use this section as the final, human-verified provenance paragraph. Do not submi
 
 ## Final blockers before submission
 
-- Upload and verify a public YouTube demo under three minutes with voiceover covering the product, Codex, and GPT-5.6.
+- Verify that the supplied public YouTube demo is under three minutes and has voiceover covering the product, Codex, and GPT-5.6.
 - Retrieve and enter the primary `/feedback` Codex Session ID.
 - Replace the provenance placeholder with the exact, human-verified GPT-5.6 contribution.
 - Confirm Devpost account/team fields and country of residence; do not infer either from the repository.

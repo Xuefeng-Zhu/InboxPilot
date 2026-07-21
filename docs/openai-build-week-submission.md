@@ -18,23 +18,33 @@ The current checkout is `4f87c29`, 63 commits ahead of `origin/main`; the reposi
 
 ## Project description
 
-InboxPilot
+# InboxPilot
 
-InboxPilot is a human-in-the-loop AI support workspace for teams that need to respond across SMS, email, and web chat without letting automation outrun judgment.
+> Human-in-the-loop AI support for SMS, email, and web chat—escalating risky conversations before an LLM responds.
+
+## The problem
+
+Support teams work across multiple channels, while AI automation can miss the moment when a conversation needs a human. A useful reply is not enough if it ignores a safety signal, invents a policy answer, loses delivery state, or crosses a tenant boundary.
 
 ## What it does
 
-The app turns every inbound message into an auditable support conversation:
+InboxPilot turns every inbound message into an auditable support conversation:
 
-- brings SMS, email, and embedded web chat into one shared inbox;
-- normalizes and deduplicates provider events before they become customer history;
-- retrieves organization knowledge and produces a grounded AI draft or confidence-gated auto-reply;
-- evaluates deterministic escalation rules before any LLM call for safety concerns, legal threats, profanity, missing knowledge, and other configured signals;
-- lets agents approve, edit, regenerate, send, escalate, resolve, and reopen conversations;
-- keeps the agent inbox and web-chat visitor synchronized through authenticated realtime events; and
-- preserves the message, AI decision, knowledge evidence, delivery outcome, and human handoff in an audit trail.
+- **One workspace:** SMS, email, and embedded web chat share one inbox and conversation model.
+- **Grounded assistance:** organization knowledge feeds AI drafts and confidence-gated auto-replies.
+- **Safety before speed:** deterministic escalation rules run before any LLM call for safety concerns, legal threats, profanity, missing knowledge, and other configured signals.
+- **Human control:** agents can approve, edit, regenerate, send, escalate, resolve, and reopen conversations.
+- **Live collaboration:** authenticated realtime events keep the agent inbox and web-chat visitor synchronized.
+- **Traceable outcomes:** messages, AI decisions, knowledge evidence, delivery outcomes, and handoffs remain auditable.
 
 The result is more than a chatbot: support teams can see what the system decided, why it decided it, and exactly where a human took control.
+
+## Demo flow
+
+1. A customer message arrives through SMS, email, or the embedded web-chat widget.
+2. InboxPilot normalizes and deduplicates the event, finds the right conversation, and queues durable AI work.
+3. The system retrieves relevant knowledge and either creates a draft, sends a confidence-gated auto-reply, or escalates before the model responds.
+4. An agent reviews the decision, takes over when needed, and sees the final reply delivered in realtime.
 
 ## How it works
 
@@ -42,21 +52,19 @@ A Next.js App Router client provides the inbox, customer, knowledge, analytics, 
 
 The trusted backend is split into nine Deno function entrypoints for inbound webhooks, delivery callbacks, job processing, and webchat lifecycle. They delegate to the portable `packages/support-core/` package, where database, queue, AI, provider, and realtime dependencies are injected behind interfaces.
 
-The reliability boundaries are deliberate:
+### Reliability and trust boundaries
 
-- deterministic escalation runs before the model sees sensitive content;
-- durable jobs use active/lifetime idempotency, retries, stale-claim recovery, and dead-letter handling;
-- PostgreSQL RLS and organization-scoped realtime channels enforce tenant isolation;
-- atomic RPCs protect pending drafts, AI-decision finalization, and monotonic delivery status from races and late callbacks; and
-- pgvector-backed knowledge retrieval records the chunks used by each AI decision.
+- **Deterministic escalation** runs before the model sees sensitive content.
+- **Durable jobs** use active/lifetime idempotency, retries, stale-claim recovery, and dead-letter handling.
+- **Tenant isolation** is enforced by PostgreSQL RLS and organization-scoped realtime channels.
+- **Atomic RPCs** protect pending drafts, AI-decision finalization, and monotonic delivery status from races and late callbacks.
+- **Knowledge traceability** records the pgvector chunks used by each AI decision.
 
-The public source is available at https://github.com/Xuefeng-Zhu/InboxPilot. The repository includes setup instructions, seeded sample data, unit and property-based tests, source-contract coverage, and guarded live integration suites for seed idempotency, tenant isolation, realtime delivery, inbound SMS/email, and outbound messaging.
+The public source is available at [github.com/Xuefeng-Zhu/InboxPilot](https://github.com/Xuefeng-Zhu/InboxPilot). The repository includes setup instructions, seeded sample data, unit and property-based tests, source-contract coverage, and guarded live integration suites for seed idempotency, tenant isolation, realtime delivery, inbound SMS/email, and outbound messaging.
 
 ## Why it matters
 
-Traditional support automation optimizes for sending the next reply. That is the wrong default when the message contains a safety issue, a legal threat, an uncertain policy answer, or a delivery failure that needs investigation.
-
-InboxPilot makes the reasoning and the handoff observable. Teams get the speed of AI-assisted responses without losing the controls that make automation trustworthy: a deterministic safety gate, grounded knowledge, confidence-based behavior, durable retries, tenant boundaries, and an auditable path back to a human.
+Traditional support automation optimizes for sending the next reply. InboxPilot makes the reasoning and the handoff observable, giving teams the speed of AI-assisted responses without losing the controls that make automation trustworthy: a safety gate, grounded knowledge, confidence-based behavior, durable retries, tenant boundaries, and an auditable path back to a human.
 
 ## Build notes
 

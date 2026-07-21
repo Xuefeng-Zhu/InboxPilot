@@ -18,13 +18,51 @@ The current checkout is `4f87c29`, 63 commits ahead of `origin/main`; the reposi
 
 ## Project description
 
-Customer support teams work across SMS, email, and web chat, but the cost of switching channels is only half the problem. AI can draft a useful answer while still missing a safety signal, a policy constraint, or the point where a human must take over.
+InboxPilot
 
-InboxPilot is a multi-tenant AI support workspace that brings those channels into one inbox. Incoming messages are normalized, deduplicated, attached to the right customer conversation, and placed on a durable job queue. The AI pipeline retrieves relevant knowledge, evaluates deterministic escalation rules before any LLM call, and then produces either a draft, an auto-reply, or a human escalation based on organization settings, confidence, and safety requirements. Agents can approve, regenerate, send, escalate, resolve, and reopen conversations while realtime updates keep the inbox and embedded web-chat visitor in sync.
+InboxPilot is a human-in-the-loop AI support workspace for teams that need to respond across SMS, email, and web chat without letting automation outrun judgment.
 
-The product is built on Next.js and React with an InsForge backend. Nine Deno function entrypoints handle webhooks, jobs, and webchat lifecycle; the portable `packages/support-core/` package contains the business logic behind injected database, queue, AI, provider, and realtime interfaces. PostgreSQL RLS enforces tenant boundaries, pgvector supports knowledge retrieval, audit logs preserve significant actions, and atomic RPCs protect AI decisions, pending drafts, delivery status, and retries from race conditions.
+## What it does
 
-The project is intentionally designed for failure-aware support operations: escalation is evaluated before the model sees sensitive content; jobs use active/lifetime idempotency and retry boundaries; late provider callbacks cannot overwrite terminal delivery outcomes; and authenticated realtime channels are scoped to the organization or visitor thread. The repository includes unit, property-based, source-contract, and opt-in live integration coverage for seed idempotency, tenant isolation, realtime delivery, inbound SMS/email, and outbound messaging.
+The app turns every inbound message into an auditable support conversation:
+
+- brings SMS, email, and embedded web chat into one shared inbox;
+- normalizes and deduplicates provider events before they become customer history;
+- retrieves organization knowledge and produces a grounded AI draft or confidence-gated auto-reply;
+- evaluates deterministic escalation rules before any LLM call for safety concerns, legal threats, profanity, missing knowledge, and other configured signals;
+- lets agents approve, edit, regenerate, send, escalate, resolve, and reopen conversations;
+- keeps the agent inbox and web-chat visitor synchronized through authenticated realtime events; and
+- preserves the message, AI decision, knowledge evidence, delivery outcome, and human handoff in an audit trail.
+
+The result is more than a chatbot: support teams can see what the system decided, why it decided it, and exactly where a human took control.
+
+## How it works
+
+A Next.js App Router client provides the inbox, customer, knowledge, analytics, settings, and embedded web-chat experiences. InsForge provides authentication, Postgres persistence, row-level security, storage, realtime delivery, and serverless functions.
+
+The trusted backend is split into nine Deno function entrypoints for inbound webhooks, delivery callbacks, job processing, and webchat lifecycle. They delegate to the portable `packages/support-core/` package, where database, queue, AI, provider, and realtime dependencies are injected behind interfaces.
+
+The reliability boundaries are deliberate:
+
+- deterministic escalation runs before the model sees sensitive content;
+- durable jobs use active/lifetime idempotency, retries, stale-claim recovery, and dead-letter handling;
+- PostgreSQL RLS and organization-scoped realtime channels enforce tenant isolation;
+- atomic RPCs protect pending drafts, AI-decision finalization, and monotonic delivery status from races and late callbacks; and
+- pgvector-backed knowledge retrieval records the chunks used by each AI decision.
+
+The public source is available at https://github.com/Xuefeng-Zhu/InboxPilot. The repository includes setup instructions, seeded sample data, unit and property-based tests, source-contract coverage, and guarded live integration suites for seed idempotency, tenant isolation, realtime delivery, inbound SMS/email, and outbound messaging.
+
+## Why it matters
+
+Traditional support automation optimizes for sending the next reply. That is the wrong default when the message contains a safety issue, a legal threat, an uncertain policy answer, or a delivery failure that needs investigation.
+
+InboxPilot makes the reasoning and the handoff observable. Teams get the speed of AI-assisted responses without losing the controls that make automation trustworthy: a deterministic safety gate, grounded knowledge, confidence-based behavior, durable retries, tenant boundaries, and an auditable path back to a human.
+
+## Build notes
+
+I used ChatGPT and Codex throughout the Build Week iteration to decompose the cross-channel message lifecycle, implement the authenticated event and state-transition flows, harden the AI and delivery boundaries, and drive the live regression-verification loop. Codex accelerated the work by turning the support pipeline into testable interfaces and by helping trace failures across the Next.js client, InsForge functions, Postgres/RLS policies, realtime channels, and provider adapters.
+
+The final README and submission should identify the primary `/feedback` Codex Session ID and the specific GPT-5.6 contribution used during the Build Week window.
 
 ## Codex and GPT-5.6 provenance
 

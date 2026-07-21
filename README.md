@@ -14,6 +14,14 @@ InboxPilot is a multi-tenant AI-powered customer support platform built on [InsF
 - **Audit logging** — Append-only log of all significant actions for compliance
 - **RAG context persistence** — Every AI decision records which knowledge chunks it used (`ai_decision_chunks` table) for traceability and post-hoc analysis
 
+## OpenAI Build Week
+
+InboxPilot is a **Work & Productivity** project: a human-in-the-loop support workspace for teams handling SMS, email, and embedded web chat. It combines one shared inbox with retrieval-augmented AI drafts, deterministic escalation before any LLM call, optional confidence-gated auto-replies, realtime updates, and auditable agent handoff.
+
+The Build Week iteration focused on making the product dependable under real support traffic. Codex accelerated the work by mapping the end-to-end message pipeline, expanding the opt-in live coverage, and tightening the failure boundaries around idempotent jobs, tenant-isolated realtime, atomic AI-decision finalization, monotonic delivery status, and webchat draft recovery. Product and engineering decisions remain visible in the portable `packages/support-core/` interfaces, the pre-LLM escalation policy, the RLS policies, and the migration/ADR documentation below.
+
+The final submission must also identify the primary `/feedback` Codex Session ID and describe the specific GPT-5.6 contribution used during the Build Week window. Those two provenance details are intentionally kept out of this repository until they are verified against the primary build thread.
+
 ## Architecture
 
 ```
